@@ -29,10 +29,36 @@
 
 ;;; Code:
 
+(defface blue-documentation
+  '((t :inherit completions-annotations))
+  "Face used to highlight documentation strings.")
+
+;; Example output: ((:invoke "build" :category build :synopsys "Build the
+;; project" :help "[INPUTS] ...  Compile all blue modules or only INPUTS.") ...)
 (defun blue--get-commands ()
   ;; Run `blue' in `default-directory'.
   (let ((commands-raw (shell-command-to-string "blue .elisp-serialize")))
     (read commands-raw)))
+
+;;;###autoload
+(defun blue-run-command (command)
+  "Run a BLUE command."
+  (interactive
+   (let* ((commands (blue--get-commands))
+          (invocations (mapcar (lambda (c) (plist-get c :invoke)) commands))
+          (synopses (mapcar (lambda (c) (plist-get c :synopsys)) commands))
+          (collection (seq-mapn #'cons invocations synopses))
+          (width (apply #'max (mapcar #'string-width invocations)))
+          (padding 8)
+          (completion-extra-properties
+           (list :annotation-function
+                 (lambda (cand)
+                   (let ((desc (alist-get cand minibuffer-completion-table nil nil #'string=)))
+                     (when desc
+                       (concat (make-string (+ padding (- width (string-width cand))) ?\s)
+                               (propertize desc 'face 'blue-documentation))))))))
+     (list (completing-read "Command: " collection))))
+  (message (concat "Running " command "...")))
 
 (provide 'blue)
 ;;; blue.el ends here.
