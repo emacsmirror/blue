@@ -33,8 +33,15 @@
   '((t :inherit completions-annotations))
   "Face used to highlight documentation strings.")
 
-;; Example output: ((:invoke "build" :category build :synopsys "Build the
-;; project" :help "[INPUTS] ...  Compile all blue modules or only INPUTS.") ...)
+(defvar blue--anotation-padding 8
+  "Padding used for alignment of synopsis in completing read.")
+
+;; Example output:
+;; (((invoke . "build")
+;;   (category . build)
+;;   (synopsys . "Build the project")
+;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
+;;  ...)
 (defun blue--get-commands ()
   ;; Run `blue' in `default-directory'.
   (let ((commands-raw (shell-command-to-string "blue .elisp-serialize")))
@@ -45,19 +52,32 @@
   "Run a BLUE command."
   (interactive
    (let* ((commands (blue--get-commands))
-          (invocations (mapcar (lambda (c) (plist-get c :invoke)) commands))
-          (synopses (mapcar (lambda (c) (plist-get c :synopsys)) commands))
-          (collection (seq-mapn #'cons invocations synopses))
+          (invocations (mapcar (lambda (c) (cdr (assq 'invoke c))) commands))
           (width (apply #'max (mapcar #'string-width invocations)))
-          (padding 8)
           (completion-extra-properties
-           (list :annotation-function
-                 (lambda (cand)
-                   (let ((desc (alist-get cand minibuffer-completion-table nil nil #'string=)))
-                     (when desc
-                       (concat (make-string (+ padding (- width (string-width cand))) ?\s)
-                               (propertize desc 'face 'blue-documentation))))))))
-     (list (completing-read "Command: " collection))))
+           (list
+            :annotation-function
+            (lambda (cand)
+              (let* ((entry (seq-find (lambda (c)
+                                        (string= cand (cdr (assq 'invoke c))))
+                                      commands))
+                     (syn (cdr (assq 'synopsys entry))))
+                (when syn
+                  (concat (make-string (+ blue--anotation-padding
+                                          (- width (string-width cand)))
+                                       ?\s)
+                          (propertize syn 'face 'blue-documentation)))))
+            :group-function
+            (lambda (cand transform)
+              (if transform
+                  cand
+                (let* ((entry (seq-find (lambda (invoke)
+                                          (string= cand
+                                                   (alist-get 'invoke invoke)))
+                                        commands))
+                       (category (alist-get 'category entry)))
+                  (symbol-name category)))))))
+     (list (completing-read "Command: " invocations))))
   (message (concat "Running " command "...")))
 
 (provide 'blue)
