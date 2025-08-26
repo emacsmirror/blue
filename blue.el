@@ -29,6 +29,8 @@
 
 ;;; Code:
 
+(require 'compile)
+
 (defface blue-documentation
   '((t :inherit completions-annotations))
   "Face used to highlight documentation strings.")
@@ -42,6 +44,65 @@ Interactive commands will run in comint mode compilation buffers.")
 
 (defvar blue--last-configuration nil
   "Path to last known configuration directory.")
+
+(defvar blue--compilation-buffer-name-function #'blue--compilation-default-buffer-name
+  "Function used by BLUE to name the compilation buffer used to run target
+command.
+
+The function must take 2 arguments, the COMMAND being run and
+NAME-OF-MODE which is the major mode of the compilation buffer.")
+
+(defun blue--compilation-default-buffer-name (command name-of-mode)
+  (concat "*" name-of-mode " -- " command "*"))
+
+(defun blue--compile (command requires-configuration &optional comint)
+  "Like `compile' but tailored for BLUE."
+  (interactive
+   (list
+    (let ((command (eval compile-command)))
+      (if (or compilation-read-command current-prefix-arg)
+	      (compilation-read-command command)
+	    command))
+    (consp current-prefix-arg)))
+  (unless (equal command (eval compile-command))
+    (setq compile-command command))
+  (save-some-buffers (not compilation-ask-about-save)
+                     compilation-save-buffers-predicate)
+  (setq-default compilation-directory default-directory)
+
+  ;; Create the compilation buffer beforehand to setup some variables.
+  (let* ((mode (or comint
+                   'compilation-mode))
+         (name-of-mode (if (eq mode t)
+                           "compilation"
+                         (replace-regexp-in-string "-mode\\'" "" (symbol-name mode))))
+         (compilation-buffer-name-function #'(lambda (name-of-mode)
+                                               (funcall #'blue--compilation-default-buffer-name
+                                                        command name-of-mode)))
+         (buf (get-buffer-create
+               (compilation-buffer-name name-of-mode
+                                        comint
+                                        compilation-buffer-name-function))))
+    ;; Setup compilation buffer variables.
+    (with-current-buffer buf
+      ;; Extend error list to make it understand Guile errors.
+      (make-local-variable 'compilation-error-regexp-alist)
+      (add-to-list 'compilation-error-regexp-alist '("^.* at \\(.*?\\):\\([0-9]+\\)" 1 2))
+
+      ;; This needs to be set bufer-local so `recompile' runs in the correct
+      ;; directory.
+      (setq default-directory (if requires-configuration
+                                  blue--last-configuration
+                                default-directory)))
+
+    ;; If commands needs a configuration, setup `default-directory' so it runs
+    ;; in the previously configured directory.
+    (let ((default-directory (if requires-configuration
+                                 blue--last-configuration
+                               default-directory)))
+      ;; Start compilation from original directory to ensure '.envrc' is loaded
+      ;; if needed.
+      (compilation-start command comint))))
 
 ;; Example output:
 ;; (((invoke . "build")
@@ -106,12 +167,7 @@ Interactive commands will run in comint mode compilation buffers.")
          (requires-configuration (alist-get 'requires-configuration? entry)))
     (when configuration
       (setq blue--last-configuration default-directory))
-    ;; If the command requires a configuration cache, try to run it in the last
-    ;; configured directory.
-    (let ((default-directory (if requires-configuration
-                                 blue--last-configuration
-                               default-directory)))
-      (compile (concat "blue " command) inter))))
+    (blue--compile (concat "blue " command) requires-configuration inter)))
 
 (provide 'blue)
 ;;; blue.el ends here.
