@@ -53,9 +53,9 @@ The function must take 2 arguments, the COMMAND being run and
 NAME-OF-MODE which is the major mode of the compilation buffer.")
 
 (defun blue--compilation-default-buffer-name (command name-of-mode)
-  (concat "*" name-of-mode " -- " command "*"))
+  (concat "*" name-of-mode " | " command "*"))
 
-(defun blue--compile (command requires-configuration &optional comint)
+(defun blue--compile (command &optional requires-configuration comint)
   "Like `compile' but tailored for BLUE."
   (interactive
    (list
@@ -91,13 +91,15 @@ NAME-OF-MODE which is the major mode of the compilation buffer.")
 
       ;; This needs to be set bufer-local so `recompile' runs in the correct
       ;; directory.
-      (setq default-directory (if requires-configuration
+      (setq default-directory (if (and requires-configuration
+                                       blue--last-configuration)
                                   blue--last-configuration
                                 default-directory)))
 
     ;; If commands needs a configuration, setup `default-directory' so it runs
     ;; in the previously configured directory.
-    (let ((default-directory (if requires-configuration
+    (let ((default-directory (if (and requires-configuration
+                                      blue--last-configuration)
                                  blue--last-configuration
                                default-directory)))
       ;; Start compilation from original directory to ensure '.envrc' is loaded
@@ -116,13 +118,13 @@ NAME-OF-MODE which is the major mode of the compilation buffer.")
     (read commands-raw)))
 
 ;;;###autoload
-(defun blue-run-command (command &optional commands comint-flip)
+(defun blue-run-command (commands &optional all-commands comint-flip)
   "Run a BLUE command."
   (interactive
-   (let* ((commands (blue--get-commands))
+   (let* ((all-commands (blue--get-commands))
           (invocations (mapcar (lambda (cmd)
                                  (alist-get 'invoke cmd))
-                               commands))
+                               all-commands))
           (width (apply #'max (mapcar #'string-width invocations)))
           (completion-extra-properties
            (list
@@ -131,7 +133,7 @@ NAME-OF-MODE which is the major mode of the compilation buffer.")
               (let* ((entry (seq-find (lambda (cmd)
                                         (string= cand
                                                  (alist-get 'invoke cmd)))
-                                      commands))
+                                      all-commands))
                      (synopsis (alist-get 'synopsis entry)))
                 (when synopsis
                   (concat (make-string (+ blue--anotation-padding
@@ -145,29 +147,53 @@ NAME-OF-MODE which is the major mode of the compilation buffer.")
                 (let* ((entry (seq-find (lambda (cmd)
                                           (string= cand
                                                    (alist-get 'invoke cmd)))
-                                        commands))
+                                        all-commands))
                        (category (alist-get 'category entry)))
-                  (symbol-name category)))))))
-     (list (completing-read "Command: " invocations)
-           commands
+                  (symbol-name category))))))
+          (crm-separator
+           (propertize "[ \t]*--[ \t]+"
+                       'separator "--"
+                       'description "double-dash-separated list"))
+          ;; HACK: redundant but avoids displaying `crm-separator' as part of
+          ;; the prompt. Otherwhise prompt will looke like:
+          ;; '[double-dash-separated list] [CRM--[ 	]+] Command:'
+          (prompt "Command: ")
+          (crm-prompt
+           (concat "[%d] [CMR%s] " prompt)))
+     (list (completing-read-multiple prompt invocations)
+           all-commands
            (consp current-prefix-arg))))
-  ;; `xor' allows to use `comint-flip' to invert the mode for the compilation,
-  ;; if `command' is part of `blue-interactive-commands', calling
-  ;; `blue-run-command' with universal prefix argument (commint-flip = t) will
-  ;; disable comint mode for the compilation buffers while enabling it for all
-  ;; other commands.
-  (let* ((inter (if (xor (member command blue-interactive-commands)
+
+  (let* ((invokes (mapcar (lambda (command)
+                           (car (string-split command)))
+                         commands))
+         (any-interactive (seq-some (lambda (command)
+                                      (member command blue-interactive-commands))
+                                    invokes))
+         ;; `xor' allows to use `comint-flip' to invert the mode for the
+         ;; compilation, if `commands' is part of `blue-interactive-commands',
+         ;; calling `blue-run-command' with universal prefix argument
+         ;; (commint-flip = t) will disable comint mode for the compilation
+         ;; buffers while enabling it for all other commands.
+         (inter (if (xor any-interactive
                          comint-flip)
                     t nil))
-         (configuration (string= command "configure"))
-         (entry (seq-find (lambda (cmd)
-                            (string= command
-                                     (alist-get 'invoke cmd)))
-                          commands))
-         (requires-configuration (alist-get 'requires-configuration? entry)))
+         (configuration (seq-find (lambda (command)
+                                    (string= command "configure"))
+                                  commands))
+         (entries (mapcar (lambda (command)
+                            (seq-find (lambda (cmd)
+                                        (string= command
+                                                 (alist-get 'invoke cmd)))
+                                      all-commands))
+                          invokes))
+         (any-requires-configuration (seq-some (lambda (entry)
+                                                 (alist-get 'requires-configuration? entry))
+                                               entries)))
     (when configuration
       (setq blue--last-configuration default-directory))
-    (blue--compile (concat "blue " command) requires-configuration inter)))
+    (blue--compile (concat "blue " (string-join commands " -- "))
+                   any-requires-configuration inter)))
 
 (provide 'blue)
 ;;; blue.el ends here.
