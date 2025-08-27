@@ -30,14 +30,32 @@
 ;;; Code:
 
 (require 'compile)
+(require 'crm)
+
+(defgroup blue nil
+  "Operations on the current project."
+  :version "31.1"
+  :group 'tools)
+
+(defcustom blue-interactive-commands '("repl")
+  "List of strings of interactive BLUE commands.
+Interactive commands will run in comint mode compilation buffers."
+  :group 'blue
+  :type '(repeat string))
+
+(defcustom blue-cache-list-file
+  (locate-user-emacs-file "blue.eld")
+  "File in which to save the list of known BLUE caches."
+  :type 'file
+  :version "31.1"
+  :group 'blue)
 
 (defface blue-documentation
   '((t :inherit completions-annotations))
   "Face used to highlight documentation strings.")
 
-(defvar blue-interactive-commands '("repl")
-  "List of strings of interactive BLUE commands.
-Interactive commands will run in comint mode compilation buffers.")
+(defvar blue--cache-list 'unset
+  "List structure containing directories of known BLUE caches for project.")
 
 (defvar blue--anotation-padding 8
   "Padding used for alignment of synopsis in completing read.")
@@ -105,6 +123,76 @@ NAME-OF-MODE which is the major mode of the compilation buffer.")
       ;; Start compilation from original directory to ensure '.envrc' is loaded
       ;; if needed.
       (compilation-start command comint))))
+
+(defun blue--expand-if-remote-name (path)
+  "Expand PATH if it's a file."
+  (if (file-remote-p path) path
+    (expand-file-name path)))
+
+(defun blue--read-cache-list ()
+  "Initialize `blue--cache-list' using contents of `blue-cache-list-file'."
+  (let ((filename blue-cache-list-file))
+    (setq blue--cache-list
+          (when (file-exists-p filename)
+            (with-temp-buffer
+              (insert-file-contents filename)
+              (mapcar (lambda (elem)
+                        (let ((root (car elem))
+                              (dir (cdr elem)))
+                          (cons (blue--expand-if-remote-name root)
+                                (blue--expand-if-remote-name dir))))
+                      (condition-case nil
+                          (read (current-buffer))
+                        (end-of-file
+                         (warn "Failed to read the BLUE cache list file due to unexpected EOF")))))))
+    (unless (seq-every-p
+             (lambda (elt) (stringp (car-safe elt)))
+             blue--cache-list)
+      (warn "Contents of %s are in wrong format, resetting"
+            blue-cache-list-file)
+      (setq blue--cache-list nil))))
+
+(defun blue--ensure-read-cache-list ()
+  "Initialize `blue--cache-list' if it isn't already initialized."
+  (when (eq blue--cache-list 'unset)
+    (blue--read-cache-list)))
+
+(defun blue--write-cache-list ()
+  "Save `blue--cache-list' in `blue-cache-list-file'."
+  (let ((filename blue-cache-list-file))
+    (with-temp-buffer
+      (insert ";;; -*- lisp-data -*-\n")
+      (let ((print-length nil)
+            (print-level nil))
+        (pp (mapcar (lambda (elem)
+                      (let ((root (car elem))
+                            (dir (cdr elem)))
+                        (cons (blue--expand-if-remote-name root)
+                              (blue--expand-if-remote-name dir))))
+                    blue--cache-list)
+            (current-buffer)))
+      (write-region nil nil filename nil 'silent))))
+
+(defun blue--remember-cache (dir &optional no-write)
+  "Add DIR to the front of the cache list.
+Save the result in `blue-cache-list-file' if the list of dir has
+changed, and NO-WRITE is nil."
+  (blue--ensure-read-cache-list)
+  (let* ((root (abbreviate-file-name (project-root (project-current nil dir))))
+         (dir (abbreviate-file-name dir))
+         (pair (cons root dir)))
+    (unless (equal (car blue--cache-list) pair)
+      (dolist (ent blue--cache-list)
+        (when (equal root (car ent))
+          (setq blue--cache-list (delq ent blue--cache-list))))
+      (push pair blue--cache-list)
+      (unless no-write
+        (blue--write-cache-list)))))
+
+(defun blue--project-cache (dir)
+  "Get last cache configured for project containing DIR."
+  (let ((root (expand-file-name (project-root (project-current nil dir)))))
+    (cdr (assoc-string root blue--cache-list))))
 
 ;; Example output:
 ;; (((invoke . "build")
@@ -190,8 +278,11 @@ NAME-OF-MODE which is the major mode of the compilation buffer.")
          (any-requires-configuration (seq-some (lambda (entry)
                                                  (alist-get 'requires-configuration? entry))
                                                entries)))
+    (blue--ensure-read-cache-list)
     (when configuration
-      (setq blue--last-configuration default-directory))
+      (blue--remember-cache blue--last-configuration))
+    (setq blue--last-configuration (or (blue--project-cache default-directory)
+                                       default-directory))
     (blue--compile (concat "blue " (string-join commands " -- "))
                    any-requires-configuration inter)))
 
