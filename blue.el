@@ -200,10 +200,37 @@ changed, and NO-WRITE is nil."
 ;;   (synopsis . "Build the project")
 ;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
 ;;  ...)
+;; TODO: rewrite to handle errors and not rely on a shell, maybe use
+;; `call-process'.
 (defun blue--get-commands ()
   ;; Run `blue' in `default-directory'.
   (let ((commands-raw (shell-command-to-string "blue .elisp-serialize-commands")))
     (read commands-raw)))
+
+(defun blue--autocomplete (input)
+  "Invoke BLUE autocompletion command with INPUT string."
+  (let* ((beg (minibuffer-prompt-end))
+         (end (point-max))
+         (input (buffer-substring beg end)))
+    input))
+
+(defun blue--completion-at-point ()
+  "Function for `completion-at-point' fn for `blue-run-command'."
+  (let* ((prompt-start (minibuffer-prompt-end))
+         (prompt-end (point-max))
+         (input (buffer-substring prompt-start prompt-end))
+         (autocompletion-raw (shell-command-to-string
+                              (concat "blue .autocomplete \"blue " input "\"")))
+         (completion-table (string-split autocompletion-raw))
+         (symbol-boundaries (bounds-of-thing-at-point 'symbol))
+         (pt (point)))
+    (if completion-table
+        (if-let* (symbol-boundaries
+                  (symbol-start (car symbol-boundaries))
+                  (symbol-end (cdr symbol-boundaries)))
+            (list symbol-start symbol-end completion-table)
+          (list pt pt completion-table))
+      nil)))
 
 ;;;###autoload
 (defun blue-run-command (commands &optional all-commands comint-flip)
@@ -248,7 +275,16 @@ changed, and NO-WRITE is nil."
           (prompt "Command: ")
           (crm-prompt
            (concat "[%d] [CMR%s] " prompt)))
-     (list (completing-read-multiple prompt invocations)
+     (list (minibuffer-with-setup-hook
+               (lambda ()
+                 ;; Emacs default completion maps <SPC> to `crm-complete-word'
+                 ;; which forces the user to introduce spaces using
+                 ;; `quoted-insert'. Remove the keybinding so literal spaces can
+                 ;; be introduces.
+                 (define-key crm-local-completion-map (kbd "SPC") nil)
+                 (add-hook 'completion-at-point-functions
+                           #'blue--completion-at-point nil t))
+               (completing-read-multiple prompt invocations))
            all-commands
            (consp current-prefix-arg))))
 
