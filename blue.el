@@ -233,13 +233,13 @@ changed, and NO-WRITE is nil."
       nil)))
 
 ;;;###autoload
-(defun blue-run-command (commands &optional all-commands comint-flip)
+(defun blue-run-command (input &optional commands comint-flip)
   "Run a BLUE command."
   (interactive
-   (let* ((all-commands (blue--get-commands))
+   (let* ((commands (blue--get-commands))
           (invocations (mapcar (lambda (cmd)
                                  (alist-get 'invoke cmd))
-                               all-commands))
+                               commands))
           (width (apply #'max (mapcar #'string-width invocations)))
           (completion-extra-properties
            (list
@@ -248,7 +248,7 @@ changed, and NO-WRITE is nil."
               (let* ((entry (seq-find (lambda (cmd)
                                         (string= cand
                                                  (alist-get 'invoke cmd)))
-                                      all-commands))
+                                      commands))
                      (synopsis (alist-get 'synopsis entry)))
                 (when synopsis
                   (concat (make-string (+ blue--anotation-padding
@@ -262,7 +262,7 @@ changed, and NO-WRITE is nil."
                 (let* ((entry (seq-find (lambda (cmd)
                                           (string= cand
                                                    (alist-get 'invoke cmd)))
-                                        all-commands))
+                                        commands))
                        (category (alist-get 'category entry)))
                   (symbol-name category))))))
           (crm-separator
@@ -285,17 +285,31 @@ changed, and NO-WRITE is nil."
                  (add-hook 'completion-at-point-functions
                            #'blue--completion-at-point nil t))
                (completing-read-multiple prompt invocations))
-           all-commands
+           commands
            (consp current-prefix-arg))))
 
-  (let* ((invokes (mapcar (lambda (command)
-                           (car (string-split command)))
-                         commands))
+  ;; List of chained commands in user input, with arguments. Each element is a
+  ;; list of strings representing the arguments and invoke of commands.
+  (let* ((input-tokens (mapcar (lambda (command)
+                                 (string-split command))
+                               input))
+         ;; The first token list needs to be treated specially since it includes
+         ;; the arguments meant for BLUE as well as the first chained command
+         ;; and it's arguments.
+         (first-invoke (seq-find (lambda (token)
+                                   (not (string-prefix-p "--" token)))
+                                 (car input-tokens)))
+         ;; Aside from the first one, all other tokens start with the command
+         ;; name followed by it's arguments.
+         (rest-invokes (mapcar (lambda (token)
+                                 (car token))
+                               (cdr input-tokens)))
+         (invokes (print (cons first-invoke rest-invokes)))
          (any-interactive (seq-some (lambda (command)
                                       (member command blue-interactive-commands))
                                     invokes))
          ;; `xor' allows to use `comint-flip' to invert the mode for the
-         ;; compilation, if `commands' is part of `blue-interactive-commands',
+         ;; compilation, if `input' is part of `blue-interactive-commands',
          ;; calling `blue-run-command' with universal prefix argument
          ;; (commint-flip = t) will disable comint mode for the compilation
          ;; buffers while enabling it for all other commands.
@@ -304,12 +318,12 @@ changed, and NO-WRITE is nil."
                     t nil))
          (configuration (seq-find (lambda (command)
                                     (string= command "configure"))
-                                  commands))
+                                  input))
          (entries (mapcar (lambda (command)
                             (seq-find (lambda (cmd)
                                         (string= command
                                                  (alist-get 'invoke cmd)))
-                                      all-commands))
+                                      commands))
                           invokes))
          (any-requires-configuration (seq-some (lambda (entry)
                                                  (alist-get 'requires-configuration? entry))
@@ -319,7 +333,7 @@ changed, and NO-WRITE is nil."
       (blue--remember-cache blue--last-configuration))
     (setq blue--last-configuration (or (blue--project-cache default-directory)
                                        default-directory))
-    (blue--compile (concat "blue " (string-join commands " -- "))
+    (blue--compile (concat "blue " (string-join input " -- "))
                    any-requires-configuration inter)))
 
 (provide 'blue)
