@@ -300,68 +300,70 @@ On failure, returns a condition object describing the error."
           (list pt pt completion-table))
       nil)))
 
+(defun blue--run-command-prompt ()
+  "Interactive prompt used by `blue-run-command'."
+  (if-let* ((commands (blue--get-commands))
+            (invocations (mapcar (lambda (cmd)
+                                   (alist-get 'invoke cmd))
+                                 commands))
+            (width (if invocations
+                       (apply #'max (mapcar #'string-width invocations))
+                     0))
+            (completion-extra-properties
+             (list
+              :annotation-function
+              (lambda (cand)
+                (let* ((entry (seq-find (lambda (cmd)
+                                          (string= cand
+                                                   (alist-get 'invoke cmd)))
+                                        commands))
+                       (synopsis (alist-get 'synopsis entry)))
+                  (when synopsis
+                    (concat (make-string (+ blue--anotation-padding
+                                            (- width (string-width cand)))
+                                         ?\s)
+                            (propertize synopsis 'face 'blue-documentation)))))
+              :group-function
+              (lambda (cand transform)
+                (if transform
+                    cand
+                  (let* ((entry (seq-find (lambda (cmd)
+                                            (string= cand
+                                                     (alist-get 'invoke cmd)))
+                                          commands))
+                         (category (alist-get 'category entry)))
+                    (symbol-name category))))))
+            (crm-separator
+             (propertize "[ \t]*--[ \t]+"
+                         'separator "--"
+                         'description "double-dash-separated list"))
+            ;; HACK: redundant but avoids displaying `crm-separator' as part of
+            ;; the prompt. Otherwhise prompt will looke like:
+            ;; '[double-dash-separated list] [CRM--[ 	]+] Command:'
+            (prompt "Command: ")
+            (crm-prompt
+             (concat "[%d] [CMR%s] " prompt)))
+      (list (minibuffer-with-setup-hook
+                (lambda ()
+                  ;; Emacs default completion maps <SPC> to `crm-complete-word'
+                  ;; which forces the user to introduce spaces using
+                  ;; `quoted-insert'. Remove the keybinding so literal spaces can
+                  ;; be introduces.
+                  (define-key crm-local-completion-map (kbd "SPC") nil)
+                  (add-hook 'completion-at-point-functions
+                            #'blue--completion-at-point nil t))
+              (completing-read-multiple prompt invocations))
+            commands
+            (consp current-prefix-arg))
+    '(unset)))
+
 ;;;###autoload
 (defun blue-run-command (input &optional commands comint-flip)
   "Run a BLUE command."
-  (interactive
-   (if-let* ((commands (blue--get-commands))
-             (invocations (mapcar (lambda (cmd)
-                                    (alist-get 'invoke cmd))
-                                  commands))
-             (width (if invocations
-                        (apply #'max (mapcar #'string-width invocations))
-                      0))
-             (completion-extra-properties
-              (list
-               :annotation-function
-               (lambda (cand)
-                 (let* ((entry (seq-find (lambda (cmd)
-                                           (string= cand
-                                                    (alist-get 'invoke cmd)))
-                                         commands))
-                        (synopsis (alist-get 'synopsis entry)))
-                   (when synopsis
-                     (concat (make-string (+ blue--anotation-padding
-                                             (- width (string-width cand)))
-                                          ?\s)
-                             (propertize synopsis 'face 'blue-documentation)))))
-               :group-function
-               (lambda (cand transform)
-                 (if transform
-                     cand
-                   (let* ((entry (seq-find (lambda (cmd)
-                                             (string= cand
-                                                      (alist-get 'invoke cmd)))
-                                           commands))
-                          (category (alist-get 'category entry)))
-                     (symbol-name category))))))
-             (crm-separator
-              (propertize "[ \t]*--[ \t]+"
-                          'separator "--"
-                          'description "double-dash-separated list"))
-             ;; HACK: redundant but avoids displaying `crm-separator' as part of
-             ;; the prompt. Otherwhise prompt will looke like:
-             ;; '[double-dash-separated list] [CRM--[ 	]+] Command:'
-             (prompt "Command: ")
-             (crm-prompt
-              (concat "[%d] [CMR%s] " prompt)))
-       (list (minibuffer-with-setup-hook
-                 (lambda ()
-                   ;; Emacs default completion maps <SPC> to `crm-complete-word'
-                   ;; which forces the user to introduce spaces using
-                   ;; `quoted-insert'. Remove the keybinding so literal spaces can
-                   ;; be introduces.
-                   (define-key crm-local-completion-map (kbd "SPC") nil)
-                   (add-hook 'completion-at-point-functions
-                             #'blue--completion-at-point nil t))
-               (completing-read-multiple prompt invocations))
-             commands
-             (consp current-prefix-arg))
-     '(unset)))
-
+  (interactive (blue--run-command-prompt))
   ;; List of chained commands in user input, with arguments. Each element is a
   ;; list of strings representing the arguments and invoke of commands.
-  (unless (eq input 'unset)
+  (unless (eq input 'unset) ; Special value since empty input is allowed.
     (let* ((input-tokens (mapcar (lambda (command)
                                    (string-split command))
                                  input))
