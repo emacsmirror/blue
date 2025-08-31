@@ -217,13 +217,12 @@ changed, and NO-WRITE is nil."
 (defun blue--completion-at-point ()
   "Function for `completion-at-point' fn for `blue-run-command'."
   (let* ((prompt-start (minibuffer-prompt-end))
-         (prompt-end (point-max))
-         (input (buffer-substring prompt-start prompt-end))
+         (pt (point))
+         (input (buffer-substring prompt-start pt))
          (autocompletion-raw (shell-command-to-string
                               (concat "blue .autocomplete \"blue " input "\"")))
          (completion-table (string-split autocompletion-raw))
-         (symbol-boundaries (bounds-of-thing-at-point 'symbol))
-         (pt (point)))
+         (symbol-boundaries (bounds-of-thing-at-point 'symbol)))
     (if completion-table
         (if-let* (symbol-boundaries
                   (symbol-start (car symbol-boundaries))
