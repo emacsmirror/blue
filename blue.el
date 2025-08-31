@@ -201,12 +201,60 @@ changed, and NO-WRITE is nil."
 ;;   (synopsis . "Build the project")
 ;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
 ;;  ...)
-;; TODO: rewrite to handle errors and not rely on a shell, maybe use
-;; `call-process'.
+(defvar blue--output-buffer " *blue output*"
+  "Buffer used to capture output from BLUE commands.")
+
 (defun blue--get-commands ()
-  ;; Run `blue' in `default-directory'.
-  (let ((commands-raw (shell-command-to-string "blue .elisp-serialize-commands")))
-    (read commands-raw)))
+  "Return the commands provided by `blue .elisp-serialize-commands`.
+
+Appends output to the persistent buffer `blue--output-buffer'.  Each
+invocation gets a header with the command and timestamp, and a footer
+with a propertized status code."
+  (interactive)
+  (let* ((buf (get-buffer-create blue--output-buffer))
+         (cmd "blue .elisp-serialize-commands")
+         (time (current-time-string))
+         (env process-environment)
+         (path exec-path)
+         exit-code
+         output
+         result)
+    (with-current-buffer buf
+      (let ((process-environment env)
+            (exec-path path))
+        ;; Insert header.
+        (insert (propertize (format "▶ %s  [%s]\n" cmd time)
+                            'face '(:foreground "deep sky blue" :weight bold)))
+        ;; Run the command.
+        (condition-case err
+            (setq exit-code (call-process "blue" nil buf nil ".elisp-serialize-commands"))
+          (file-missing
+           (insert (propertize "[ERROR] `blue` command not found in exec-path"
+                               'face 'error))
+           (setq exit-code :missing)))
+        ;; Insert status code footer.
+        (insert (propertize (format "\n⏹ Status: %s\n\n"
+                                    (if (numberp exit-code) exit-code exit-code))
+                            'face (cond
+                                   ((eq exit-code 0) 'success)
+                                   ((eq exit-code :missing) 'error)
+                                   (t 'warning))))
+        ;; Extract output for parsing.
+        (setq output
+              (buffer-substring-no-properties
+               (save-excursion
+                 (goto-char (point-min))
+                 (search-forward (format "\n▶ %s  [%s]\n" cmd time) nil t))
+               (point-max)))
+        ;; Attempt to read output.
+        (condition-case parse-err
+            (setq result (read output))
+          (error
+           (insert (propertize (format "[Parse error] %S\n" parse-err)
+                               'face 'error))
+           (setq result nil)))))
+    result))
+
 
 (defun blue--autocomplete (input)
   "Invoke BLUE autocompletion command with INPUT string."
