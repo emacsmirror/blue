@@ -3,7 +3,7 @@
 ;; Copyright © 2025 Sergio Pastor Pérez
 ;;
 ;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
-;; Version: 0.0.2
+;; Version: 0.0.3
 ;; Package-Requires: ((emacs "31.0.50"))
 ;; Keywords: blue, tools
 ;; URL: https://codeberg.org/lapislazuli/blue.el
