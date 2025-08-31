@@ -178,8 +178,8 @@ NAME-OF-MODE which is the major mode of the compilation buffer.")
 Save the result in `blue-cache-list-file' if the list of dir has
 changed, and NO-WRITE is nil."
   (blue--ensure-read-cache-list)
-  (let* ((root (abbreviate-file-name (project-root (project-current nil dir))))
-         (dir (abbreviate-file-name dir))
+  (let* ((root (expand-file-name (project-root (project-current nil dir))))
+         (dir (expand-file-name dir))
          (pair (cons root dir)))
     (unless (equal (car blue--cache-list) pair)
       (dolist (ent blue--cache-list)
@@ -330,9 +330,8 @@ changed, and NO-WRITE is nil."
                                                entries)))
     (blue--ensure-read-cache-list)
     (when configuration
-      (blue--remember-cache blue--last-configuration))
-    (setq blue--last-configuration (or (blue--project-cache default-directory)
-                                       default-directory))
+      (blue--remember-cache default-directory))
+    (setq blue--last-configuration (blue--project-cache default-directory))
     (blue--compile (concat "blue " (string-join input " -- "))
                    any-requires-configuration inter)))
 
