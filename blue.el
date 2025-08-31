@@ -3,14 +3,15 @@
 ;; Copyright © 2025 Sergio Pastor Pérez
 ;;
 ;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
-;; Version: 0.0.1
-;; URL: https://codeberg.org/pastor/blue.el
-;; Keywords: extensions
+;; Version: 0.0.2
 ;; Package-Requires: ((emacs "31.0.50"))
+;; Keywords: blue, tools
+;; URL: https://codeberg.org/lapislazuli/blue.el
 
 ;;; Commentary:
 
-;; Interface for the BLUE build system.
+;; Interface for the BLUE build system, this package provides a completion
+;; interface to ease the dispatch of BLUE project commands.
 
 ;;; License:
 

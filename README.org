@@ -1,0 +1,46 @@
+#+TITLE: blue.el --- BLUE build system interface for Emacs
+#+OPTIONS: toc:nil
+
+This package provides an Emacs native completion interface for the [[https://codeberg.org/lapislazuli/blue][BLUE]] build
+system. The completion interface relies on [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Minibuffer-Completion.html][completing read]] and [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Completion-in-Buffers.html][completion at
+point]]. This means that it should work out of the box with native and modern
+completion packages such as [[https://github.com/minad/vertico][vertico]] and [[https://github.com/minad/corfu][corfu]].
+
+Features:
+- Command grouping by category.
+- Completion of built-in and user defined commands.
+- Completion of command arguments through [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Completion-in-Buffers.html#index-completion_002dat_002dpoint_002dfunctions][completion at point]].
+- Chaining of commands through [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Minibuffer-Completion.html#index-completing_002dread_002dfunction][completing-read-multiple]].
+- Integration with [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html][project.el]] to enable configuration cache persistence.
+- Naming of compilation buffer according to run command.
+- Auto enable comint mode in the compilation buffers that involve a command that
+  requires interactive usage, such as the ~repl~ command.
+
+* Screenshots
+[[file:screenshot.png]]
+
+* Installation
+This package is available on [[https://melpa.org/][MELPA]]!
+
+Add this to your configuration file:
+#+begin_src emacs-lisp
+(use-package blue
+  :vc (:url "https://codeberg.org/lapislazuli/blue.el"))
+#+end_src
+
+* Usage
+Run ~M-x blue-run-command~ in a [[https://codeberg.org/lapislazuli/blue][BLUE]] project.
+
+You will be prompted by a command, in this minibuffer you can chain commands
+through the =--= separator, after inserting a space the completion will update
+for the next commands. Additionally, some [[https://codeberg.org/lapislazuli/blue][BLUE]] commands accept arguments, you
+can add them in this prompt, [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Completion-in-Buffers.html#index-completion_002dat_002dpoint_002dfunctions][completion at point]] is configured in the minibuffer
+meaning that you can use ~complete-symbol~, generally bound to =C-M-i= to
+complete the arguments, you can complete [[https://codeberg.org/lapislazuli/blue][BLUE]] options such as ~--always-build~
+or command arguments such as ~--prefix=~.
+
+*Note* that some [[https://codeberg.org/lapislazuli/blue][BLUE]] commands require configuration, [[file:blue.el][blue.el]] is smart enough to
+identify those commands and it will try to run them in a previously configured
+directory. The configuration directory will be stored after running the
+configure command and it will be persistent across restarts as long as
+[[https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html][project.el]] knows about the project.
