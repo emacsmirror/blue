@@ -65,17 +65,29 @@ Interactive commands will run in comint mode compilation buffers."
   "Path to last known configuration directory.")
 
 (defvar blue--compilation-buffer-name-function #'blue--compilation-default-buffer-name
-  "Function used by BLUE to name the compilation buffer used to run target
-command.
+  "Function used by BLUE to name the compilation buffer used to run command.
 
 The function must take 2 arguments, the COMMAND being run and
 NAME-OF-MODE which is the major mode of the compilation buffer.")
 
 (defun blue--compilation-default-buffer-name (command name-of-mode)
+  "Compilation naming function for `blue-run-command'.
+
+COMMAND will be passed the BLUE CLI arguments.
+
+NAME-OF-MODE will be passed the major mode of the compilation buffer."
   (concat "*" name-of-mode " | " command "*"))
 
 (defun blue--compile (command &optional requires-configuration comint)
-  "Like `compile' but tailored for BLUE."
+  "Like `compile' but tailored for BLUE.
+
+COMMAND is the command to run in the compilation buffer, it has the same
+meaning as in `compile'
+
+REQUIRES-CONFIGURATION ensures that command is run in
+`blue--last-configuration' directory.
+
+COMINT selects wheter the compilation buffer should be interactive."
   (interactive
    (list
     (let ((command (eval compile-command)))
@@ -207,11 +219,11 @@ changed, and NO-WRITE is nil."
 (defun blue--get-commands ()
   "Return the commands provided by `blue .elisp-serialize-commands`.
 
-Each invocation prepends output to `blue--output-buffer` with a header
-(command + timestamp) and a propertized footer (status).
+Each invocation prepends output to `blue--output-buffer' with a header
+[command + timestamp] and a propertized status footer.
 
 On success, returns the parsed Lisp value.
-On failure, returns a condition object describing the error."
+On failure, returns nil."
   (interactive)
   (let* ((buf (get-buffer-create blue--output-buffer))
          (cmd "blue .elisp-serialize-commands")
@@ -359,7 +371,16 @@ On failure, returns a condition object describing the error."
 
 ;;;###autoload
 (defun blue-run-command (input &optional commands comint-flip)
-  "Run a BLUE command."
+  "Run a BLUE command.
+
+INPUT is a list of strings of BLUE arguments, COMMANDS and their
+arguments.
+
+COMINT-FLIP whether to invert the comint euristics logic.  If input
+contains a member of `blue-interactive-commands', starts an interactive
+compilation buffer in comint mode, if COMINT-FLIP is t, invert that
+behavior so the interactive buffer will be created if the command is not
+a member of `blue-interactive-commands'."
   (interactive (blue--run-command-prompt))
   ;; List of chained commands in user input, with arguments. Each element is a
   ;; list of strings representing the arguments and invoke of commands.
