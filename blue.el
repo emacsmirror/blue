@@ -207,54 +207,74 @@ changed, and NO-WRITE is nil."
 (defun blue--get-commands ()
   "Return the commands provided by `blue .elisp-serialize-commands`.
 
-Appends output to the persistent buffer `blue--output-buffer'.  Each
-invocation gets a header with the command and timestamp, and a footer
-with a propertized status code."
+Each invocation prepends output to `blue--output-buffer` with a header
+(command + timestamp) and a propertized footer (status).
+
+On success, returns the parsed Lisp value.
+On failure, returns a condition object describing the error."
   (interactive)
   (let* ((buf (get-buffer-create blue--output-buffer))
          (cmd "blue .elisp-serialize-commands")
          (time (current-time-string))
-         (env process-environment)
+         ;; Disable autocompilation.
+         (env (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (path exec-path)
+         (header (format "▶ %s  [%s]\n" cmd time))
+         start-pos end-pos
          exit-code
-         output
          result)
     (with-current-buffer buf
       (let ((process-environment env)
-            (exec-path path))
-        ;; Insert header.
-        (insert (propertize (format "▶ %s  [%s]\n" cmd time)
-                            'face '(:foreground "deep sky blue" :weight bold)))
-        ;; Run the command.
-        (condition-case err
+            (exec-path path)
+            (inhibit-read-only t))
+        ;; Always prepend: go to beginning of buffer
+        (goto-char (point-min))
+        (unless (bobp) (insert "\n"))
+
+        ;; Insert header and mark where command output starts
+        (insert (propertize header 'face 'bold))
+        (setq start-pos (point))
+
+        ;; Run `blue`, capturing stdout in the buffer
+        (condition-case call-err
             (setq exit-code (call-process "blue" nil buf nil ".elisp-serialize-commands"))
           (file-missing
-           (insert (propertize "[ERROR] `blue` command not found in exec-path"
-                               'face 'error))
-           (setq exit-code :missing)))
-        ;; Insert status code footer.
-        (insert (propertize (format "\n⏹ Status: %s\n\n"
-                                    (if (numberp exit-code) exit-code exit-code))
-                            'face (cond
-                                   ((eq exit-code 0) 'success)
-                                   ((eq exit-code :missing) 'error)
-                                   (t 'warning))))
-        ;; Extract output for parsing.
-        (setq output
-              (buffer-substring-no-properties
-               (save-excursion
-                 (goto-char (point-min))
-                 (search-forward (format "\n▶ %s  [%s]\n" cmd time) nil t))
-               (point-max)))
-        ;; Attempt to read output.
-        (condition-case parse-err
-            (setq result (read output))
-          (error
-           (insert (propertize (format "[Parse error] %S\n" parse-err)
-                               'face 'error))
-           (setq result nil)))))
-    result))
+           (let ((error-msg (concat (propertize "[ERROR] " 'face 'error)
+                                    (propertize "`blue'" 'face 'font-lock-constant-face)
+                                    " command not found in "
+                                    (propertize "`exec-path'" 'face 'font-lock-type-face))))
+             (insert error-msg)
+             (message error-msg))
+           (setq exit-code 'missing
+                 result nil)))
 
+        ;; Mark where command output ended
+        (setq end-pos (point))
+
+        ;; Footer
+        (insert (concat(propertize (format "\n⏹ Status: %s\n\n" exit-code)
+                                   'face (cond
+                                          ((eq exit-code 0) 'success)
+                                          ((eq exit-code 'missing) 'error)
+                                          (t 'warning)))))
+
+        ;; Handle failures
+        (unless result
+          (when (and (numberp exit-code) (not (zerop exit-code)))
+            (setq result (list 'blue-exit exit-code))))
+
+        ;; Parse only the command’s stdout when exit-code was 0
+        (when (and (eq exit-code 0) (not result))
+          (let ((output (buffer-substring-no-properties start-pos end-pos)))
+            (condition-case parse-err
+                (setq result (read output))
+              ((end-of-file error)
+               (let ((error-msg (propertize (format "[Parse error] %S\n" parse-err)
+                                            'face 'error)))
+                 (insert error-msg)
+                 (message error-msg))
+               (setq result nil)))))))
+    result))
 
 (defun blue--autocomplete (input)
   "Invoke BLUE autocompletion command with INPUT string."
@@ -284,104 +304,108 @@ with a propertized status code."
 (defun blue-run-command (input &optional commands comint-flip)
   "Run a BLUE command."
   (interactive
-   (let* ((commands (blue--get-commands))
-          (invocations (mapcar (lambda (cmd)
-                                 (alist-get 'invoke cmd))
-                               commands))
-          (width (apply #'max (mapcar #'string-width invocations)))
-          (completion-extra-properties
-           (list
-            :annotation-function
-            (lambda (cand)
-              (let* ((entry (seq-find (lambda (cmd)
-                                        (string= cand
-                                                 (alist-get 'invoke cmd)))
-                                      commands))
-                     (synopsis (alist-get 'synopsis entry)))
-                (when synopsis
-                  (concat (make-string (+ blue--anotation-padding
-                                          (- width (string-width cand)))
-                                       ?\s)
-                          (propertize synopsis 'face 'blue-documentation)))))
-            :group-function
-            (lambda (cand transform)
-              (if transform
-                  cand
-                (let* ((entry (seq-find (lambda (cmd)
-                                          (string= cand
-                                                   (alist-get 'invoke cmd)))
-                                        commands))
-                       (category (alist-get 'category entry)))
-                  (symbol-name category))))))
-          (crm-separator
-           (propertize "[ \t]*--[ \t]+"
-                       'separator "--"
-                       'description "double-dash-separated list"))
-          ;; HACK: redundant but avoids displaying `crm-separator' as part of
-          ;; the prompt. Otherwhise prompt will looke like:
-          ;; '[double-dash-separated list] [CRM--[ 	]+] Command:'
-          (prompt "Command: ")
-          (crm-prompt
-           (concat "[%d] [CMR%s] " prompt)))
-     (list (minibuffer-with-setup-hook
-               (lambda ()
-                 ;; Emacs default completion maps <SPC> to `crm-complete-word'
-                 ;; which forces the user to introduce spaces using
-                 ;; `quoted-insert'. Remove the keybinding so literal spaces can
-                 ;; be introduces.
-                 (define-key crm-local-completion-map (kbd "SPC") nil)
-                 (add-hook 'completion-at-point-functions
-                           #'blue--completion-at-point nil t))
+   (if-let* ((commands (blue--get-commands))
+             (invocations (mapcar (lambda (cmd)
+                                    (alist-get 'invoke cmd))
+                                  commands))
+             (width (if invocations
+                        (apply #'max (mapcar #'string-width invocations))
+                      0))
+             (completion-extra-properties
+              (list
+               :annotation-function
+               (lambda (cand)
+                 (let* ((entry (seq-find (lambda (cmd)
+                                           (string= cand
+                                                    (alist-get 'invoke cmd)))
+                                         commands))
+                        (synopsis (alist-get 'synopsis entry)))
+                   (when synopsis
+                     (concat (make-string (+ blue--anotation-padding
+                                             (- width (string-width cand)))
+                                          ?\s)
+                             (propertize synopsis 'face 'blue-documentation)))))
+               :group-function
+               (lambda (cand transform)
+                 (if transform
+                     cand
+                   (let* ((entry (seq-find (lambda (cmd)
+                                             (string= cand
+                                                      (alist-get 'invoke cmd)))
+                                           commands))
+                          (category (alist-get 'category entry)))
+                     (symbol-name category))))))
+             (crm-separator
+              (propertize "[ \t]*--[ \t]+"
+                          'separator "--"
+                          'description "double-dash-separated list"))
+             ;; HACK: redundant but avoids displaying `crm-separator' as part of
+             ;; the prompt. Otherwhise prompt will looke like:
+             ;; '[double-dash-separated list] [CRM--[ 	]+] Command:'
+             (prompt "Command: ")
+             (crm-prompt
+              (concat "[%d] [CMR%s] " prompt)))
+       (list (minibuffer-with-setup-hook
+                 (lambda ()
+                   ;; Emacs default completion maps <SPC> to `crm-complete-word'
+                   ;; which forces the user to introduce spaces using
+                   ;; `quoted-insert'. Remove the keybinding so literal spaces can
+                   ;; be introduces.
+                   (define-key crm-local-completion-map (kbd "SPC") nil)
+                   (add-hook 'completion-at-point-functions
+                             #'blue--completion-at-point nil t))
                (completing-read-multiple prompt invocations))
-           commands
-           (consp current-prefix-arg))))
+             commands
+             (consp current-prefix-arg))
+     '(unset)))
 
   ;; List of chained commands in user input, with arguments. Each element is a
   ;; list of strings representing the arguments and invoke of commands.
-  (let* ((input-tokens (mapcar (lambda (command)
-                                 (string-split command))
-                               input))
-         ;; The first token list needs to be treated specially since it includes
-         ;; the arguments meant for BLUE as well as the first chained command
-         ;; and it's arguments.
-         (first-invoke (seq-find (lambda (token)
-                                   (not (string-prefix-p "--" token)))
-                                 (car input-tokens)))
-         ;; Aside from the first one, all other tokens start with the command
-         ;; name followed by it's arguments.
-         (rest-invokes (mapcar (lambda (token)
-                                 (car token))
-                               (cdr input-tokens)))
-         (invokes (print (cons first-invoke rest-invokes)))
-         (any-interactive (seq-some (lambda (command)
-                                      (member command blue-interactive-commands))
-                                    invokes))
-         ;; `xor' allows to use `comint-flip' to invert the mode for the
-         ;; compilation, if `input' is part of `blue-interactive-commands',
-         ;; calling `blue-run-command' with universal prefix argument
-         ;; (commint-flip = t) will disable comint mode for the compilation
-         ;; buffers while enabling it for all other commands.
-         (inter (if (xor any-interactive
-                         comint-flip)
-                    t nil))
-         (configuration (seq-find (lambda (command)
-                                    (string= command "configure"))
-                                  input))
-         (entries (mapcar (lambda (command)
-                            (seq-find (lambda (cmd)
-                                        (string= command
-                                                 (alist-get 'invoke cmd)))
-                                      commands))
-                          invokes))
-         (any-requires-configuration (seq-some (lambda (entry)
-                                                 (alist-get 'requires-configuration? entry))
-                                               entries)))
-    (blue--ensure-read-cache-list)
-    (when configuration
-      (blue--remember-cache default-directory))
-    (setq blue--last-configuration (blue--project-cache default-directory))
-    (blue--compile (concat "blue " (string-join input " -- "))
-                   any-requires-configuration inter)))
+  (unless (eq input 'unset)
+    (let* ((input-tokens (mapcar (lambda (command)
+                                   (string-split command))
+                                 input))
+           ;; The first token list needs to be treated specially since it includes
+           ;; the arguments meant for BLUE as well as the first chained command
+           ;; and it's arguments.
+           (first-invoke (seq-find (lambda (token)
+                                     (not (string-prefix-p "--" token)))
+                                   (car input-tokens)))
+           ;; Aside from the first one, all other tokens start with the command
+           ;; name followed by it's arguments.
+           (rest-invokes (mapcar (lambda (token)
+                                   (car token))
+                                 (cdr input-tokens)))
+           (invokes (cons first-invoke rest-invokes))
+           (any-interactive (seq-some (lambda (command)
+                                        (member command blue-interactive-commands))
+                                      invokes))
+           ;; `xor' allows to use `comint-flip' to invert the mode for the
+           ;; compilation, if `input' is part of `blue-interactive-commands',
+           ;; calling `blue-run-command' with universal prefix argument
+           ;; (commint-flip = t) will disable comint mode for the compilation
+           ;; buffers while enabling it for all other commands.
+           (inter (if (xor any-interactive
+                           comint-flip)
+                      t nil))
+           (configuration (seq-find (lambda (command)
+                                      (string= command "configure"))
+                                    input))
+           (entries (mapcar (lambda (command)
+                              (seq-find (lambda (cmd)
+                                          (string= command
+                                                   (alist-get 'invoke cmd)))
+                                        commands))
+                            invokes))
+           (any-requires-configuration (seq-some (lambda (entry)
+                                                   (alist-get 'requires-configuration? entry))
+                                                 entries)))
+      (blue--ensure-read-cache-list)
+      (when configuration
+        (blue--remember-cache default-directory))
+      (setq blue--last-configuration (blue--project-cache default-directory))
+      (blue--compile (concat "blue " (string-join input " -- "))
+                     any-requires-configuration inter))))
 
 (provide 'blue)
 ;;; blue.el ends here.
