@@ -251,14 +251,7 @@ On failure, returns nil."
         (condition-case call-err
             (setq exit-code (call-process "blue" nil buf nil ".elisp-serialize-commands"))
           (file-missing
-           (let ((error-msg (concat (propertize "[ERROR] " 'face 'error)
-                                    (propertize "`blue'" 'face 'font-lock-constant-face)
-                                    " command not found in "
-                                    (propertize "`exec-path'" 'face 'font-lock-type-face))))
-             (insert error-msg)
-             (message error-msg))
-           (setq exit-code 'missing
-                 result nil)))
+           (setq exit-code 'missing)))
 
         ;; Mark where command output ended
         (setq end-pos (point))
@@ -270,22 +263,25 @@ On failure, returns nil."
                                           ((eq exit-code 'missing) 'error)
                                           (t 'warning)))))
 
-        ;; Handle failures
-        (unless result
-          (when (and (numberp exit-code) (not (zerop exit-code)))
-            (setq result (list 'blue-exit exit-code))))
-
         ;; Parse only the command’s stdout when exit-code was 0
-        (when (and (eq exit-code 0) (not result))
-          (let ((output (buffer-substring-no-properties start-pos end-pos)))
-            (condition-case parse-err
-                (setq result (read output))
-              ((end-of-file error)
-               (let ((error-msg (propertize (format "[Parse error] %S\n" parse-err)
-                                            'face 'error)))
-                 (insert error-msg)
-                 (message error-msg))
-               (setq result nil)))))))
+        (if (eq exit-code 0)
+            (let ((output (buffer-substring-no-properties start-pos end-pos)))
+              (condition-case parse-err
+                  (setq result (read output))
+                ((end-of-file error)
+                 (let ((error-msg (propertize (format "[Parse error] %s\n" parse-err)
+                                              'face 'error)))
+                   (insert error-msg)
+                   (message error-msg)))))
+          (let ((error-msg (if (numberp exit-code)
+                               (propertize (format "[Blue] Error %s" exit-code)
+                                           'face 'error)
+                             (concat (propertize "[ERROR] " 'face 'error)
+                                     (propertize "`blue'" 'face 'font-lock-constant-face)
+                                     " command not found in "
+                                     (propertize "`exec-path'" 'face 'font-lock-type-face)))))
+            (insert error-msg)
+            (message error-msg)))))
     result))
 
 (defun blue--autocomplete (input)
