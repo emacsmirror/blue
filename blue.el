@@ -297,13 +297,6 @@ On failure, returns nil."
             (message error-msg)))))
     result))
 
-(defun blue--autocomplete (input)
-  "Invoke BLUE autocompletion command with INPUT string."
-  (let* ((beg (minibuffer-prompt-end))
-         (end (point-max))
-         (input (buffer-substring beg end)))
-    input))
-
 (defun blue--completion-at-point ()
   "Function for `completion-at-point' fn for `blue-run-command'."
   (let* ((prompt-start (minibuffer-prompt-end))
