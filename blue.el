@@ -387,9 +387,7 @@ a member of `blue-interactive-commands'."
            ;; The first token list needs to be treated specially since it includes
            ;; the arguments meant for BLUE as well as the first chained command
            ;; and it's arguments.
-           (first-invoke (seq-find (lambda (token)
-                                     (not (string-prefix-p "--" token)))
-                                   (car input-tokens)))
+           (first-invoke (car (last (car input-tokens))))
            ;; Aside from the first one, all other tokens start with the command
            ;; name followed by it's arguments.
            (rest-invokes (mapcar (lambda (token)
@@ -409,7 +407,8 @@ a member of `blue-interactive-commands'."
                       t nil))
            (configuration (seq-find (lambda (command)
                                       (string= command "configure"))
-                                    input))
+                                    invokes))
+           ;; Each entry is the a serialized command data from BLUE.
            (entries (mapcar (lambda (command)
                               (seq-find (lambda (cmd)
                                           (string= command
@@ -421,6 +420,8 @@ a member of `blue-interactive-commands'."
                                                  entries)))
       (blue--ensure-read-cache-list)
       (when configuration
+        (message (concat "Configuration requested, next command that requires a configuration will
+run under " (propertize "`blue--last-configuration'" 'face 'bold) " directory."))
         (blue--remember-cache default-directory))
       (setq blue--last-configuration (blue--project-cache default-directory))
       (blue--compile (concat "blue " (string-join input " -- "))
