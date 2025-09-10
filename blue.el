@@ -38,6 +38,11 @@
   :version "31.1"
   :group 'tools)
 
+(defcustom blue-binary "blue"
+  "Name to use to call the BLUE."
+  :group 'blue
+  :type 'string)
+
 (defcustom blue-interactive-commands '("repl")
   "List of strings of interactive BLUE commands.
 Interactive commands will run in comint mode compilation buffers."
@@ -234,12 +239,12 @@ On success, returns the parsed Lisp value.
 On failure, returns nil."
   (interactive)
   (let* ((buf (get-buffer-create blue--output-buffer))
-         (cmd "blue .elisp-serialize-commands")
+         (serialize-cmd ".elisp-serialize-commands")
          (time (current-time-string))
          ;; Disable autocompilation.
          (env (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (path exec-path)
-         (header (format "▶ %s  [%s]\n" cmd time))
+         (header (format "▶ %s  [%s]\n" (concat blue-binary " " serialize-cmd) time))
          start-pos end-pos
          exit-code
          result)
@@ -257,7 +262,7 @@ On failure, returns nil."
 
         ;; Run `blue`, capturing stdout in the buffer
         (condition-case call-err
-            (setq exit-code (call-process "blue" nil buf nil ".elisp-serialize-commands"))
+            (setq exit-code (call-process blue-binary nil buf nil serialize-cmd))
           (file-missing
            (setq exit-code 'missing)))
 
@@ -305,7 +310,7 @@ On failure, returns nil."
          (pt (point))
          (input (buffer-substring prompt-start pt))
          (autocompletion-raw (shell-command-to-string
-                              (concat "blue .autocomplete \"blue " input "\"")))
+                              (concat blue-binary " .autocomplete \"blue " input "\"")))
          (completion-table (string-split autocompletion-raw))
          (symbol-boundaries (bounds-of-thing-at-point 'symbol)))
     (if completion-table
@@ -389,9 +394,10 @@ a member of `blue-interactive-commands'."
   ;; List of chained commands in user input, with arguments. Each element is a
   ;; list of strings representing the arguments and invoke of commands.
   (unless (eq input 'unset) ; Special value since empty input is allowed.
-    (let* ((blue-flags (if (listp blue-default-flags)
-                           (string-join blue-default-flags " ")
-                         blue-default-flags))
+    (let* ((blue-flags (if (or (null blue-default-flags)
+                               (stringp blue-default-flags))
+                           blue-default-flags
+                         (string-join blue-default-flags " ")))
            (input-tokens (mapcar (lambda (command)
                                    (string-split command))
                                  input))
@@ -411,7 +417,7 @@ a member of `blue-interactive-commands'."
            ;; `xor' allows to use `comint-flip' to invert the mode for the
            ;; compilation, if `input' is part of `blue-interactive-commands',
            ;; calling `blue-run-command' with universal prefix argument
-           ;; (commint-flip = t) will disable comint mode for the compilation
+           ;; (comint-flip = t) will disable comint mode for the compilation
            ;; buffers while enabling it for all other commands.
            (inter (if (xor any-interactive
                            comint-flip)
@@ -435,7 +441,8 @@ a member of `blue-interactive-commands'."
 run under " (propertize "`blue--last-configuration'" 'face 'bold) " directory."))
         (blue--remember-cache default-directory))
       (setq blue--last-configuration (blue--project-cache default-directory))
-      (blue--compile (concat "blue " blue-flags " " (string-join input " -- "))
+      (blue--compile (concat blue-binary " " blue-flags (when blue-flags " ")
+                             (string-join input " -- "))
                      any-requires-configuration inter))))
 
 (provide 'blue)
