@@ -51,6 +51,14 @@ Interactive commands will run in comint mode compilation buffers."
   :version "31.1"
   :group 'blue)
 
+(defcustom blue-default-flags nil
+  "String or list of strings passed as arguments to BLUE."
+  :group 'blue
+  :type '(choice
+          (const :tag "None" nil)
+          (string :tag "Single string")
+          (repeat :tag "List of strings" string)))
+
 (defface blue-documentation
   '((t :inherit completions-annotations))
   "Face used to highlight documentation strings.")
@@ -381,7 +389,10 @@ a member of `blue-interactive-commands'."
   ;; List of chained commands in user input, with arguments. Each element is a
   ;; list of strings representing the arguments and invoke of commands.
   (unless (eq input 'unset) ; Special value since empty input is allowed.
-    (let* ((input-tokens (mapcar (lambda (command)
+    (let* ((blue-flags (if (listp blue-default-flags)
+                           (string-join blue-default-flags " ")
+                         blue-default-flags))
+           (input-tokens (mapcar (lambda (command)
                                    (string-split command))
                                  input))
            ;; The first token list needs to be treated specially since it includes
@@ -424,7 +435,7 @@ a member of `blue-interactive-commands'."
 run under " (propertize "`blue--last-configuration'" 'face 'bold) " directory."))
         (blue--remember-cache default-directory))
       (setq blue--last-configuration (blue--project-cache default-directory))
-      (blue--compile (concat "blue " (string-join input " -- "))
+      (blue--compile (concat "blue " blue-flags " " (string-join input " -- "))
                      any-requires-configuration inter))))
 
 (provide 'blue)
