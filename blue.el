@@ -297,22 +297,25 @@ On failure, returns nil."
             (message error-msg)))))
     result))
 
+(defvar blue--autocomplete-from-prompt
+  (completion-table-dynamic
+   (lambda (_)
+     (let ((result
+            (while-no-input
+              (when-let* ((inhibit-message t) ; Prevent completion prompt cluttering.
+                          (prompt-start (minibuffer-prompt-end))
+                          (input (buffer-substring prompt-start (point)))
+                          (completion-cmd (concat blue-binary " .autocomplete \"blue " input "\""))
+                          (completion (shell-command-to-string completion-cmd)))
+                (string-split completion)))))
+       (and (consp result) result))))
+  "Internal function to use in `blue--completion-at-point'.")
+
 (defun blue--completion-at-point ()
-  "Function for `completion-at-point' fn for `blue-run-command'."
-  (let* ((prompt-start (minibuffer-prompt-end))
-         (pt (point))
-         (input (buffer-substring prompt-start pt))
-         (autocompletion-raw (shell-command-to-string
-                              (concat blue-binary " .autocomplete \"blue " input "\"")))
-         (completion-table (string-split autocompletion-raw))
-         (symbol-boundaries (bounds-of-thing-at-point 'symbol)))
-    (if completion-table
-        (if-let* (symbol-boundaries
-                  (symbol-start (car symbol-boundaries))
-                  (symbol-end (cdr symbol-boundaries)))
-            (list symbol-start symbol-end completion-table)
-          (list pt pt completion-table))
-      nil)))
+  "`completion-at-point' for `blue-run-command'."
+  (pcase (bounds-of-thing-at-point 'symbol)
+    (`(,beg . ,end)
+     (list beg end blue--autocomplete-from-prompt :exclusive 'no))))
 
 (defun blue--run-command-prompt ()
   "Interactive prompt used by `blue-run-command'."
