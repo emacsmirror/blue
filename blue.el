@@ -229,7 +229,17 @@ changed, and NO-WRITE is nil."
 (defvar blue--output-buffer " *blue output*"
   "Buffer used to capture output from BLUE commands.")
 
-(defun blue--get-commands ()
+(defun blue--locate-blueprint (&optional path)
+  "Return path to top-level `blueprint.scm'.
+
+If PATH is non nil locate `blueprint.scm' from PATH."
+  (when-let* ((blueprint (locate-dominating-file (or path default-directory)
+                                                 "blueprint.scm")))
+    (expand-file-name
+     (directory-file-name
+      (concat blueprint "/blueprint.scm")))))
+
+(defun blue--get-commands (blueprint)
   "Return the commands provided by `blue .elisp-serialize-commands`.
 
 Each invocation prepends output to `blue--output-buffer' with a header
@@ -238,13 +248,19 @@ Each invocation prepends output to `blue--output-buffer' with a header
 On success, returns the parsed Lisp value.
 On failure, returns nil."
   (interactive)
-  (let* ((buf (get-buffer-create blue--output-buffer))
+  (let* ((blue-flags (if blueprint
+                         (list "--file" blueprint)
+                       ""))
+         (buf (get-buffer-create blue--output-buffer))
          (serialize-cmd ".elisp-serialize-commands")
          (time (current-time-string))
          ;; Disable autocompilation.
          (env (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (path exec-path)
-         (header (format "▶ %s  [%s]\n" (concat blue-binary " " serialize-cmd) time))
+         (header (format "▶ %s  [%s]\n" (concat blue-binary " "
+                                                (string-join blue-flags " ") " "
+                                                serialize-cmd)
+                         time))
          start-pos end-pos
          exit-code
          result)
@@ -262,7 +278,8 @@ On failure, returns nil."
 
         ;; Run `blue`, capturing stdout in the buffer
         (condition-case call-err
-            (setq exit-code (call-process blue-binary nil buf nil serialize-cmd))
+            (setq exit-code (apply #'call-process blue-binary nil buf nil
+                                   (append blue-flags (list serialize-cmd))))
           (file-missing
            (setq exit-code 'missing)))
 
@@ -319,7 +336,7 @@ On failure, returns nil."
 
 (defun blue--run-command-prompt ()
   "Interactive prompt used by `blue-run-command'."
-  (if-let* ((commands (blue--get-commands))
+  (if-let* ((commands (blue--get-commands (blue--locate-blueprint)))
             (invocations (mapcar (lambda (cmd)
                                    (alist-get 'invoke cmd))
                                  commands))
@@ -421,7 +438,7 @@ a member of `blue-interactive-commands'."
            (configuration (seq-find (lambda (command)
                                       (string= command "configure"))
                                     invokes))
-           ;; Each entry is the a serialized command data from BLUE.
+           ;; Each entry is a serialized command data from BLUE.
            (entries (mapcar (lambda (command)
                               (seq-find (lambda (cmd)
                                           (string= command
