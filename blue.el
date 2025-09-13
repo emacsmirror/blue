@@ -4,7 +4,7 @@
 ;;
 ;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
 ;; Version: 0.0.3
-;; Package-Requires: ((emacs "31.0.50"))
+;; Package-Requires: ((emacs "30.1"))
 ;; Keywords: blue, tools
 ;; URL: https://codeberg.org/lapislazuli/blue.el
 
@@ -32,12 +32,13 @@
 
 (require 'compile)
 (require 'crm)
+(require 'pcomplete)
+(require 'project)
 
 ;;; Configuration variables.
 
 (defgroup blue nil
   "Operations on the current project."
-  :version "31.1"
   :group 'tools)
 
 (defcustom blue-binary "blue"
@@ -55,7 +56,6 @@ Interactive commands will run in comint mode compilation buffers."
   (locate-user-emacs-file "blue.eld")
   "File in which to save the list of known BLUE caches."
   :type 'file
-  :version "31.1"
   :group 'blue)
 
 (defcustom blue-default-flags nil
@@ -122,9 +122,9 @@ COMINT selects wheter the compilation buffer should be interactive."
          (name-of-mode (if (eq mode t)
                            "compilation"
                          (replace-regexp-in-string "-mode\\'" "" (symbol-name mode))))
-         (compilation-buffer-name-function #'(lambda (name-of-mode)
-                                               (funcall #'blue--compilation-default-buffer-name
-                                                        command name-of-mode)))
+         (compilation-buffer-name-function (lambda (name-of-mode)
+                                             (funcall #'blue--compilation-default-buffer-name
+                                                      command name-of-mode)))
          (buf (get-buffer-create
                (compilation-buffer-name name-of-mode
                                         comint
@@ -186,7 +186,8 @@ If PATH is non nil locate `blueprint.scm' from PATH."
 
 (defmacro blue--memoized-defun (name arglist docstring &rest body)
   "Define a memoized function NAME.
-See `defun' for the meaning of arguments."
+
+See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
   (declare (doc-string 3) (indent 2))
   `(defalias ',name
      (blue--memoize (lambda ,arglist ,@body))
@@ -317,7 +318,7 @@ On failure, returns nil."
         (setq start-pos (point))
 
         ;; Run `blue`, capturing stdout in the buffer
-        (condition-case call-err
+        (condition-case _
             (setq exit-code (apply #'call-process blue-binary nil buf nil
                                    (append blue-flags (list serialize-cmd))))
           (file-missing
