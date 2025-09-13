@@ -229,6 +229,35 @@ changed, and NO-WRITE is nil."
 (defvar blue--output-buffer " *blue output*"
   "Buffer used to capture output from BLUE commands.")
 
+
+;;; Memoizing
+
+(defun blue--memoize (function)
+  "Return a memoized version of FUNCTION."
+  (let ((cache (make-hash-table :test 'equal)))
+    (lambda (&rest args)
+      (let ((result (gethash args cache 'not-found)))
+        (if (eq result 'not-found)
+            (let ((result (apply function args)))
+              (puthash args result cache)
+              result)
+          result)))))
+
+(defmacro blue--memoized-defun (name arglist docstring &rest body)
+  "Define a memoized function NAME.
+See `defun' for the meaning of arguments."
+  (declare (doc-string 3) (indent 2))
+  `(defalias ',name
+     (blue--memoize (lambda ,arglist ,@body))
+     ;; Add '(name args ...)' string with real arglist to the docstring,
+     ;; because *Help* will display '(name &rest ARGS)' for a defined
+     ;; function (since `blue--memoize' returns a lambda with '(&rest
+     ;; args)').
+     ,(format "(%S %s)\n\n%s"
+              name
+              (mapconcat #'symbol-name arglist " ")
+              docstring)))
+
 (defun blue--locate-blueprint (&optional path)
   "Return path to top-level `blueprint.scm'.
 
@@ -239,7 +268,7 @@ If PATH is non nil locate `blueprint.scm' from PATH."
      (directory-file-name
       (concat blueprint "/blueprint.scm")))))
 
-(defun blue--get-commands (blueprint)
+(blue--memoized-defun blue--get-commands (blueprint)
   "Return the commands provided by `blue .elisp-serialize-commands`.
 
 Each invocation prepends output to `blue--output-buffer' with a header
@@ -314,25 +343,36 @@ On failure, returns nil."
             (message error-msg)))))
     result))
 
-(defvar blue--autocomplete-from-prompt
-  (completion-table-dynamic
-   (lambda (_)
-     (let ((result
-            (while-no-input
-              (when-let* ((inhibit-message t) ; Prevent completion prompt cluttering.
-                          (prompt-start (minibuffer-prompt-end))
-                          (input (buffer-substring prompt-start (point)))
-                          (completion-cmd (concat blue-binary " .autocomplete \"blue " input "\""))
-                          (completion (shell-command-to-string completion-cmd)))
-                (string-split completion)))))
-       (and (consp result) result))))
-  "Internal function to use in `blue--completion-at-point'.")
+
+;;; Completion.
+
+(blue--memoized-defun blue--autocomplete (input)
+  "Use blue '.autocomplete' command to provide completion from INPUT."
+  (let* ((completion-cmd (concat blue-binary " .autocomplete \"blue " input "\""))
+         (completion (shell-command-to-string completion-cmd)))
+    (string-split completion)))
+
+(defun blue--autocomplete-from-prompt (&rest _)
+  "Internal function to use in `blue--completion-at-point'."
+  (let ((result
+         (while-no-input
+           (when-let* ((prompt-start (minibuffer-prompt-end))
+                       (input (buffer-substring prompt-start (point)))
+                       (completion-table (blue--autocomplete input)))
+             completion-table))))
+    (and (consp result) result)))
+
+(defun pcomplete/blue ()
+  "Completion for `blue'."
+  (while (pcomplete-here* (blue--autocomplete-from-prompt))))
 
 (defun blue--completion-at-point ()
   "`completion-at-point' for `blue-run-command'."
   (pcase (bounds-of-thing-at-point 'symbol)
     (`(,beg . ,end)
-     (list beg end blue--autocomplete-from-prompt :exclusive 'no))))
+     (list beg end
+           (completion-table-with-cache #'blue--autocomplete-from-prompt)
+           :exclusive 'no))))
 
 (defun blue--run-command-prompt ()
   "Interactive prompt used by `blue-run-command'."
