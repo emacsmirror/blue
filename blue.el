@@ -33,6 +33,8 @@
 (require 'compile)
 (require 'crm)
 
+;;; Configuration variables.
+
 (defgroup blue nil
   "Operations on the current project."
   :version "31.1"
@@ -150,10 +152,55 @@ COMINT selects wheter the compilation buffer should be interactive."
       ;; if needed.
       (compilation-start command comint))))
 
+
+;;; Utilities.
+
 (defun blue--expand-if-remote-name (path)
   "Expand PATH if it's a file."
   (if (file-remote-p path) path
     (expand-file-name path)))
+
+(defun blue--locate-blueprint (&optional path)
+  "Return path to top-level `blueprint.scm'.
+
+If PATH is non nil locate `blueprint.scm' from PATH."
+  (when-let* ((blueprint (locate-dominating-file (or path default-directory)
+                                                 "blueprint.scm")))
+    (expand-file-name
+     (directory-file-name
+      (concat blueprint "/blueprint.scm")))))
+
+
+;;; Memoizing.
+
+(defun blue--memoize (function)
+  "Return a memoized version of FUNCTION."
+  (let ((cache (make-hash-table :test 'equal)))
+    (lambda (&rest args)
+      (let ((result (gethash args cache 'not-found)))
+        (if (eq result 'not-found)
+            (let ((result (apply function args)))
+              (puthash args result cache)
+              result)
+          result)))))
+
+(defmacro blue--memoized-defun (name arglist docstring &rest body)
+  "Define a memoized function NAME.
+See `defun' for the meaning of arguments."
+  (declare (doc-string 3) (indent 2))
+  `(defalias ',name
+     (blue--memoize (lambda ,arglist ,@body))
+     ;; Add '(name args ...)' string with real arglist to the docstring,
+     ;; because *Help* will display '(name &rest ARGS)' for a defined
+     ;; function (since `blue--memoize' returns a lambda with '(&rest
+     ;; args)').
+     ,(format "(%S %s)\n\n%s"
+              name
+              (mapconcat #'symbol-name arglist " ")
+              docstring)))
+
+
+;;; Cache.
 
 (defun blue--read-cache-list ()
   "Initialize `blue--cache-list' using contents of `blue-cache-list-file'."
@@ -220,54 +267,18 @@ changed, and NO-WRITE is nil."
   (let ((root (expand-file-name (project-root (project-current nil dir)))))
     (cdr (assoc-string root blue--cache-list))))
 
+(defvar blue--output-buffer " *blue output*"
+  "Buffer used to capture output from BLUE commands.")
+
+
+;;; Completion.
+
 ;; Example output:
 ;; (((invoke . "build")
 ;;   (category . build)
 ;;   (synopsis . "Build the project")
 ;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
 ;;  ...)
-(defvar blue--output-buffer " *blue output*"
-  "Buffer used to capture output from BLUE commands.")
-
-
-;;; Memoizing
-
-(defun blue--memoize (function)
-  "Return a memoized version of FUNCTION."
-  (let ((cache (make-hash-table :test 'equal)))
-    (lambda (&rest args)
-      (let ((result (gethash args cache 'not-found)))
-        (if (eq result 'not-found)
-            (let ((result (apply function args)))
-              (puthash args result cache)
-              result)
-          result)))))
-
-(defmacro blue--memoized-defun (name arglist docstring &rest body)
-  "Define a memoized function NAME.
-See `defun' for the meaning of arguments."
-  (declare (doc-string 3) (indent 2))
-  `(defalias ',name
-     (blue--memoize (lambda ,arglist ,@body))
-     ;; Add '(name args ...)' string with real arglist to the docstring,
-     ;; because *Help* will display '(name &rest ARGS)' for a defined
-     ;; function (since `blue--memoize' returns a lambda with '(&rest
-     ;; args)').
-     ,(format "(%S %s)\n\n%s"
-              name
-              (mapconcat #'symbol-name arglist " ")
-              docstring)))
-
-(defun blue--locate-blueprint (&optional path)
-  "Return path to top-level `blueprint.scm'.
-
-If PATH is non nil locate `blueprint.scm' from PATH."
-  (when-let* ((blueprint (locate-dominating-file (or path default-directory)
-                                                 "blueprint.scm")))
-    (expand-file-name
-     (directory-file-name
-      (concat blueprint "/blueprint.scm")))))
-
 (blue--memoized-defun blue--get-commands (blueprint)
   "Return the commands provided by `blue .elisp-serialize-commands`.
 
@@ -342,9 +353,6 @@ On failure, returns nil."
             (insert error-msg)
             (message error-msg)))))
     result))
-
-
-;;; Completion.
 
 (blue--memoized-defun blue--autocomplete (input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
