@@ -22,7 +22,7 @@ Features:
 * Installation
 This package is available on [[https://melpa.org/][MELPA]]!
 
-Add this to your configuration file:
+Add this to your configuration file to install it from source:
 #+begin_src emacs-lisp
 (use-package blue
   :vc (:url "https://codeberg.org/lapislazuli/blue.el"))
