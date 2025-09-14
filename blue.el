@@ -280,7 +280,7 @@ changed, and NO-WRITE is nil."
 ;;   (synopsis . "Build the project")
 ;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
 ;;  ...)
-(blue--memoized-defun blue--get-commands (blueprint)
+(defun blue--get-commands (blueprint)
   "Return the commands provided by `blue .elisp-serialize-commands`.
 
 Each invocation prepends output to `blue--output-buffer' with a header
