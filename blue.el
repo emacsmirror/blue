@@ -281,7 +281,9 @@ changed, and NO-WRITE is nil."
 ;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
 ;;  ...)
 (defun blue--get-commands (blueprint)
-  "Return the commands provided by `blue .elisp-serialize-commands`.
+  "Return the commands provided by BLUEPRINT.
+
+If BLUEPRINT is nil let BLUE locate the blueprint file.
 
 Each invocation prepends output to `blue--output-buffer' with a header
 [command + timestamp] and a propertized status footer.
@@ -328,11 +330,11 @@ On failure, returns nil."
         (setq end-pos (point))
 
         ;; Footer
-        (insert (concat(propertize (format "\n⏹ Status: %s\n\n" exit-code)
-                                   'face (cond
-                                          ((eq exit-code 0) 'success)
-                                          ((eq exit-code 'missing) 'error)
-                                          (t 'warning)))))
+        (insert (propertize (format "\n⏹ Status: %s\n\n" exit-code)
+                            'face (cond
+                                   ((eq exit-code 0) 'success)
+                                   ((eq exit-code 'missing) 'error)
+                                   (t 'warning))))
 
         ;; Parse only the command’s stdout when exit-code was 0
         (if (eq exit-code 0)
