@@ -280,22 +280,14 @@ changed, and NO-WRITE is nil."
 ;;   (synopsis . "Build the project")
 ;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
 ;;  ...)
-(defun blue--get-commands (blueprint)
-  "Return the commands provided by BLUEPRINT.
+(defun blue--run-serialize (blue-flags serialize-cmd)
+  "Helper to run BLUE serialization commands and retrieve output.
 
-If BLUEPRINT is nil let BLUE locate the blueprint file.
+The command logs in `blue--output-buffer'.
 
-Each invocation prepends output to `blue--output-buffer' with a header
-[command + timestamp] and a propertized status footer.
-
-On success, returns the parsed Lisp value.
-On failure, returns nil."
-  (interactive)
-  (let* ((blue-flags (if blueprint
-                         (list "--file" blueprint)
-                       ""))
-         (buf (get-buffer-create blue--output-buffer))
-         (serialize-cmd ".elisp-serialize-commands")
+BLUE-FLAGS are the flags passed to 'blue'.
+SERIALIZE-CMD is the serialization command to run."
+  (let* ((buf (get-buffer-create blue--output-buffer))
          (time (current-time-string))
          ;; Disable autocompilation.
          (env (cons "GUILE_AUTO_COMPILE=0" process-environment))
@@ -356,6 +348,23 @@ On failure, returns nil."
             (insert error-msg)
             (message error-msg)))))
     result))
+
+(defun blue--get-commands (blueprint)
+  "Return the commands provided by BLUEPRINT."
+  (interactive)
+  (let ((blue-flags (if blueprint
+                        (list "--file" blueprint)
+                      "")))
+    (blue--run-serialize blue-flags ".elisp-serialize-commands")))
+
+(defun blue--get-configuration (blueprint dir)
+  "Return the BLUEPRINT configuration stored in DIR."
+  (interactive)
+  (let ((blue-flags (if blueprint
+                        (list "--file" blueprint
+                              "--build-directory" dir)
+                      "")))
+    (blue--run-serialize blue-flags ".elisp-serialize-configuration")))
 
 (blue--memoized-defun blue--autocomplete (input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
