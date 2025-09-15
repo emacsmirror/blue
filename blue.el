@@ -394,6 +394,36 @@ SERIALIZE-CMD is the serialization command to run."
            (completion-table-with-cache #'blue--autocomplete-from-prompt)
            :exclusive 'no))))
 
+;; --- HINTS
+
+(defface blue-minibuffer-hint-separator-face '((t :inherit shadow
+                                                  :strike-through t))
+  "Face used to separate hint overlay.")
+
+(defvar blue--minibuffer-hint-overlay nil
+  "Overlay for `dape--minibuffer-hint'.")
+
+(defun blue--minibuffer-hint (&rest _)
+  "Display current configuration in minibuffer in overlay."
+  (let ((hint-rows (list (current-time-string))))
+    (unless blue--minibuffer-hint-overlay
+      (setq blue--minibuffer-hint-overlay (make-overlay (point) (point))))
+    (overlay-put blue--minibuffer-hint-overlay
+                 'after-string
+                 (concat
+                  (when hint-rows
+                    (concat
+                     (mapconcat #'identity hint-rows "\n")
+                     "\n"
+                     (propertize
+                      " " 'face 'blue-minibuffer-hint-separator-face
+                      'display '(space :align-to right))
+                     "\n"))))
+    (move-overlay blue--minibuffer-hint-overlay
+                  (point-min) (point-min) (current-buffer))))
+
+;; --- HINTS
+
 (defun blue--run-command-prompt ()
   "Interactive prompt used by `blue-run-command'."
   (if-let* ((commands (blue--get-commands (blue--locate-blueprint)))
@@ -445,7 +475,10 @@ SERIALIZE-CMD is the serialization command to run."
                   ;; be introduces.
                   (define-key crm-local-completion-map (kbd "SPC") nil)
                   (add-hook 'completion-at-point-functions
-                            #'blue--completion-at-point nil t))
+                            #'blue--completion-at-point nil t)
+                  (add-hook 'after-change-functions
+                            #'blue--minibuffer-hint nil t)
+                  (blue--minibuffer-hint))
               (completing-read-multiple prompt invocations))
             commands
             (consp current-prefix-arg))
