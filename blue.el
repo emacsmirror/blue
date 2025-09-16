@@ -210,7 +210,7 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
   "Initialize `blue--cache-list' using contents of `blue-cache-list-file'.
 
 Each entry in `blue--cache-list` has the form:
-  (root . (dir0 ... dirN))"
+  (root . (dir0 ...))"
   (when-let* ((filename blue-cache-list-file)
               (contents (when (file-exists-p filename)
                           (with-temp-buffer
@@ -230,22 +230,17 @@ Each entry in `blue--cache-list` has the form:
   "Save `blue--cache-list' in `blue-cache-list-file'.
 
 Each entry has the form:
-  (root . (dir0 ... dirN))"
+  (root . (dir0 ...))"
   (let ((filename blue-cache-list-file))
     (with-temp-buffer
       (insert ";;; -*- lisp-data -*-\n")
       (let ((print-length nil)
             (print-level nil))
-        (pp (mapcar (lambda (elem)
-                      (let ((root (car elem))
-                            (dirs (cdr elem)))
-                        (list (blue--expand-if-remote-name root)
-                              (mapcar #'blue--expand-if-remote-name dirs))))
-                    blue--cache-list)
+        (pp blue--cache-list
             (current-buffer)))
       (write-region nil nil filename nil 'silent))))
 
-(defun blue--remember-cache (dir &optional no-write)
+(defun blue--add-to-cache (dir &optional no-write)
   "Add DIR under its project ROOT in `blue--cache-list`.
 
 Each entry in `blue--cache-list` has the form:
@@ -258,20 +253,25 @@ If NO-WRITE is nil, save the updated list to `blue-cache-list-file'."
   (blue--ensure-read-cache-list)
   (let* ((root (expand-file-name (project-root (project-current nil dir))))
          (dir  (expand-file-name dir))
-         (existing (assoc root blue--cache-list)))
-    (if existing
-        (let ((dirs (cdr existing)))
-          ;; Move dir to front if already present, otherwise cons it
-          (setcdr existing (cons dir (delete dir dirs))))
-      (push (cons root (list dir)) blue--cache-list)))
+         (known (blue--project-known-configurations root)))
+    (setq blue--cache-list
+          (cons (list root
+                      (cons dir
+                            (delete dir known)))
+                ;; drop any old entry for ROOT
+                (seq-remove (lambda (entry)
+                              (string-equal root (car entry)))
+                            blue--cache-list))))
   (unless no-write
     (blue--write-cache-list)))
 
 
-(defun blue--project-cache (dir)
+
+
+(defun blue--project-known-configurations (dir)
   "Get last cache configured for project containing DIR."
   (let ((root (expand-file-name (project-root (project-current nil dir)))))
-    (caadr (assoc-string root blue--cache-list))))
+    (cadr (assoc-string root blue--cache-list))))
 
 (defvar blue--output-buffer " *blue output*"
   "Buffer used to capture output from BLUE commands.")
@@ -414,31 +414,32 @@ SERIALIZE-CMD is the serialization command to run."
 
 (defun blue--minibuffer-hint (&rest _)
   "Display current configuration in minibuffer in overlay."
-  (let* ((configuration (blue--get-configuration blue--current-blueprint blue--last-configuration))
-         (vars '("srcdir" "builddir"))
-         (hint-rows (append (list "Previous configuration:")
-                            (mapcar (lambda (var)
-                                      (concat
-                                       (propertize var 'face 'font-lock-keyword-face)
-                                       " "
-                                       (propertize (blue--get-from-configuration var configuration)
-                                                   'face '(:inherit shadow :weight regular))))
-                                    vars))))
-    (unless blue--minibuffer-hint-overlay
-      (setq blue--minibuffer-hint-overlay (make-overlay (point) (point))))
-    (overlay-put blue--minibuffer-hint-overlay
-                 'after-string
-                 (concat
-                  (when hint-rows
-                    (concat
-                     (mapconcat #'identity hint-rows "\n")
-                     "\n"
-                     (propertize
-                      " " 'face 'blue-minibuffer-hint-separator-face
-                      'display '(space :align-to right))
-                     "\n"))))
-    (move-overlay blue--minibuffer-hint-overlay
-                  (point-min) (point-min) (current-buffer))))
+  ;; (let* ((configuration (blue--get-configuration blue--current-blueprint blue--last-configuration))
+  ;;        (vars '("srcdir" "builddir"))
+  ;;        (hint-rows (append (list "Previous configuration:")
+  ;;                           (mapcar (lambda (var)
+  ;;                                     (concat
+  ;;                                      (propertize var 'face 'font-lock-keyword-face)
+  ;;                                      " "
+  ;;                                      (propertize (blue--get-from-configuration var configuration)
+  ;;                                                  'face '(:inherit shadow :weight regular))))
+  ;;                                   vars))))
+  ;;   (unless blue--minibuffer-hint-overlay
+  ;;     (setq blue--minibuffer-hint-overlay (make-overlay (point) (point))))
+  ;;   (overlay-put blue--minibuffer-hint-overlay
+  ;;                'after-string
+  ;;                (concat
+  ;;                 (when hint-rows
+  ;;                   (concat
+  ;;                    (mapconcat #'identity hint-rows "\n")
+  ;;                    "\n"
+  ;;                    (propertize
+  ;;                     " " 'face 'blue-minibuffer-hint-separator-face
+  ;;                     'display '(space :align-to right))
+  ;;                    "\n"))))
+  ;;   (move-overlay blue--minibuffer-hint-overlay
+  ;;                 (point-min) (point-min) (current-buffer)))
+  )
 
 ;; --- HINTS
 
@@ -564,8 +565,9 @@ a member of `blue-interactive-commands'."
       (when configuration
         (message (concat "Configuration requested, next command that requires a configuration will
 run under " (propertize "`blue--last-configuration'" 'face 'bold) " directory."))
-        (blue--remember-cache default-directory))
-      (setq blue--last-configuration (blue--project-cache default-directory))
+        (blue--add-to-cache default-directory))
+      (let ((last-configuration (car (blue--project-known-configurations default-directory))))
+        (setq blue--last-configuration last-configuration))
       (blue--compile (concat blue-binary " " blue-flags (when blue-flags " ")
                              (string-join input " -- "))
                      any-requires-configuration inter))))
