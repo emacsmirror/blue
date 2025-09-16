@@ -207,27 +207,19 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
 ;;; Cache.
 
 (defun blue--read-cache-list ()
-  "Initialize `blue--cache-list' using contents of `blue-cache-list-file'."
-  (let ((filename blue-cache-list-file))
-    (setq blue--cache-list
-          (when (file-exists-p filename)
-            (with-temp-buffer
-              (insert-file-contents filename)
-              (mapcar (lambda (elem)
-                        (let ((root (car elem))
-                              (dir (cdr elem)))
-                          (cons (blue--expand-if-remote-name root)
-                                (blue--expand-if-remote-name dir))))
-                      (condition-case nil
-                          (read (current-buffer))
-                        (end-of-file
-                         (warn "Failed to read the BLUE cache list file due to unexpected EOF")))))))
-    (unless (seq-every-p
-             (lambda (elt) (stringp (car-safe elt)))
-             blue--cache-list)
-      (warn "Contents of %s are in wrong format, resetting"
-            blue-cache-list-file)
-      (setq blue--cache-list nil))))
+  "Initialize `blue--cache-list' using contents of `blue-cache-list-file'.
+
+Each entry in `blue--cache-list` has the form:
+  (root . (dir0 ... dirN))"
+  (when-let* ((filename blue-cache-list-file)
+              (contents (when (file-exists-p filename)
+                          (with-temp-buffer
+                            (insert-file-contents filename)
+                            (condition-case nil
+                                (read (current-buffer))
+                              (end-of-file
+                               (warn "Failed to read the BLUE cache list file due to unexpected EOF")))))))
+    (setq blue--cache-list contents)))
 
 (defun blue--ensure-read-cache-list ()
   "Initialize `blue--cache-list' if it isn't already initialized."
@@ -235,7 +227,10 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
     (blue--read-cache-list)))
 
 (defun blue--write-cache-list ()
-  "Save `blue--cache-list' in `blue-cache-list-file'."
+  "Save `blue--cache-list' in `blue-cache-list-file'.
+
+Each entry has the form:
+  (root . (dir0 ... dirN))"
   (let ((filename blue-cache-list-file))
     (with-temp-buffer
       (insert ";;; -*- lisp-data -*-\n")
@@ -243,33 +238,40 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
             (print-level nil))
         (pp (mapcar (lambda (elem)
                       (let ((root (car elem))
-                            (dir (cdr elem)))
-                        (cons (blue--expand-if-remote-name root)
-                              (blue--expand-if-remote-name dir))))
+                            (dirs (cdr elem)))
+                        (list (blue--expand-if-remote-name root)
+                              (mapcar #'blue--expand-if-remote-name dirs))))
                     blue--cache-list)
             (current-buffer)))
       (write-region nil nil filename nil 'silent))))
 
 (defun blue--remember-cache (dir &optional no-write)
-  "Add DIR to the front of the cache list.
-Save the result in `blue-cache-list-file' if the list of dir has
-changed, and NO-WRITE is nil."
+  "Add DIR under its project ROOT in `blue--cache-list`.
+
+Each entry in `blue--cache-list` has the form:
+  (root . (dir0 ...))
+
+If ROOT is already present, DIR is added to its list (most recent first).
+If ROOT is not present, a new entry is created.
+
+If NO-WRITE is nil, save the updated list to `blue-cache-list-file'."
   (blue--ensure-read-cache-list)
   (let* ((root (expand-file-name (project-root (project-current nil dir))))
-         (dir (expand-file-name dir))
-         (pair (cons root dir)))
-    (unless (equal (car blue--cache-list) pair)
-      (dolist (ent blue--cache-list)
-        (when (equal root (car ent))
-          (setq blue--cache-list (delq ent blue--cache-list))))
-      (push pair blue--cache-list)
-      (unless no-write
-        (blue--write-cache-list)))))
+         (dir  (expand-file-name dir))
+         (existing (assoc root blue--cache-list)))
+    (if existing
+        (let ((dirs (cdr existing)))
+          ;; Move dir to front if already present, otherwise cons it
+          (setcdr existing (cons dir (delete dir dirs))))
+      (push (cons root (list dir)) blue--cache-list)))
+  (unless no-write
+    (blue--write-cache-list)))
+
 
 (defun blue--project-cache (dir)
   "Get last cache configured for project containing DIR."
   (let ((root (expand-file-name (project-root (project-current nil dir)))))
-    (cdr (assoc-string root blue--cache-list))))
+    (caadr (assoc-string root blue--cache-list))))
 
 (defvar blue--output-buffer " *blue output*"
   "Buffer used to capture output from BLUE commands.")
