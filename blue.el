@@ -70,6 +70,9 @@ Interactive commands will run in comint mode compilation buffers."
   '((t :inherit completions-annotations))
   "Face used to highlight documentation strings.")
 
+(defvar blue--current-blueprint nil
+  "Current blueprint being processed.")
+
 (defvar blue--cache-list 'unset
   "List structure containing directories of known BLUE caches for project.")
 
@@ -366,6 +369,10 @@ SERIALIZE-CMD is the serialization command to run."
                       "")))
     (blue--run-serialize blue-flags ".elisp-serialize-configuration")))
 
+(defun blue--get-from-configuration (var configuration)
+  "Retrieve variable VAR value from CONFIGURATION."
+  (cdr (assoc-string var configuration)))
+
 (blue--memoized-defun blue--autocomplete (input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
   (let* ((completion-cmd (concat blue-binary " .autocomplete \"blue " input "\""))
@@ -405,7 +412,16 @@ SERIALIZE-CMD is the serialization command to run."
 
 (defun blue--minibuffer-hint (&rest _)
   "Display current configuration in minibuffer in overlay."
-  (let ((hint-rows (list (current-time-string))))
+  (let* ((configuration (blue--get-configuration blue--current-blueprint blue--last-configuration))
+         (vars '("srcdir" "builddir"))
+         (hint-rows (append (list "Previous configuration:")
+                            (mapcar (lambda (var)
+                                      (concat
+                                       (propertize var 'face 'font-lock-keyword-face)
+                                       " "
+                                       (propertize (blue--get-from-configuration var configuration)
+                                                   'face '(:inherit shadow :weight regular))))
+                                    vars))))
     (unless blue--minibuffer-hint-overlay
       (setq blue--minibuffer-hint-overlay (make-overlay (point) (point))))
     (overlay-put blue--minibuffer-hint-overlay
@@ -426,7 +442,8 @@ SERIALIZE-CMD is the serialization command to run."
 
 (defun blue--run-command-prompt ()
   "Interactive prompt used by `blue-run-command'."
-  (if-let* ((commands (blue--get-commands (blue--locate-blueprint)))
+  (if-let* ((blue--current-blueprint (blue--locate-blueprint))
+            (commands (blue--get-commands blue--current-blueprint))
             (invocations (mapcar (lambda (cmd)
                                    (alist-get 'invoke cmd))
                                  commands))
