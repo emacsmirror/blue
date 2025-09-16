@@ -414,32 +414,32 @@ SERIALIZE-CMD is the serialization command to run."
 
 (defun blue--minibuffer-hint (&rest _)
   "Display current configuration in minibuffer in overlay."
-  ;; (let* ((configuration (blue--get-configuration blue--current-blueprint blue--last-configuration))
-  ;;        (vars '("srcdir" "builddir"))
-  ;;        (hint-rows (append (list "Previous configuration:")
-  ;;                           (mapcar (lambda (var)
-  ;;                                     (concat
-  ;;                                      (propertize var 'face 'font-lock-keyword-face)
-  ;;                                      " "
-  ;;                                      (propertize (blue--get-from-configuration var configuration)
-  ;;                                                  'face '(:inherit shadow :weight regular))))
-  ;;                                   vars))))
-  ;;   (unless blue--minibuffer-hint-overlay
-  ;;     (setq blue--minibuffer-hint-overlay (make-overlay (point) (point))))
-  ;;   (overlay-put blue--minibuffer-hint-overlay
-  ;;                'after-string
-  ;;                (concat
-  ;;                 (when hint-rows
-  ;;                   (concat
-  ;;                    (mapconcat #'identity hint-rows "\n")
-  ;;                    "\n"
-  ;;                    (propertize
-  ;;                     " " 'face 'blue-minibuffer-hint-separator-face
-  ;;                     'display '(space :align-to right))
-  ;;                    "\n"))))
-  ;;   (move-overlay blue--minibuffer-hint-overlay
-  ;;                 (point-min) (point-min) (current-buffer)))
-  )
+  (let* ((known-configurations (blue--project-known-configurations blue--current-blueprint))
+         (indices (mapcar #'number-to-string (number-sequence 1 (length known-configurations))))
+         (known-configurations* (seq-mapn (lambda (idx str)
+                                            (concat
+                                             (propertize idx 'face 'font-lock-keyword-face)
+                                             " "
+                                             (propertize str
+                                                         'face '(:inherit shadow :weight regular))))
+                                          indices known-configurations))
+         (hint-rows (append (list "Previous configuration (M-<num> to select):")
+                            known-configurations*)))
+    (unless blue--minibuffer-hint-overlay
+      (setq blue--minibuffer-hint-overlay (make-overlay (point) (point))))
+    (overlay-put blue--minibuffer-hint-overlay
+                 'after-string
+                 (concat
+                  (when hint-rows
+                    (concat
+                     (mapconcat #'identity hint-rows "\n")
+                     "\n"
+                     (propertize
+                      " " 'face 'blue-minibuffer-hint-separator-face
+                      'display '(space :align-to right))
+                     "\n"))))
+    (move-overlay blue--minibuffer-hint-overlay
+                  (point-min) (point-min) (current-buffer))))
 
 ;; --- HINTS
 
