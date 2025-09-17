@@ -412,19 +412,30 @@ SERIALIZE-CMD is the serialization command to run."
                                                   :strike-through t))
   "Face used to separate hint overlay.")
 
+(defface blue-minibuffer-hint-highlight-face '((t :inherit bold
+                                                  :foreground "#3f578f"
+                                                  :background "#e0f2fa"))
+  "Face used to draw attention in hint overlay.")
+
+(defface blue-minibuffer-hint-faded-face '((t :inherit shadow :weight regular))
+  "Face used to display inactive items in hint overlay.")
+
 (defvar blue--minibuffer-hint-overlay nil
   "Overlay for `dape--minibuffer-hint'.")
 
 (defun blue--minibuffer-hint (&rest _)
-  "Display current configuration in minibuffer in overlay."
+  "Display current configuration in minibuffer overlay."
   (when-let* ((known-configurations (blue--project-known-configurations blue--current-blueprint))
               (indices (mapcar #'number-to-string (number-sequence 1 (length known-configurations))))
               (known-configurations* (seq-mapn (lambda (idx str)
-                                                 (concat
-                                                  (propertize idx 'face 'font-lock-keyword-face)
-                                                  " "
-                                                  (propertize str
-                                                              'face '(:inherit shadow :weight regular))))
+                                                 (let ((face (if (string-equal str blue--last-configuration)
+                                                                 'blue-minibuffer-hint-highlight-face
+                                                               'blue-minibuffer-hint-faded-face)))
+                                                   (concat
+                                                    (propertize idx 'face 'font-lock-keyword-face)
+                                                    " "
+                                                    (propertize str
+                                                                'face face))))
                                                indices known-configurations))
               (hint-rows (append (list "Previous configuration (M-<num> to select):")
                                  known-configurations*)))
@@ -435,7 +446,7 @@ SERIALIZE-CMD is the serialization command to run."
                  (concat
                   (when hint-rows
                     (concat
-                     (mapconcat #'identity hint-rows "\n")
+                     (string-join hint-rows "\n")
                      "\n"
                      (propertize
                       " " 'face 'blue-minibuffer-hint-separator-face
