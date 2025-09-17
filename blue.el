@@ -117,8 +117,6 @@ COMINT selects wheter the compilation buffer should be interactive."
     (setq compile-command command))
   (save-some-buffers (not compilation-ask-about-save)
                      compilation-save-buffers-predicate)
-  (setq-default compilation-directory default-directory)
-
   ;; Create the compilation buffer beforehand to setup some variables.
   (let* ((mode (or comint
                    'compilation-mode))
@@ -131,7 +129,11 @@ COMINT selects wheter the compilation buffer should be interactive."
          (buf (get-buffer-create
                (compilation-buffer-name name-of-mode
                                         comint
-                                        compilation-buffer-name-function))))
+                                        compilation-buffer-name-function)))
+         (dir (or blue--last-configuration default-directory)))
+
+    (setq-default compilation-directory dir)
+
     ;; Setup compilation buffer variables.
     (with-current-buffer buf
       ;; Extend error list to make it understand Guile errors.
@@ -140,17 +142,11 @@ COMINT selects wheter the compilation buffer should be interactive."
 
       ;; This needs to be set bufer-local so `recompile' runs in the correct
       ;; directory.
-      (setq default-directory (if (and requires-configuration
-                                       blue--last-configuration)
-                                  blue--last-configuration
-                                default-directory)))
+      (setq default-directory dir))
 
     ;; If commands needs a configuration, setup `default-directory' so it runs
     ;; in the previously configured directory.
-    (let ((default-directory (if (and requires-configuration
-                                      blue--last-configuration)
-                                 blue--last-configuration
-                               default-directory)))
+    (let ((default-directory dir))
       ;; Start compilation from original directory to ensure '.envrc' is loaded
       ;; if needed.
       (compilation-start command comint))))
@@ -224,7 +220,19 @@ Each entry in `blue--cache-list` has the form:
 (defun blue--ensure-read-cache-list ()
   "Initialize `blue--cache-list' if it isn't already initialized."
   (when (eq blue--cache-list 'unset)
-    (blue--read-cache-list)))
+    (blue--read-cache-list))
+
+  ;; Sanitize list, remove directories that does not exist.
+  (let ((sanitized (mapcar (lambda (entry)
+                             (let ((project (car entry))
+                                   (known-cache (cadr entry)))
+                               (when (file-exists-p project)
+                                 (list project
+                                       (seq-filter (lambda (dir)
+                                                     (file-exists-p dir))
+                                                   known-cache)))))
+                           blue--cache-list)))
+    (setq blue--cache-list sanitized)))
 
 (defun blue--write-cache-list ()
   "Save `blue--cache-list' in `blue-cache-list-file'.
