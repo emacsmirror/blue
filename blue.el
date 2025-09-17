@@ -457,6 +457,22 @@ SERIALIZE-CMD is the serialization command to run."
 
 ;; --- HINTS
 
+(defun blue--setup-prompt-map ()
+  "Setup keybindings for `blue-run-command' minibuffer prompt."
+  (define-key crm-local-completion-map (kbd "SPC") nil)
+  (mapc (lambda (index)
+          (let* ((num-str (number-to-string index))
+                 (key (kbd (concat "M-" num-str))))
+            (define-key crm-local-completion-map key
+                        (lambda ()
+                          (interactive)
+                          (setq blue--last-configuration
+                                (nth (1- index)
+                                     (blue--project-known-configurations blue--current-blueprint)))
+                          ;; Refresh hint.
+                          (blue--minibuffer-hint)))))
+          (number-sequence 1 9)))
+
 (defun blue--run-command-prompt ()
   "Interactive prompt used by `blue-run-command'."
   (blue--ensure-read-cache-list)
@@ -510,11 +526,12 @@ SERIALIZE-CMD is the serialization command to run."
                   ;; which forces the user to introduce spaces using
                   ;; `quoted-insert'. Remove the keybinding so literal spaces can
                   ;; be introduces.
-                  (define-key crm-local-completion-map (kbd "SPC") nil)
+                  (blue--setup-prompt-map)
                   (add-hook 'completion-at-point-functions
                             #'blue--completion-at-point nil t)
-                  (add-hook 'after-change-functions
-                            #'blue--minibuffer-hint nil t)
+                  ;; NOTE: high overhead, not needed for now.
+                  ;; (add-hook 'after-change-functions
+                  ;;           #'blue--minibuffer-hint nil t)
                   (blue--minibuffer-hint))
               (completing-read-multiple prompt invocations))
             commands
