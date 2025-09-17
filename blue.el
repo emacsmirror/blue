@@ -253,7 +253,10 @@ If NO-WRITE is nil, save the updated list to `blue-cache-list-file'."
   (blue--ensure-read-cache-list)
   (let* ((root (expand-file-name (project-root (project-current nil dir))))
          (dir  (expand-file-name dir))
-         (known (blue--project-known-configurations root)))
+         (known (blue--project-known-configurations root))
+         (cache (if (eq blue--cache-list 'unset)
+                    nil
+                  blue--cache-list)))
     (setq blue--cache-list
           (cons (list root
                       (cons dir
@@ -261,7 +264,7 @@ If NO-WRITE is nil, save the updated list to `blue-cache-list-file'."
                 ;; drop any old entry for ROOT
                 (seq-remove (lambda (entry)
                               (string-equal root (car entry)))
-                            blue--cache-list))))
+                            cache))))
   (unless no-write
     (blue--write-cache-list)))
 
