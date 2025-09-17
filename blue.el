@@ -533,7 +533,11 @@ SERIALIZE-CMD is the serialization command to run."
                   ;; (add-hook 'after-change-functions
                   ;;           #'blue--minibuffer-hint nil t)
                   (blue--minibuffer-hint))
-              (completing-read-multiple prompt invocations))
+              (prog1
+                  (completing-read-multiple prompt invocations)
+                ;; Move selected configuration to the front of the known cache
+                ;; lists so it's pre-selected in subsequent invocations.
+                (blue--add-to-cache blue--last-configuration)))
             commands
             (consp current-prefix-arg))
     '(unset)))
