@@ -459,11 +459,11 @@ SERIALIZE-CMD is the serialization command to run."
 
 (defun blue--setup-prompt-map ()
   "Setup keybindings for `blue-run-command' minibuffer prompt."
-  (define-key crm-local-completion-map (kbd "SPC") nil)
+  (define-key minibuffer-local-map (kbd "SPC") nil)
   (mapc (lambda (index)
           (let* ((num-str (number-to-string index))
                  (key (kbd (concat "M-" num-str))))
-            (define-key crm-local-completion-map key
+            (define-key minibuffer-local-map key
                         (lambda ()
                           (interactive)
                           (setq blue--last-configuration
