@@ -445,6 +445,7 @@ SERIALIZE-CMD is the serialization command to run."
 
 (defun blue--run-command-prompt ()
   "Interactive prompt used by `blue-run-command'."
+  (blue--ensure-read-cache-list)
   (if-let* ((blue--current-blueprint (blue--locate-blueprint))
             (commands (blue--get-commands blue--current-blueprint))
             (invocations (mapcar (lambda (cmd)
@@ -561,7 +562,6 @@ a member of `blue-interactive-commands'."
            (any-requires-configuration (seq-some (lambda (entry)
                                                    (alist-get 'requires-configuration? entry))
                                                  entries)))
-      (blue--ensure-read-cache-list)
       (when configuration
         (message (concat "Configuration requested, next command that requires a configuration will
 run under " (propertize "`blue--last-configuration'" 'face 'bold) " directory."))
