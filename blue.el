@@ -251,8 +251,8 @@ If ROOT is not present, a new entry is created.
 
 If NO-WRITE is nil, save the updated list to `blue-cache-list-file'."
   (blue--ensure-read-cache-list)
-  (let* ((root (expand-file-name (project-root (project-current nil dir))))
-         (dir  (expand-file-name dir))
+  (let* ((root (directory-file-name (expand-file-name (project-root (project-current nil dir)))))
+         (dir  (directory-file-name (expand-file-name dir)))
          (known (blue--project-known-configurations root))
          (cache (if (eq blue--cache-list 'unset)
                     nil
@@ -273,7 +273,7 @@ If NO-WRITE is nil, save the updated list to `blue-cache-list-file'."
 
 (defun blue--project-known-configurations (dir)
   "Get last cache configured for project containing DIR."
-  (let ((root (expand-file-name (project-root (project-current nil dir)))))
+  (let ((root (directory-file-name (expand-file-name (project-root (project-current nil dir))))))
     (cadr (assoc-string root blue--cache-list))))
 
 (defvar blue--output-buffer " *blue output*"
@@ -537,7 +537,8 @@ SERIALIZE-CMD is the serialization command to run."
                   (completing-read-multiple prompt invocations)
                 ;; Move selected configuration to the front of the known cache
                 ;; lists so it's pre-selected in subsequent invocations.
-                (blue--add-to-cache blue--last-configuration)))
+                (when blue--last-configuration
+                  (blue--add-to-cache blue--last-configuration))))
             commands
             (consp current-prefix-arg))
     '(unset)))
