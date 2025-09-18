@@ -100,6 +100,12 @@ Interactive commands will run in comint mode compilation buffers."
 (defvar blue--config-dir nil
   "Path to last known configuration directory.")
 
+(defvar blue--overiden-config-dir nil
+  "Internal variable used to override `blue--config-dir'.
+
+This is used when passing universal prefix argument `C-u' to
+`blue-run-command'.")
+
 (defvar blue--buffer-name-function #'blue--default-buffer-name
   "Function used by BLUE to name the compilation buffer.")
 
@@ -366,25 +372,34 @@ If CURRENT is non-nil the entry will be highlighted."
      " "
      (propertize config 'face face))))
 
-(defun blue--create-hint-overlay (configs current)
-  "Create hint overlay content from CONFIGS and CURRENT configuration."
-  (when configs
-    (let* ((indices (number-sequence 1 (length configs)))
-           (formatted (seq-mapn (lambda (idx config)
-                                  (blue--format-config-hint idx config current))
-                                indices configs))
-           (lines (cons "Previous configuration (M-<num> to select):" formatted)))
-      (concat
-       (string-join lines "\n")
-       "\n"
-       (propertize " " 'face 'blue-hint-separator
-                   'display '(space :align-to right))
-       "\n"))))
+(defun blue--create-hint-overlay (configs current override)
+  "Create hint overlay content from CONFIGS and CURRENT configuration.
+
+If OVERRIDE is non nil disable CONFIGS."
+  (when-let* (configs
+              (indices (number-sequence 1 (length configs)))
+              (formatted (seq-mapn (lambda (idx config)
+                                     (blue--format-config-hint idx config current))
+                                   indices configs))
+              (lines (string-join formatted "\n"))
+              (lines* (if override
+                          (concat
+                           (blue--format-config-hint 0 override override)
+                           "\n"
+                           (propertize lines 'face '(:inherit blue-hint-faded :strike-through t)))
+                        lines)))
+    (concat
+     "Previous configuration (M-<num> to select):\n"
+     lines*
+     "\n"
+     (propertize " " 'face 'blue-hint-separator
+                 'display '(space :align-to right))
+     "\n")))
 
 (defun blue--show-hints (&rest _)
   "Display configuration hints in minibuffer overlay."
   (when-let* ((configs (blue--cache-get-configs blue--blueprint))
-              (content (blue--create-hint-overlay configs blue--config-dir)))
+              (content (blue--create-hint-overlay configs blue--config-dir blue--overiden-config-dir)))
     (unless blue--hint-overlay
       (setq blue--hint-overlay (make-overlay (point) (point))))
     (overlay-put blue--hint-overlay 'after-string content)
@@ -396,7 +411,7 @@ If CURRENT is non-nil the entry will be highlighted."
 (defun blue--bind-config-key (index)
   "Setup keybinding for configuration INDEX."
   (let ((key (kbd (format "M-%d" index))))
-    (define-key minibuffer-local-map key
+    (define-key (current-local-map) key
                 (lambda ()
                   (interactive)
                   (setq blue--config-dir
@@ -405,8 +420,12 @@ If CURRENT is non-nil the entry will be highlighted."
 
 (defun blue--setup-minibuffer ()
   "Setup keybindings and completion for minibuffer prompt."
-  (define-key minibuffer-local-map (kbd "SPC") nil)
-  (seq-do #'blue--bind-config-key (number-sequence 1 9))
+  ;; Work on a copy of the current minibuffer keymap so it doesn’t leak
+  (use-local-map (copy-keymap (current-local-map)))
+  (define-key (current-local-map) (kbd "SPC") nil)
+  (unless blue--overiden-config-dir
+    (let ((configs (blue--cache-get-configs blue--blueprint)))
+      (seq-do #'blue--bind-config-key (number-sequence 1 (length configs)))))
   (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
   (blue--show-hints))
 
@@ -528,41 +547,73 @@ COMINT-P selects `comint-mode' for compilation buffer."
     (list :annotation-function (blue--create-annotation-fn commands width)
           :group-function (blue--create-group-fn commands))))
 
+(defun blue--prompt-dir (&optional cache)
+  "Prompt for directory, create it if it does not exists.
+
+If CACHE is non nil, add directory to cache."
+  (let ((dir (blue--expand-path (read-directory-name "Configuration directory: "))))
+    (unless (file-exists-p dir)
+      (mkdir dir t))
+    ;; Needed to force the change of the execution directory since for the
+    ;; configure command the value of `default-directory' is respected in
+    ;; `blue--compile'.
+    (setq default-directory dir
+          blue--config-dir dir)
+    (when cache
+      (blue--cache-add dir))
+    dir))
+
 (defun blue--prompt-for-commands ()
   "Interactive prompt for BLUE commands."
   (blue--ensure-cache)
   (setq blue--config-dir (car (blue--cache-get-configs default-directory)))
 
-  (if-let* ((blue--blueprint (blue--find-blueprint))
-            (commands (blue--get-commands blue--blueprint))
-            (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
-            (completion-extra-properties
-             (blue--create-completion-properties commands invocations))
-            (crm-separator (propertize "[ \t]*--[ \t]+"
-                                       'separator "--"
-                                       'description "double-dash-separated list"))
-            (crm-prompt "[%d] [CMR%s] Command: "))
-      (let* ((prefix (car current-prefix-arg))
-             (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
-             (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
+  (let* ((prefix (car current-prefix-arg))
+         (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
+         (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
+         (blue--overiden-config-dir (when prompt-dir-p
+                                      (blue--prompt-dir))))
+    (if-let* ((blue--blueprint (blue--find-blueprint))
+              (commands (blue--get-commands blue--blueprint))
+              (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
+              (completion-extra-properties
+               (blue--create-completion-properties commands invocations))
+              (crm-separator (propertize "[ \t]*--[ \t]+"
+                                         'separator "--"
+                                         'description "double-dash-separated list"))
+              (crm-prompt "[%d] [CMR%s] Command: "))
         (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
                 (prog1 (completing-read-multiple "Command: " invocations)
                   (when blue--config-dir
-                    (blue--cache-add blue--config-dir))))
+                    (if blue--overiden-config-dir
+                        ;; Do not set cache for this case since this is only
+                        ;; used for bringing the directory to the front of the
+                        ;; cache list and it could be that there is no
+                        ;; configuration command in the user input meaning that
+                        ;; this directory should not be cached. The caching will
+                        ;; be done later in `blue-run-command'.
+                        (setq blue--config-dir blue--overiden-config-dir)
+                        (blue--cache-add blue--config-dir)))))
               commands
-              prompt-dir-p
-              comint-flip))
-    '(unset)))
+              comint-flip)
+      '(unset))))
 
 
 ;;; UI.
 
 ;;;###autoload
-(defun blue-run-command (input &optional commands prompt-dir-p comint-flip)
+(defun blue-run-command (input &optional commands comint-flip)
   "Run a BLUE command interactively.
+
+Invoked with universal prefix argument '\\[universal-argument]', prompt
+for a directory use when running 'blue'.
+
+Invoked with double universal prefix argument '\\[universal-argument]
+\\[universal-argument]', invert the interactive heuristics configured by
+`blue-interactive-commands'.
+
 INPUT is a list of command strings.
 COMMANDS contains command metadata.
-PROMPT-DIR-P prompt the user for a directory where to run INPUT.
 COMINT-FLIP inverts the interactive compilation logic."
   (interactive (blue--prompt-for-commands))
 
@@ -575,10 +626,9 @@ COMINT-FLIP inverts the interactive compilation logic."
            (needs-config-p (plist-get analysis :needs-config-p)))
 
       (cond
-       ((or prompt-dir-p
-            (and needs-config-p
-                 (not blue--config-dir)
-                 (not configure-p)))
+       ((and needs-config-p
+             (not blue--config-dir)
+             (not configure-p))
         (let ((conf-dir (read-directory-name "Configuration directory: ")))
           (unless (file-exists-p conf-dir)
             (mkdir conf-dir t))
@@ -586,8 +636,7 @@ COMINT-FLIP inverts the interactive compilation logic."
           ;; configure command the value of `default-directory' is respected in
           ;; `blue--compile'.
           (setq default-directory conf-dir
-                blue--config-dir conf-dir)
-          (blue--cache-add conf-dir)))
+                blue--config-dir conf-dir)))
        (configure-p
         (message (concat "Configuration requested, next command requiring configuration will "
                          "run under " (propertize "`blue--config-dir'" 'face 'bold) " directory."))
