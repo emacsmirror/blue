@@ -35,7 +35,7 @@
 (require 'pcomplete)
 (require 'project)
 
-;;; Configuration variables.
+;;; Configuration
 
 (defgroup blue nil
   "Operations on the current project."
@@ -52,7 +52,7 @@ Interactive commands will run in comint mode compilation buffers."
   :group 'blue
   :type '(repeat string))
 
-(defcustom blue-cache-list-file
+(defcustom blue-cache-file
   (locate-user-emacs-file "blue.eld")
   "File in which to save the list of known BLUE caches."
   :type 'file
@@ -66,555 +66,539 @@ Interactive commands will run in comint mode compilation buffers."
           (string :tag "Single string")
           (repeat :tag "List of strings" string)))
 
+(defcustom blue-annotation-padding 8
+  "Padding used for alignment of synopsis in completing read."
+  :type 'integer
+  :group 'blue)
+
+;;; Faces
+
 (defface blue-documentation
   '((t :inherit completions-annotations))
   "Face used to highlight documentation strings.")
 
-(defvar blue--current-blueprint nil
+(defface blue-hint-separator
+  '((t :inherit shadow :strike-through t))
+  "Face used to separate hint overlay.")
+
+(defface blue-hint-highlight
+  '((t :inherit bold :foreground "#3f578f" :background "#e0f2fa"))
+  "Face used to draw attention in hint overlay.")
+
+(defface blue-hint-faded
+  '((t :inherit shadow :weight regular))
+  "Face used to display inactive items in hint overlay.")
+
+;;; Internal Variables
+
+(defvar blue--blueprint nil
   "Current blueprint being processed.")
 
-(defvar blue--cache-list 'unset
+(defvar blue--cache-list 'uninitialized
   "List structure containing directories of known BLUE caches for project.")
 
-(defvar blue--anotation-padding 8
-  "Padding used for alignment of synopsis in completing read.")
-
-(defvar blue--last-configuration nil
+(defvar blue--config-dir nil
   "Path to last known configuration directory.")
 
-(defvar blue--compilation-buffer-name-function #'blue--compilation-default-buffer-name
-  "Function used by BLUE to name the compilation buffer used to run command.
+(defvar blue--buffer-name-function #'blue--default-buffer-name
+  "Function used by BLUE to name the compilation buffer.")
 
-The function must take 2 arguments, the COMMAND being run and
-NAME-OF-MODE which is the major mode of the compilation buffer.")
+(defvar blue--output-buffer " *blue output*"
+  "Buffer used to capture output from BLUE commands.")
 
-(defun blue--compilation-default-buffer-name (command name-of-mode)
-  "Compilation naming function for `blue-run-command'.
+(defvar blue--hint-overlay nil
+  "Overlay for minibuffer hints.")
 
-COMMAND will be passed the BLUE CLI arguments.
+;;; Utilities
 
-NAME-OF-MODE will be passed the major mode of the compilation buffer."
-  (concat "*" name-of-mode " | " command "*"))
-
-(defun blue--compile (command &optional requires-configuration comint)
-  "Like `compile' but tailored for BLUE.
-
-COMMAND is the command to run in the compilation buffer, it has the same
-meaning as in `compile'
-
-REQUIRES-CONFIGURATION ensures that command is run in
-`blue--last-configuration' directory.
-
-COMINT selects wheter the compilation buffer should be interactive."
-  (interactive
-   (list
-    (let ((command (eval compile-command)))
-      (if (or compilation-read-command current-prefix-arg)
-	      (compilation-read-command command)
-	    command))
-    (consp current-prefix-arg)))
-  (unless (equal command (eval compile-command))
-    (setq compile-command command))
-  (save-some-buffers (not compilation-ask-about-save)
-                     compilation-save-buffers-predicate)
-  ;; Create the compilation buffer beforehand to setup some variables.
-  (let* ((mode (or comint
-                   'compilation-mode))
-         (name-of-mode (if (eq mode t)
-                           "compilation"
-                         (replace-regexp-in-string "-mode\\'" "" (symbol-name mode))))
-         (compilation-buffer-name-function (lambda (name-of-mode)
-                                             (funcall #'blue--compilation-default-buffer-name
-                                                      command name-of-mode)))
-         (buf (get-buffer-create
-               (compilation-buffer-name name-of-mode
-                                        comint
-                                        compilation-buffer-name-function)))
-         (dir (or blue--last-configuration default-directory)))
-
-    (setq-default compilation-directory dir)
-
-    ;; Setup compilation buffer variables.
-    (with-current-buffer buf
-      ;; Extend error list to make it understand Guile errors.
-      (make-local-variable 'compilation-error-regexp-alist)
-      (add-to-list 'compilation-error-regexp-alist '("^.* at \\(.*?\\):\\([0-9]+\\)" 1 2))
-
-      ;; This needs to be set bufer-local so `recompile' runs in the correct
-      ;; directory.
-      (setq default-directory dir))
-
-    ;; If commands needs a configuration, setup `default-directory' so it runs
-    ;; in the previously configured directory.
-    (let ((default-directory dir))
-      ;; Start compilation from original directory to ensure '.envrc' is loaded
-      ;; if needed.
-      (compilation-start command comint))))
-
-
-;;; Utilities.
-
-(defun blue--expand-if-remote-name (path)
-  "Expand PATH if it's a file."
+(defun blue--expand-path (path)
+  "Expand PATH if it's a local file."
   (if (file-remote-p path) path
     (expand-file-name path)))
 
-(defun blue--locate-blueprint (&optional path)
+(defun blue--find-blueprint (&optional path)
   "Return path to top-level `blueprint.scm'.
-
-If PATH is non nil locate `blueprint.scm' from PATH."
+If PATH is non-nil, locate `blueprint.scm' from PATH."
   (when-let* ((blueprint (locate-dominating-file (or path default-directory)
                                                  "blueprint.scm")))
     (expand-file-name
      (directory-file-name
       (concat blueprint "/blueprint.scm")))))
 
-
-;;; Memoizing.
+(defun blue--normalize-flags (flags)
+  "Normalize FLAGS to a list of strings."
+  (cond
+   ((null flags) nil)
+   ((stringp flags) (string-split flags))
+   ((listp flags) flags)
+   (t (list (format "%s" flags)))))
+
+(defun blue--project-root (&optional dir)
+  "Get project root for DIR (defaults to `default-directory')."
+  (directory-file-name
+   (expand-file-name
+    (project-root (project-current nil (or dir default-directory))))))
+
+(defun blue--file-safe-p (file)
+  "Return t if FILE exists and is readable."
+  (and file (file-exists-p file) (file-readable-p file)))
+
+;;; Memoization
 
 (defun blue--memoize (function)
   "Return a memoized version of FUNCTION."
   (let ((cache (make-hash-table :test 'equal)))
     (lambda (&rest args)
-      (let ((result (gethash args cache 'not-found)))
-        (if (eq result 'not-found)
+      (let ((result (gethash args cache 'cache-miss)))
+        (if (eq result 'cache-miss)
             (let ((result (apply function args)))
               (puthash args result cache)
               result)
           result)))))
 
-(defmacro blue--memoized-defun (name arglist docstring &rest body)
+(defmacro blue--define-memoized (name arglist docstring &rest body)
   "Define a memoized function NAME.
-
 See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
   (declare (doc-string 3) (indent 2))
   `(defalias ',name
      (blue--memoize (lambda ,arglist ,@body))
-     ;; Add '(name args ...)' string with real arglist to the docstring,
-     ;; because *Help* will display '(name &rest ARGS)' for a defined
-     ;; function (since `blue--memoize' returns a lambda with '(&rest
-     ;; args)').
      ,(format "(%S %s)\n\n%s"
               name
               (mapconcat #'symbol-name arglist " ")
               docstring)))
 
-
-;;; Cache.
+;;; Cache Management
 
-(defun blue--read-cache-list ()
-  "Initialize `blue--cache-list' using contents of `blue-cache-list-file'.
+(defun blue--read-cache ()
+  "Initialize `blue--cache-list' from `blue-cache-file'."
+  (when (blue--file-safe-p blue-cache-file)
+    (condition-case err
+        (with-temp-buffer
+          (insert-file-contents blue-cache-file)
+          (setq blue--cache-list (read (current-buffer))))
+      (error
+       (warn "Failed to read BLUE cache file: %s" (error-message-string err))
+       (setq blue--cache-list nil)))))
 
-Each entry in `blue--cache-list` has the form:
-  (root . (dir0 ...))"
-  (when-let* ((filename blue-cache-list-file)
-              (contents (when (file-exists-p filename)
-                          (with-temp-buffer
-                            (insert-file-contents filename)
-                            (condition-case nil
-                                (read (current-buffer))
-                              (end-of-file
-                               (warn "Failed to read the BLUE cache list file due to unexpected EOF")))))))
-    (setq blue--cache-list contents)))
+(defun blue--write-cache ()
+  "Save `blue--cache-list' to `blue-cache-file'."
+  (condition-case err
+      (with-temp-buffer
+        (insert ";;; -*- lisp-data -*-\n")
+        (let ((print-length nil)
+              (print-level nil))
+          (pp blue--cache-list (current-buffer)))
+        (write-region nil nil blue-cache-file nil 'silent))
+    (error
+     (warn "Failed to write BLUE cache file: %s" (error-message-string err)))))
 
-(defun blue--ensure-read-cache-list ()
-  "Initialize `blue--cache-list' if it isn't already initialized."
-  (when (eq blue--cache-list 'unset)
-    (blue--read-cache-list))
+(defun blue--sanitize-cache ()
+  "Remove non-existent directories from cache list."
+  (setq blue--cache-list
+        (delq nil
+              (mapcar (lambda (entry)
+                        (let ((project (car entry))
+                              (configs (cadr entry)))
+                          (when (file-exists-p project)
+                            (list project (seq-filter #'file-exists-p configs)))))
+                      blue--cache-list))))
 
-  ;; Sanitize list, remove directories that does not exist.
-  (let ((sanitized (mapcar (lambda (entry)
-                             (let ((project (car entry))
-                                   (known-cache (cadr entry)))
-                               (when (file-exists-p project)
-                                 (list project
-                                       (seq-filter (lambda (dir)
-                                                     (file-exists-p dir))
-                                                   known-cache)))))
-                           blue--cache-list)))
-    (setq blue--cache-list sanitized)))
+(defun blue--ensure-cache ()
+  "Initialize cache if needed and sanitize it."
+  (when (eq blue--cache-list 'uninitialized)
+    (blue--read-cache))
+  (when blue--cache-list
+    (blue--sanitize-cache)))
 
-(defun blue--write-cache-list ()
-  "Save `blue--cache-list' in `blue-cache-list-file'.
+(defun blue--cache-add (dir &optional no-save)
+  "Add DIR to cache under its project root.
+If NO-SAVE is non-nil, don't save to disk immediately."
+  (blue--ensure-cache)
+  (let* ((root (blue--project-root dir))
+         (dir (directory-file-name (expand-file-name dir)))
+         (existing-configs (blue--cache-get-configs root))
+         (updated-configs (cons dir (delete dir existing-configs)))
+         (updated-cache (cons (list root updated-configs)
+                              (seq-remove (lambda (entry)
+                                            (string-equal root (car entry)))
+                                          (or blue--cache-list nil)))))
+    (setq blue--cache-list updated-cache))
+  (unless no-save
+    (blue--write-cache)))
 
-Each entry has the form:
-  (root . (dir0 ...))"
-  (let ((filename blue-cache-list-file))
-    (with-temp-buffer
-      (insert ";;; -*- lisp-data -*-\n")
-      (let ((print-length nil)
-            (print-level nil))
-        (pp blue--cache-list
-            (current-buffer)))
-      (write-region nil nil filename nil 'silent))))
-
-(defun blue--add-to-cache (dir &optional no-write)
-  "Add DIR under its project ROOT in `blue--cache-list`.
-
-Each entry in `blue--cache-list` has the form:
-  (root . (dir0 ...))
-
-If ROOT is already present, DIR is added to its list (most recent first).
-If ROOT is not present, a new entry is created.
-
-If NO-WRITE is nil, save the updated list to `blue-cache-list-file'."
-  (blue--ensure-read-cache-list)
-  (let* ((root (directory-file-name (expand-file-name (project-root (project-current nil dir)))))
-         (dir  (directory-file-name (expand-file-name dir)))
-         (known (blue--project-known-configurations root))
-         (cache (if (eq blue--cache-list 'unset)
-                    nil
-                  blue--cache-list)))
-    (setq blue--cache-list
-          (cons (list root
-                      (cons dir
-                            (delete dir known)))
-                ;; drop any old entry for ROOT
-                (seq-remove (lambda (entry)
-                              (string-equal root (car entry)))
-                            cache))))
-  (unless no-write
-    (blue--write-cache-list)))
-
-
-
-
-(defun blue--project-known-configurations (dir)
-  "Get last cache configured for project containing DIR."
-  (let ((root (directory-file-name (expand-file-name (project-root (project-current nil dir))))))
+(defun blue--cache-get-configs (dir)
+  "Get cached configurations for DIR."
+  (let ((root (blue--project-root dir)))
     (cadr (assoc-string root blue--cache-list))))
 
-(defvar blue--output-buffer " *blue output*"
-  "Buffer used to capture output from BLUE commands.")
-
 
-;;; Completion.
+;;; Command Execution.
 
-;; Example output:
-;; (((invoke . "build")
-;;   (category . build)
-;;   (synopsis . "Build the project")
-;;   (help . "[INPUTS] ...\nCompile all blue modules or only INPUTS."))
-;;  ...)
-(defun blue--run-serialize (blue-flags serialize-cmd)
-  "Helper to run BLUE serialization commands and retrieve output.
+(defun blue--format-header (command time)
+  "Format COMMAND header for output buffer.
 
-The command logs in `blue--output-buffer'.
+TIME is the timestamp of the header."
+  (format "▶ %s  [%s]\n" command time))
 
-BLUE-FLAGS are the flags passed to 'blue'.
-SERIALIZE-CMD is the serialization command to run."
-  (let* ((buf (get-buffer-create blue--output-buffer))
-         (time (current-time-string))
-         ;; Disable autocompilation.
+(defun blue--format-footer (exit-code)
+  "Format status footer for output buffer.
+
+EXIT-CODE displays the status of the command."
+  (propertize (format "\n⚹ Status: %s\n\n" exit-code)
+              'face (pcase exit-code
+                      (0 'success)
+                      ('missing 'error)
+                      (_ 'warning))))
+
+(defun blue--handle-error (exit-code)
+  "Handle and display command execution errors.
+
+Give a relevant error message according to EXIT-CODE."
+  (let ((message (if (numberp exit-code)
+                     (propertize (format "[Blue] Error %s" exit-code) 'face 'error)
+                   (concat (propertize "[ERROR] " 'face 'error)
+                           (propertize "`blue'" 'face 'font-lock-constant-face)
+                           " command not found in "
+                           (propertize "`exec-path'" 'face 'font-lock-type-face)))))
+    (insert message)
+    (message "%s" message)))
+
+(defun blue--execute-serialize (flags command)
+  "Execute BLUE serialization COMMAND with FLAGS and return parsed output."
+  (let* ((buffer (get-buffer-create blue--output-buffer))
+         (timestamp (current-time-string))
          (env (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (path exec-path)
-         (header (format "▶ %s  [%s]\n" (concat blue-binary " "
-                                                (string-join blue-flags " ") " "
-                                                serialize-cmd)
-                         time))
-         start-pos end-pos
-         exit-code
-         result)
-    (with-current-buffer buf
+         (args (append (or flags '()) (list command)))
+         (command-string (string-join (cons blue-binary args) " "))
+         (header (blue--format-header command-string timestamp))
+         start-pos end-pos exit-code result)
+
+    (with-current-buffer buffer
       (let ((process-environment env)
             (exec-path path)
             (inhibit-read-only t))
-        ;; Always prepend: go to beginning of buffer
         (goto-char (point-min))
         (unless (bobp) (insert "\n"))
 
-        ;; Insert header and mark where command output starts
         (insert (propertize header 'face 'bold))
         (setq start-pos (point))
 
-        ;; Run `blue`, capturing stdout in the buffer
         (condition-case _
-            (setq exit-code (apply #'call-process blue-binary nil buf nil
-                                   (append blue-flags (list serialize-cmd))))
-          (file-missing
-           (setq exit-code 'missing)))
+            (setq exit-code (apply #'call-process blue-binary nil buffer nil args))
+          (file-missing (setq exit-code 'missing)))
 
-        ;; Mark where command output ended
         (setq end-pos (point))
+        (insert (blue--format-footer exit-code))
 
-        ;; Footer
-        (insert (propertize (format "\n⏹ Status: %s\n\n" exit-code)
-                            'face (cond
-                                   ((eq exit-code 0) 'success)
-                                   ((eq exit-code 'missing) 'error)
-                                   (t 'warning))))
-
-        ;; Parse only the command’s stdout when exit-code was 0
         (if (eq exit-code 0)
-            (let ((output (buffer-substring-no-properties start-pos end-pos)))
-              (condition-case parse-err
-                  (setq result (read output))
-                ((end-of-file error)
-                 (let ((error-msg (propertize (format "[Parse error] %s\n" parse-err)
-                                              'face 'error)))
-                   (insert error-msg)
-                   (message error-msg)))))
-          (let ((error-msg (if (numberp exit-code)
-                               (propertize (format "[Blue] Error %s" exit-code)
-                                           'face 'error)
-                             (concat (propertize "[ERROR] " 'face 'error)
-                                     (propertize "`blue'" 'face 'font-lock-constant-face)
-                                     " command not found in "
-                                     (propertize "`exec-path'" 'face 'font-lock-type-face)))))
-            (insert error-msg)
-            (message error-msg)))))
+            (condition-case parse-error
+                (setq result (read (buffer-substring-no-properties start-pos end-pos)))
+              (error
+               (let ((error-message (propertize (format "[Parse error] %s\n" parse-error)
+                                                'face 'error)))
+                 (insert error-message)
+                 (message "%s" error-message))))
+          (blue--handle-error exit-code))))
     result))
 
 (defun blue--get-commands (blueprint)
   "Return the commands provided by BLUEPRINT."
-  (interactive)
-  (let ((blue-flags (if blueprint
-                        (list "--file" blueprint)
-                      "")))
-    (blue--run-serialize blue-flags ".elisp-serialize-commands")))
+  (let ((flags (when blueprint (list "--file" blueprint))))
+    (blue--execute-serialize flags ".elisp-serialize-commands")))
 
-(defun blue--get-configuration (blueprint dir)
+(defun blue--get-config (blueprint dir)
   "Return the BLUEPRINT configuration stored in DIR."
-  (interactive)
-  (let ((blue-flags (if blueprint
-                        (list "--file" blueprint
-                              "--build-directory" dir)
-                      "")))
-    (blue--run-serialize blue-flags ".elisp-serialize-configuration")))
+  (let ((flags (when blueprint
+                 (list "--file" blueprint "--build-directory" dir))))
+    (blue--execute-serialize flags ".elisp-serialize-configuration")))
 
-(defun blue--get-from-configuration (var configuration)
-  "Retrieve variable VAR value from CONFIGURATION."
-  (cdr (assoc-string var configuration)))
+(defun blue--config-get (var config)
+  "Retrieve variable VAR value from CONFIG."
+  (cdr (assoc-string var config)))
 
-(blue--memoized-defun blue--autocomplete (input)
+
+;;; Completion.
+
+(blue--define-memoized blue--autocomplete (input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
-  (let* ((completion-cmd (concat blue-binary " .autocomplete \"blue " input "\""))
-         (completion (shell-command-to-string completion-cmd)))
-    (string-split completion)))
+  (let* ((command (concat blue-binary " .autocomplete \"blue " input "\""))
+         (output (shell-command-to-string command)))
+    (string-split output)))
 
-(defun blue--autocomplete-from-prompt (&rest _)
-  "Internal function to use in `blue--completion-at-point'."
+(defun blue--completion-table (&rest _)
+  "Completion table function for minibuffer prompt."
   (let ((result
          (while-no-input
            (when-let* ((prompt-start (minibuffer-prompt-end))
                        (input (buffer-substring prompt-start (point)))
-                       (completion-table (blue--autocomplete input)))
-             completion-table))))
+                       (completions (blue--autocomplete input)))
+             completions))))
     (and (consp result) result)))
 
 (defun pcomplete/blue ()
   "Completion for `blue'."
-  (while (pcomplete-here* (blue--autocomplete-from-prompt))))
+  (while (pcomplete-here* (blue--completion-table))))
 
 (defun blue--completion-at-point ()
-  "`completion-at-point' for `blue-run-command'."
+  "`completion-at-point' function for `blue-run-command'."
   (pcase (bounds-of-thing-at-point 'symbol)
     (`(,beg . ,end)
      (list beg end
-           (completion-table-with-cache #'blue--autocomplete-from-prompt)
+           (completion-table-with-cache #'blue--completion-table)
            :exclusive 'no))))
 
-;; --- HINTS
+
+;;; Minibuffer Hints.
 
-(defface blue-minibuffer-hint-separator-face '((t :inherit shadow
-                                                  :strike-through t))
-  "Face used to separate hint overlay.")
+(defun blue--format-config-hint (index config current)
+  "Format a single configuration hint line.
 
-(defface blue-minibuffer-hint-highlight-face '((t :inherit bold
-                                                  :foreground "#3f578f"
-                                                  :background "#e0f2fa"))
-  "Face used to draw attention in hint overlay.")
+INDEX is the number prefixing the displayed known configuration in the
+hint message.
+CONFIG is the directory of the known configuration.
+If CURRENT is non-nil the entry will be highlighted."
+  (let ((face (if (string-equal config current)
+                  'blue-hint-highlight
+                'blue-hint-faded)))
+    (concat
+     (propertize (number-to-string index) 'face 'font-lock-keyword-face)
+     " "
+     (propertize config 'face face))))
 
-(defface blue-minibuffer-hint-faded-face '((t :inherit shadow :weight regular))
-  "Face used to display inactive items in hint overlay.")
+(defun blue--create-hint-overlay (configs current)
+  "Create hint overlay content from CONFIGS and CURRENT configuration."
+  (when configs
+    (let* ((indices (number-sequence 1 (length configs)))
+           (formatted (seq-mapn (lambda (idx config)
+                                  (blue--format-config-hint idx config current))
+                                indices configs))
+           (lines (cons "Previous configuration (M-<num> to select):" formatted)))
+      (concat
+       (string-join lines "\n")
+       "\n"
+       (propertize " " 'face 'blue-hint-separator
+                   'display '(space :align-to right))
+       "\n"))))
 
-(defvar blue--minibuffer-hint-overlay nil
-  "Overlay for `dape--minibuffer-hint'.")
+(defun blue--show-hints (&rest _)
+  "Display configuration hints in minibuffer overlay."
+  (when-let* ((configs (blue--cache-get-configs blue--blueprint))
+              (content (blue--create-hint-overlay configs blue--config-dir)))
+    (unless blue--hint-overlay
+      (setq blue--hint-overlay (make-overlay (point) (point))))
+    (overlay-put blue--hint-overlay 'after-string content)
+    (move-overlay blue--hint-overlay (point-min) (point-min) (current-buffer))))
 
-(defun blue--minibuffer-hint (&rest _)
-  "Display current configuration in minibuffer overlay."
-  (when-let* ((known-configurations (blue--project-known-configurations blue--current-blueprint))
-              (indices (mapcar #'number-to-string (number-sequence 1 (length known-configurations))))
-              (known-configurations* (seq-mapn (lambda (idx str)
-                                                 (let ((face (if (string-equal str blue--last-configuration)
-                                                                 'blue-minibuffer-hint-highlight-face
-                                                               'blue-minibuffer-hint-faded-face)))
-                                                   (concat
-                                                    (propertize idx 'face 'font-lock-keyword-face)
-                                                    " "
-                                                    (propertize str
-                                                                'face face))))
-                                               indices known-configurations))
-              (hint-rows (append (list "Previous configuration (M-<num> to select):")
-                                 known-configurations*)))
-    (unless blue--minibuffer-hint-overlay
-      (setq blue--minibuffer-hint-overlay (make-overlay (point) (point))))
-    (overlay-put blue--minibuffer-hint-overlay
-                 'after-string
-                 (concat
-                  (when hint-rows
-                    (concat
-                     (string-join hint-rows "\n")
-                     "\n"
-                     (propertize
-                      " " 'face 'blue-minibuffer-hint-separator-face
-                      'display '(space :align-to right))
-                     "\n"))))
-    (move-overlay blue--minibuffer-hint-overlay
-                  (point-min) (point-min) (current-buffer))))
+
+;;; Minibuffer Setup.
 
-;; --- HINTS
-
-(defun blue--setup-prompt-map ()
-  "Setup keybindings for `blue-run-command' minibuffer prompt."
-  (define-key minibuffer-local-map (kbd "SPC") nil)
-  (mapc (lambda (index)
-          (let* ((num-str (number-to-string index))
-                 (key (kbd (concat "M-" num-str))))
-            (define-key minibuffer-local-map key
-                        (lambda ()
-                          (interactive)
-                          (setq blue--last-configuration
-                                (nth (1- index)
-                                     (blue--project-known-configurations blue--current-blueprint)))
-                          ;; Refresh hint.
-                          (blue--minibuffer-hint)))))
-          (number-sequence 1 9)))
-
-(defun blue--run-command-prompt ()
-  "Interactive prompt used by `blue-run-command'."
-  (blue--ensure-read-cache-list)
-  (let ((last-configuration (car (blue--project-known-configurations default-directory))))
-        (setq blue--last-configuration last-configuration))
-  (if-let* ((blue--current-blueprint (blue--locate-blueprint))
-            (commands (blue--get-commands blue--current-blueprint))
-            (invocations (mapcar (lambda (cmd)
-                                   (alist-get 'invoke cmd))
-                                 commands))
-            (width (if invocations
-                       (apply #'max (mapcar #'string-width invocations))
-                     0))
-            (completion-extra-properties
-             (list
-              :annotation-function
-              (lambda (cand)
-                (let* ((entry (seq-find (lambda (cmd)
-                                          (string= cand
-                                                   (alist-get 'invoke cmd)))
-                                        commands))
-                       (synopsis (alist-get 'synopsis entry)))
-                  (when synopsis
-                    (concat (make-string (+ blue--anotation-padding
-                                            (- width (string-width cand)))
-                                         ?\s)
-                            (propertize synopsis 'face 'blue-documentation)))))
-              :group-function
-              (lambda (cand transform)
-                (if transform
-                    cand
-                  (let* ((entry (seq-find (lambda (cmd)
-                                            (string= cand
-                                                     (alist-get 'invoke cmd)))
-                                          commands))
-                         (category (alist-get 'category entry)))
-                    (symbol-name category))))))
-            (crm-separator
-             (propertize "[ \t]*--[ \t]+"
-                         'separator "--"
-                         'description "double-dash-separated list"))
-            ;; HACK: redundant but avoids displaying `crm-separator' as part of
-            ;; the prompt. Otherwhise prompt will looke like:
-            ;; '[double-dash-separated list] [CRM--[ 	]+] Command:'
-            (prompt "Command: ")
-            (crm-prompt
-             (concat "[%d] [CMR%s] " prompt)))
-      (list (minibuffer-with-setup-hook
+(defun blue--bind-config-key (index)
+  "Setup keybinding for configuration INDEX."
+  (let ((key (kbd (format "M-%d" index))))
+    (define-key minibuffer-local-map key
                 (lambda ()
-                  ;; Emacs default completion maps <SPC> to `crm-complete-word'
-                  ;; which forces the user to introduce spaces using
-                  ;; `quoted-insert'. Remove the keybinding so literal spaces can
-                  ;; be introduces.
-                  (blue--setup-prompt-map)
-                  (add-hook 'completion-at-point-functions
-                            #'blue--completion-at-point nil t)
-                  ;; NOTE: high overhead, not needed for now.
-                  ;; (add-hook 'after-change-functions
-                  ;;           #'blue--minibuffer-hint nil t)
-                  (blue--minibuffer-hint))
-              (prog1
-                  (completing-read-multiple prompt invocations)
-                ;; Move selected configuration to the front of the known cache
-                ;; lists so it's pre-selected in subsequent invocations.
-                (when blue--last-configuration
-                  (blue--add-to-cache blue--last-configuration))))
-            commands
-            (consp current-prefix-arg))
+                  (interactive)
+                  (setq blue--config-dir
+                        (nth (1- index) (blue--cache-get-configs blue--blueprint)))
+                  (blue--show-hints)))))
+
+(defun blue--setup-minibuffer ()
+  "Setup keybindings and completion for minibuffer prompt."
+  (define-key minibuffer-local-map (kbd "SPC") nil)
+  (seq-do #'blue--bind-config-key (number-sequence 1 9))
+  (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
+  (blue--show-hints))
+
+
+;;; Compilation.
+
+(defun blue--default-buffer-name (command name-of-mode)
+  "Default buffer naming function for compilation buffers.
+
+COMMAND is the invocation passed to BLUE.
+NAME-OF-MODE is the major mode name that the compilation buffer will use."
+  (format "*%s | %s*" name-of-mode command))
+
+(defun blue--setup-buffer (buffer dir)
+  "Setup compilation BUFFER with DIR and error patterns."
+  (with-current-buffer buffer
+    (make-local-variable 'compilation-error-regexp-alist)
+    (add-to-list 'compilation-error-regexp-alist
+                 '("^.* at \\(.*?\\):\\([0-9]+\\)" 1 2))
+    (setq default-directory dir)))
+
+(defun blue--compile (command &optional configure-p comint-p)
+  "Compile COMMAND with BLUE-specific setup.
+CONFIGURE-P runs command in `default-directory'.
+COMINT-P selects `comint-mode' for compilation buffer."
+  (interactive
+   (list
+    (let ((command (eval compile-command)))
+      (if (or compilation-read-command current-prefix-arg)
+          (compilation-read-command command)
+        command))
+    (consp current-prefix-arg)))
+
+  (unless (equal command (eval compile-command))
+    (setq compile-command command))
+
+  (save-some-buffers (not compilation-ask-about-save)
+                     compilation-save-buffers-predicate)
+
+  (let* ((mode (or comint-p 'compilation-mode))
+         (name-of-mode (if (eq mode t)
+                           "compilation"
+                         (replace-regexp-in-string "-mode\\'" "" (symbol-name mode))))
+         (compilation-buffer-name-function (lambda (name-of-mode)
+                                             (funcall #'blue--default-buffer-name
+                                                      command name-of-mode)))
+         (buf (get-buffer-create
+               (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
+         (dir (if configure-p
+                  default-directory
+                  (or blue--config-dir default-directory))))
+
+    (setq-default compilation-directory dir)
+    (blue--setup-buffer buf dir)
+
+    (let ((default-directory dir))
+      (compilation-start command comint-p))))
+
+
+;;; Command Analysis.
+
+(defun blue--parse-invocations (input-tokens)
+  "Parse invocation names from INPUT-TOKENS."
+  (let ((first-invoke (car (last (car input-tokens))))
+        (rest-invokes (mapcar #'car (cdr input-tokens))))
+    (cons first-invoke rest-invokes)))
+
+(defun blue--find-command-entries (invocations commands)
+  "Find command entries for INVOCATIONS in COMMANDS list."
+  (mapcar (lambda (invoke)
+            (seq-find (lambda (cmd)
+                        (string= invoke (alist-get 'invoke cmd)))
+                      commands))
+          invocations))
+
+(defun blue--analyze-commands (input-tokens commands)
+  "Analyze INPUT-TOKENS against COMMANDS to extract properties."
+  (let* ((invocations (blue--parse-invocations input-tokens))
+         (entries (blue--find-command-entries invocations commands)))
+    (list :invocations invocations
+          :entries entries
+          :interactive-p (seq-some (lambda (cmd)
+                                     (when (member cmd blue-interactive-commands)
+                                       t))
+                                   invocations)
+          :needs-config-p (seq-some (lambda (entry)
+                                      (alist-get 'requires-configuration? entry))
+                                    entries)
+          :configure-p (member "configure" invocations))))
+
+
+;;; Command Prompt.
+
+(defun blue--create-annotation-fn (commands width)
+  "Create annotation function for COMMANDS with WIDTH alignment."
+  (lambda (candidate)
+    (when-let* ((entry (seq-find (lambda (cmd)
+                                   (string= candidate (alist-get 'invoke cmd)))
+                                 commands))
+                (synopsis (alist-get 'synopsis entry)))
+      (concat (make-string (+ blue-annotation-padding
+                              (- width (string-width candidate))) ?\s)
+              (propertize synopsis 'face 'blue-documentation)))))
+
+(defun blue--create-group-fn (commands)
+  "Create group function for COMMANDS."
+  (lambda (candidate transform)
+    (if transform
+        candidate
+      (when-let* ((entry (seq-find (lambda (cmd)
+                                     (string= candidate (alist-get 'invoke cmd)))
+                                   commands))
+                  (category (alist-get 'category entry)))
+        (symbol-name category)))))
+
+(defun blue--create-completion-properties (commands invocations)
+  "Create completion properties for COMMANDS and INVOCATIONS."
+  (let ((width (if invocations (apply #'max (mapcar #'string-width invocations)) 0)))
+    (list :annotation-function (blue--create-annotation-fn commands width)
+          :group-function (blue--create-group-fn commands))))
+
+(defun blue--prompt-for-commands ()
+  "Interactive prompt for BLUE commands."
+  (blue--ensure-cache)
+  (setq blue--config-dir (car (blue--cache-get-configs default-directory)))
+
+  (if-let* ((blue--blueprint (blue--find-blueprint))
+            (commands (blue--get-commands blue--blueprint))
+            (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
+            (completion-extra-properties
+             (blue--create-completion-properties commands invocations))
+            (crm-separator (propertize "[ \t]*--[ \t]+"
+                                       'separator "--"
+                                       'description "double-dash-separated list"))
+            (crm-prompt "[%d] [CMR%s] Command: "))
+      (let* ((prefix (car current-prefix-arg))
+             (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
+             (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
+        (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
+                (prog1 (completing-read-multiple "Command: " invocations)
+                  (when blue--config-dir
+                    (blue--cache-add blue--config-dir))))
+              commands
+              prompt-dir-p
+              comint-flip))
     '(unset)))
 
+
+;;; UI.
+
 ;;;###autoload
-(defun blue-run-command (input &optional commands comint-flip)
-  "Run a BLUE command.
+(defun blue-run-command (input &optional commands prompt-dir-p comint-flip)
+  "Run a BLUE command interactively.
+INPUT is a list of command strings.
+COMMANDS contains command metadata.
+PROMPT-DIR-P prompt the user for a directory where to run INPUT.
+COMINT-FLIP inverts the interactive compilation logic."
+  (interactive (blue--prompt-for-commands))
 
-INPUT is a list of strings of BLUE arguments, COMMANDS and their
-arguments.
+  (unless (eq input 'unset)
+    (let* ((flags (blue--normalize-flags blue-default-flags))
+           (tokens (mapcar #'string-split input))
+           (analysis (blue--analyze-commands tokens commands))
+           (comint (xor (plist-get analysis :interactive-p) comint-flip))
+           (configure-p (plist-get analysis :configure-p))
+           (needs-config-p (plist-get analysis :needs-config-p)))
 
-COMINT-FLIP whether to invert the comint euristics logic.  If input
-contains a member of `blue-interactive-commands', starts an interactive
-compilation buffer in comint mode, if COMINT-FLIP is t, invert that
-behavior so the interactive buffer will be created if the command is not
-a member of `blue-interactive-commands'."
-  (interactive (blue--run-command-prompt))
-  ;; List of chained commands in user input, with arguments. Each element is a
-  ;; list of strings representing the arguments and invoke of commands.
-  (unless (eq input 'unset) ; Special value since empty input is allowed.
-    (let* ((blue-flags (if (or (null blue-default-flags)
-                               (stringp blue-default-flags))
-                           blue-default-flags
-                         (string-join blue-default-flags " ")))
-           (input-tokens (mapcar (lambda (command)
-                                   (string-split command))
-                                 input))
-           ;; The first token list needs to be treated specially since it includes
-           ;; the arguments meant for BLUE as well as the first chained command
-           ;; and it's arguments.
-           (first-invoke (car (last (car input-tokens))))
-           ;; Aside from the first one, all other tokens start with the command
-           ;; name followed by it's arguments.
-           (rest-invokes (mapcar (lambda (token)
-                                   (car token))
-                                 (cdr input-tokens)))
-           (invokes (cons first-invoke rest-invokes))
-           (any-interactive (seq-some (lambda (command)
-                                        (member command blue-interactive-commands))
-                                      invokes))
-           ;; `xor' allows to use `comint-flip' to invert the mode for the
-           ;; compilation, if `input' is part of `blue-interactive-commands',
-           ;; calling `blue-run-command' with universal prefix argument
-           ;; (comint-flip = t) will disable comint mode for the compilation
-           ;; buffers while enabling it for all other commands.
-           (inter (if (xor any-interactive
-                           comint-flip)
-                      t nil))
-           (configuration (seq-find (lambda (command)
-                                      (string= command "configure"))
-                                    invokes))
-           ;; Each entry is a serialized command data from BLUE.
-           (entries (mapcar (lambda (command)
-                              (seq-find (lambda (cmd)
-                                          (string= command
-                                                   (alist-get 'invoke cmd)))
-                                        commands))
-                            invokes))
-           (any-requires-configuration (seq-some (lambda (entry)
-                                                   (alist-get 'requires-configuration? entry))
-                                                 entries)))
-      (when configuration
-        (message (concat "Configuration requested, next command that requires a configuration will
-run under " (propertize "`blue--last-configuration'" 'face 'bold) " directory."))
-        (blue--add-to-cache default-directory))
-      (blue--compile (concat blue-binary " " blue-flags (when blue-flags " ")
-                             (string-join input " -- "))
-                     any-requires-configuration inter))))
+      (cond
+       ((or prompt-dir-p
+            (and needs-config-p
+                 (not blue--config-dir)
+                 (not configure-p)))
+        (let ((conf-dir (read-directory-name "Configuration directory: ")))
+          (unless (file-exists-p conf-dir)
+            (mkdir conf-dir t))
+          ;; Needed to force the change of the execution directory since for the
+          ;; configure command the value of `default-directory' is respected in
+          ;; `blue--compile'.
+          (setq default-directory conf-dir
+                blue--config-dir conf-dir)
+          (blue--cache-add conf-dir)))
+       (configure-p
+        (message (concat "Configuration requested, next command requiring configuration will "
+                         "run under " (propertize "`blue--config-dir'" 'face 'bold) " directory."))
+        (blue--cache-add default-directory)))
+
+      (let ((command-string (string-join
+                             (cons blue-binary
+                                   (append (when flags flags)
+                                           (cons (string-join input " -- ") nil)))
+                             " ")))
+        (blue--compile command-string configure-p comint)))))
 
 (provide 'blue)
 ;;; blue.el ends here.
