@@ -250,7 +250,7 @@ TIME is the timestamp of the header."
   "Format status footer for output buffer.
 
 EXIT-CODE displays the status of the command."
-  (propertize (format "\n⚹ Status: %s\n\n" exit-code)
+  (propertize (format "⏹ Status: %s\n" exit-code)
               'face (pcase exit-code
                       (0 'success)
                       ('missing 'error)
@@ -260,14 +260,15 @@ EXIT-CODE displays the status of the command."
   "Handle and display command execution errors.
 
 Give a relevant error message according to EXIT-CODE."
-  (let ((message (if (numberp exit-code)
-                     (propertize (format "[Blue] Error %s" exit-code) 'face 'error)
-                   (concat (propertize "[ERROR] " 'face 'error)
-                           (propertize "`blue'" 'face 'font-lock-constant-face)
-                           " command not found in "
-                           (propertize "`exec-path'" 'face 'font-lock-type-face)))))
-    (insert message)
-    (message "%s" message)))
+  (let* ((prefix (propertize "[ERROR] " 'face 'error))
+         (msg (if (numberp exit-code)
+                  (propertize (format "Error %s" exit-code) 'face 'error)
+                (concat (propertize "`blue'" 'face 'font-lock-constant-face)
+                        " command not found in "
+                        (propertize "`exec-path'" 'face 'font-lock-type-face))))
+         (msg* (concat prefix msg "\n\n")))
+    (insert msg*)
+    (message "%s" msg*)))
 
 (defun blue--execute-serialize (flags command)
   "Execute BLUE serialization COMMAND with FLAGS and return parsed output."
