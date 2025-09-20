@@ -604,6 +604,17 @@ If CACHE is non nil, add directory to cache."
 ;;; UI.
 
 ;;;###autoload
+(defun blue-forget-blueprint (blueprint)
+  "Forget BLUEPRINT from cache."
+  (interactive
+   (let ((blueprint (blue--find-blueprint default-directory)))
+     (list blueprint)))
+  (let ((updated-cache (seq-remove (lambda (entry)
+                                     (string-equal blueprint (car entry)))
+                                   (or blue--cache-list nil))))
+    (setq blue--cache-list updated-cache)))
+
+;;;###autoload
 (defun blue-forget-build-dir (build-dir)
   "Forget BUILD-DIR from cache."
   (interactive
