@@ -90,10 +90,13 @@ Interactive commands will run in comint mode compilation buffers."
 
 ;;; Internal Variables
 
+(defvar blue--unset 'unset
+  "Unset symbol.")
+
 (defvar blue--blueprint nil
   "Current blueprint being processed.")
 
-(defvar blue--cache-list 'uninitialized
+(defvar blue--cache-list blue--unset
   "List structure containing directories of known BLUE caches for project.")
 
 (defvar blue--build-dir nil
@@ -209,7 +212,7 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
 
 (defun blue--ensure-cache ()
   "Initialize cache if needed and sanitize it."
-  (when (eq blue--cache-list 'uninitialized)
+  (when (eq blue--cache-list blue--unset)
     (blue--read-cache))
   (when blue--cache-list
     (blue--sanitize-cache)))
@@ -598,7 +601,7 @@ If CACHE is non nil, add directory to cache."
                         (blue--cache-add blue--build-dir)))))
               commands
               comint-flip)
-      '(unset))))
+      (list blue--unset))))
 
 
 ;;; UI.
@@ -652,7 +655,7 @@ COMMANDS contains command metadata.
 COMINT-FLIP inverts the interactive compilation logic."
   (interactive (blue--prompt-for-commands))
 
-  (unless (eq input 'unset)
+  (unless (eq input blue--unset)
     (let* ((flags (blue--normalize-flags blue-default-flags))
            (tokens (mapcar #'string-split input))
            (analysis (blue--analyze-commands tokens commands))
