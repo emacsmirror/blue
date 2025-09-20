@@ -478,7 +478,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
                (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
          (dir (if configure-p
                   default-directory
-                  (or blue--build-dir default-directory))))
+                (or blue--build-dir default-directory))))
 
     (setq-default compilation-directory dir)
     (blue--setup-buffer buf dir)
@@ -574,7 +574,7 @@ If CACHE is non nil, add directory to cache."
          (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
          (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
          (blue--overiden-build-dir (when prompt-dir-p
-                                      (blue--prompt-dir t))))
+                                     (blue--prompt-dir t))))
     (if-let* ((blue--blueprint (blue--find-blueprint))
               (commands (blue--get-commands blue--blueprint))
               (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
@@ -598,7 +598,7 @@ If CACHE is non nil, add directory to cache."
                         ;; this directory should not be cached. The caching will
                         ;; be done later in `blue-run-command'.
                         (setq blue--build-dir blue--overiden-build-dir)
-                        (blue--cache-add blue--build-dir)))))
+                      (blue--cache-add blue--build-dir)))))
               commands
               comint-flip)
       (list blue--unset))))
