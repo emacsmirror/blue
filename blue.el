@@ -33,7 +33,6 @@
 (require 'compile)
 (require 'crm)
 (require 'pcomplete)
-(require 'project)
 
 ;;; Configuration
 
@@ -117,19 +116,24 @@ This is used when passing universal prefix argument `C-u' to
 
 ;;; Utilities
 
-(defun blue--expand-path (path)
-  "Expand PATH if it's a local file."
-  (if (file-remote-p path) path
-    (expand-file-name path)))
-
+;; TODO: should we use 'blue' to locate the 'blueprint.scm'?
 (defun blue--find-blueprint (&optional path)
   "Return path to top-level `blueprint.scm'.
 If PATH is non-nil, locate `blueprint.scm' from PATH."
-  (when-let* ((blueprint (locate-dominating-file (or path default-directory)
-                                                 "blueprint.scm")))
-    (expand-file-name
-     (directory-file-name
-      (concat blueprint "/blueprint.scm")))))
+  (if-let* ((blueprint (locate-dominating-file (or path default-directory)
+                                               "blueprint.scm")))
+      ;; This expands resolving symlinks. It's needed since in the build
+      ;; directory ther can be a symlinked 'blueprint.scm' for projects that
+      ;; require configuration.
+      (file-truename
+       (directory-file-name
+        (concat blueprint "/blueprint.scm")))
+    (error
+     (warn (concat "Failed to locate "
+                   (propertize "`blueprint.scm'" 'face 'font-lock-constant-face)
+                   (when path
+                     (concat " in "
+                             (propertize path 'face 'font-lock-type-face))))))))
 
 (defun blue--normalize-flags (flags)
   "Normalize FLAGS to a list of strings."
@@ -138,12 +142,6 @@ If PATH is non-nil, locate `blueprint.scm' from PATH."
    ((stringp flags) (string-split flags))
    ((listp flags) flags)
    (t (list (format "%s" flags)))))
-
-(defun blue--project-root (&optional dir)
-  "Get project root for DIR (defaults to `default-directory')."
-  (directory-file-name
-   (expand-file-name
-    (project-root (project-current nil (or dir default-directory))))))
 
 (defun blue--file-safe-p (file)
   "Return t if FILE exists and is readable."
@@ -220,13 +218,13 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
   "Add DIR to cache under its project root.
 If NO-SAVE is non-nil, don't save to disk immediately."
   (blue--ensure-cache)
-  (let* ((root (blue--project-root dir))
+  (let* ((blueprint (blue--find-blueprint dir))
          (dir (directory-file-name (expand-file-name dir)))
-         (existing-configs (blue--cache-get-build-dirs root))
+         (existing-configs (blue--cache-get-build-dirs blueprint))
          (updated-configs (cons dir (delete dir existing-configs)))
-         (updated-cache (cons (list root updated-configs)
+         (updated-cache (cons (list blueprint updated-configs)
                               (seq-remove (lambda (entry)
-                                            (string-equal root (car entry)))
+                                            (string-equal blueprint (car entry)))
                                           (or blue--cache-list nil)))))
     (setq blue--cache-list updated-cache))
   (unless no-save
@@ -234,8 +232,8 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 (defun blue--cache-get-build-dirs (dir)
   "Get cached build directories for project containing DIR."
-  (let ((root (blue--project-root dir)))
-    (cadr (assoc-string root blue--cache-list))))
+  (let ((blueprint (blue--find-blueprint dir)))
+    (cadr (assoc-string blueprint blue--cache-list))))
 
 
 ;;; Command Execution.
@@ -552,7 +550,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
   "Prompt for directory, create it if it does not exists.
 
 If CACHE is non nil, add directory to cache."
-  (let ((dir (blue--expand-path (read-directory-name "Build directory: "))))
+  (let ((dir (expand-file-name (read-directory-name "Build directory: "))))
     (unless (file-exists-p dir)
       (mkdir dir t))
     ;; Needed to force the change of the execution directory since for the
@@ -573,7 +571,7 @@ If CACHE is non nil, add directory to cache."
          (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
          (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
          (blue--overiden-build-dir (when prompt-dir-p
-                                      (blue--prompt-dir))))
+                                      (blue--prompt-dir t))))
     (if-let* ((blue--blueprint (blue--find-blueprint))
               (commands (blue--get-commands blue--blueprint))
               (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
