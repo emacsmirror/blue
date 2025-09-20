@@ -97,11 +97,11 @@ Interactive commands will run in comint mode compilation buffers."
 (defvar blue--cache-list 'uninitialized
   "List structure containing directories of known BLUE caches for project.")
 
-(defvar blue--config-dir nil
-  "Path to last known configuration directory.")
+(defvar blue--build-dir nil
+  "Path to last known build directory.")
 
-(defvar blue--overiden-config-dir nil
-  "Internal variable used to override `blue--config-dir'.
+(defvar blue--overiden-build-dir nil
+  "Internal variable used to override `blue--build-dir'.
 
 This is used when passing universal prefix argument `C-u' to
 `blue-run-command'.")
@@ -222,7 +222,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
   (blue--ensure-cache)
   (let* ((root (blue--project-root dir))
          (dir (directory-file-name (expand-file-name dir)))
-         (existing-configs (blue--cache-get-configs root))
+         (existing-configs (blue--cache-get-build-dirs root))
          (updated-configs (cons dir (delete dir existing-configs)))
          (updated-cache (cons (list root updated-configs)
                               (seq-remove (lambda (entry)
@@ -232,8 +232,8 @@ If NO-SAVE is non-nil, don't save to disk immediately."
   (unless no-save
     (blue--write-cache)))
 
-(defun blue--cache-get-configs (dir)
-  "Get cached configurations for DIR."
+(defun blue--cache-get-build-dirs (dir)
+  "Get cached build directories for project containing DIR."
   (let ((root (blue--project-root dir)))
     (cadr (assoc-string root blue--cache-list))))
 
@@ -358,39 +358,39 @@ Give a relevant error message according to EXIT-CODE."
 
 ;;; Minibuffer Hints.
 
-(defun blue--format-config-hint (index config current)
-  "Format a single configuration hint line.
+(defun blue--format-build-dir-hint (index build-dir current)
+  "Format a single build directory hint line.
 
-INDEX is the number prefixing the displayed known configuration in the
+INDEX is the number prefixing the displayed known build directory in the
 hint message.
-CONFIG is the directory of the known configuration.
+BUILD-DIR is the directory of the known build directory.
 If CURRENT is non-nil the entry will be highlighted."
-  (let ((face (if (string-equal config current)
+  (let ((face (if (string-equal build-dir current)
                   'blue-hint-highlight
                 'blue-hint-faded)))
     (concat
      (propertize (number-to-string index) 'face 'font-lock-keyword-face)
      " "
-     (propertize config 'face face))))
+     (propertize build-dir 'face face))))
 
-(defun blue--create-hint-overlay (configs current override)
-  "Create hint overlay content from CONFIGS and CURRENT configuration.
+(defun blue--create-hint-overlay (build-dirs current override)
+  "Create hint overlay content from BUILD-DIRS and CURRENT build-dir.
 
 If OVERRIDE is non nil disable CONFIGS."
-  (when-let* (configs
-              (indices (number-sequence 1 (length configs)))
+  (when-let* (build-dirs
+              (indices (number-sequence 1 (length build-dirs)))
               (formatted (seq-mapn (lambda (idx config)
-                                     (blue--format-config-hint idx config current))
-                                   indices configs))
+                                     (blue--format-build-dir-hint idx config current))
+                                   indices build-dirs))
               (lines (string-join formatted "\n"))
               (lines* (if override
                           (concat
-                           (blue--format-config-hint 0 override override)
+                           (blue--format-build-dir-hint 0 override override)
                            "\n"
                            (propertize lines 'face '(:inherit blue-hint-faded :strike-through t)))
                         lines)))
     (concat
-     "Previous configuration (M-<num> to select):\n"
+     "Previous build directory (M-<num> to select):\n"
      lines*
      "\n"
      (propertize " " 'face 'blue-hint-separator
@@ -398,9 +398,9 @@ If OVERRIDE is non nil disable CONFIGS."
      "\n")))
 
 (defun blue--show-hints (&rest _)
-  "Display configuration hints in minibuffer overlay."
-  (when-let* ((configs (blue--cache-get-configs blue--blueprint))
-              (content (blue--create-hint-overlay configs blue--config-dir blue--overiden-config-dir)))
+  "Display build directory hints in minibuffer overlay."
+  (when-let* ((configs (blue--cache-get-build-dirs blue--blueprint))
+              (content (blue--create-hint-overlay configs blue--build-dir blue--overiden-build-dir)))
     (unless blue--hint-overlay
       (setq blue--hint-overlay (make-overlay (point) (point))))
     (overlay-put blue--hint-overlay 'after-string content)
@@ -409,14 +409,14 @@ If OVERRIDE is non nil disable CONFIGS."
 
 ;;; Minibuffer Setup.
 
-(defun blue--bind-config-key (index)
-  "Setup keybinding for configuration INDEX."
+(defun blue--bind-build-dir-key (index)
+  "Setup keybinding for build directory INDEX."
   (let ((key (kbd (format "M-%d" index))))
     (define-key (current-local-map) key
                 (lambda ()
                   (interactive)
-                  (setq blue--config-dir
-                        (nth (1- index) (blue--cache-get-configs blue--blueprint)))
+                  (setq blue--build-dir
+                        (nth (1- index) (blue--cache-get-build-dirs blue--blueprint)))
                   (blue--show-hints)))))
 
 (defun blue--setup-minibuffer ()
@@ -424,9 +424,9 @@ If OVERRIDE is non nil disable CONFIGS."
   ;; Work on a copy of the current minibuffer keymap so it doesn’t leak
   (use-local-map (copy-keymap (current-local-map)))
   (define-key (current-local-map) (kbd "SPC") nil)
-  (unless blue--overiden-config-dir
-    (let ((configs (blue--cache-get-configs blue--blueprint)))
-      (seq-do #'blue--bind-config-key (number-sequence 1 (length configs)))))
+  (unless blue--overiden-build-dir
+    (let ((configs (blue--cache-get-build-dirs blue--blueprint)))
+      (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length configs)))))
   (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
   (blue--show-hints))
 
@@ -477,7 +477,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
                (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
          (dir (if configure-p
                   default-directory
-                  (or blue--config-dir default-directory))))
+                  (or blue--build-dir default-directory))))
 
     (setq-default compilation-directory dir)
     (blue--setup-buffer buf dir)
@@ -552,14 +552,14 @@ COMINT-P selects `comint-mode' for compilation buffer."
   "Prompt for directory, create it if it does not exists.
 
 If CACHE is non nil, add directory to cache."
-  (let ((dir (blue--expand-path (read-directory-name "Configuration directory: "))))
+  (let ((dir (blue--expand-path (read-directory-name "Build directory: "))))
     (unless (file-exists-p dir)
       (mkdir dir t))
     ;; Needed to force the change of the execution directory since for the
     ;; configure command the value of `default-directory' is respected in
     ;; `blue--compile'.
     (setq default-directory dir
-          blue--config-dir dir)
+          blue--build-dir dir)
     (when cache
       (blue--cache-add dir))
     dir))
@@ -567,12 +567,12 @@ If CACHE is non nil, add directory to cache."
 (defun blue--prompt-for-commands ()
   "Interactive prompt for BLUE commands."
   (blue--ensure-cache)
-  (setq blue--config-dir (car (blue--cache-get-configs default-directory)))
+  (setq blue--build-dir (car (blue--cache-get-build-dirs default-directory)))
 
   (let* ((prefix (car current-prefix-arg))
          (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
          (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
-         (blue--overiden-config-dir (when prompt-dir-p
+         (blue--overiden-build-dir (when prompt-dir-p
                                       (blue--prompt-dir))))
     (if-let* ((blue--blueprint (blue--find-blueprint))
               (commands (blue--get-commands blue--blueprint))
@@ -585,16 +585,19 @@ If CACHE is non nil, add directory to cache."
               (crm-prompt "[%d] [CMR%s] Command: "))
         (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
                 (prog1 (completing-read-multiple "Command: " invocations)
-                  (when blue--config-dir
-                    (if blue--overiden-config-dir
+                  (when blue--build-dir
+                    (if blue--overiden-build-dir
+                        ;; FIXME: this should not be cached ONLY for projects
+                        ;; that use configuration.
+
                         ;; Do not set cache for this case since this is only
                         ;; used for bringing the directory to the front of the
                         ;; cache list and it could be that there is no
                         ;; configuration command in the user input meaning that
                         ;; this directory should not be cached. The caching will
                         ;; be done later in `blue-run-command'.
-                        (setq blue--config-dir blue--overiden-config-dir)
-                        (blue--cache-add blue--config-dir)))))
+                        (setq blue--build-dir blue--overiden-build-dir)
+                        (blue--cache-add blue--build-dir)))))
               commands
               comint-flip)
       '(unset))))
@@ -625,10 +628,9 @@ COMINT-FLIP inverts the interactive compilation logic."
            (comint (xor (plist-get analysis :interactive-p) comint-flip))
            (configure-p (plist-get analysis :configure-p))
            (needs-config-p (plist-get analysis :needs-config-p)))
-
       (cond
        ((and needs-config-p
-             (not blue--config-dir)
+             (not blue--build-dir)
              (not configure-p))
         (let ((conf-dir (read-directory-name "Configuration directory: ")))
           (unless (file-exists-p conf-dir)
@@ -637,10 +639,10 @@ COMINT-FLIP inverts the interactive compilation logic."
           ;; configure command the value of `default-directory' is respected in
           ;; `blue--compile'.
           (setq default-directory conf-dir
-                blue--config-dir conf-dir)))
+                blue--build-dir conf-dir)))
        (configure-p
         (message (concat "Configuration requested, next command requiring configuration will "
-                         "run under " (propertize "`blue--config-dir'" 'face 'bold) " directory."))
+                         "run under " (propertize "`blue--build-dir'" 'face 'bold) " directory."))
         (blue--cache-add default-directory)))
 
       (let ((command-string (string-join
