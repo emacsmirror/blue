@@ -34,6 +34,7 @@
 (require 'crm)
 (require 'pcomplete)
 
+
 ;;; Configuration
 
 (defgroup blue nil
@@ -70,6 +71,7 @@ Interactive commands will run in comint mode compilation buffers."
   :type 'integer
   :group 'blue)
 
+
 ;;; Faces
 
 (defface blue-documentation
@@ -88,6 +90,7 @@ Interactive commands will run in comint mode compilation buffers."
   '((t :inherit shadow :weight regular))
   "Face used to display inactive items in hint overlay.")
 
+
 ;;; Internal Variables
 
 (defvar blue--unset 'unset
@@ -117,7 +120,8 @@ This is used when passing universal prefix argument `C-u' to
 (defvar blue--hint-overlay nil
   "Overlay for minibuffer hints.")
 
-;;; Utilities
+
+;;; Utilities.
 
 (defun blue--get-log-buffer ()
   "Return `blue--log-buffer'."
@@ -125,11 +129,16 @@ This is used when passing universal prefix argument `C-u' to
 
 (defun blue--check-blue-binary ()
   "Check if `blue-binary' is in PATH."
-  (if (executable-find blue-binary)
-      t
-    (with-current-buffer (blue--get-log-buffer)
-      (blue--handle-error 'missing))
-    nil))
+  (let ((bin (executable-find blue-binary)))
+    (unless bin
+      (let* ((prefix (propertize "[ERROR] " 'face 'error))
+             (msg (concat (propertize "`blue'" 'face 'font-lock-constant-face)
+                          " command not found in "
+                          (propertize "`exec-path'" 'face 'font-lock-type-face)))
+             (msg* (concat prefix msg)))
+        (blue--log-output (concat msg* "\n"))
+        (message msg*)))
+    bin))
 
 ;; TODO: should we use 'blue' to locate the 'blueprint.scm'?
 (defun blue--find-blueprint (&optional path)
@@ -162,7 +171,8 @@ If PATH is non-nil, locate `blueprint.scm' from PATH."
   "Return t if FILE exists and is readable."
   (and file (file-exists-p file) (file-readable-p file)))
 
-;;; Memoization
+
+;;; Memoization.
 
 (defun blue--memoize (function)
   "Return a memoized version of FUNCTION."
@@ -186,7 +196,52 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
               (mapconcat #'symbol-name arglist " ")
               docstring)))
 
-;;; Cache Management
+
+;;; Logging.
+
+(defun blue--format-header (command)
+  "Format COMMAND header for output buffer.
+
+TIME is the timestamp of the header."
+  (propertize (format "▶ %s  [%s]\n" command (current-time-string))
+              'face 'bold))
+
+(defun blue--format-footer (exit-code)
+  "Format status footer for output buffer.
+
+EXIT-CODE displays the status of the command."
+  (propertize (format "⏹ Status: %s\n\n" exit-code)
+              'face (if (= exit-code 0)
+                        'success
+                      'error)))
+
+(defun blue--log-output (output &optional command exit-code)
+  "Log OUTPUT string to `blue--log-buffer'.
+
+COMMAND is the command string that generated OUTPUT.
+EXIT-CODE is the return value of CMD."
+  (with-current-buffer (blue--get-log-buffer)
+    (when command (insert (blue--format-header command)))
+    (insert output)
+    (insert "\n")
+    (when exit-code (insert (blue--format-footer exit-code)))))
+
+(defun blue--handle-error (exit-code)
+  "Handle and display command execution errors.
+
+Give a relevant error message according to EXIT-CODE."
+  (let* ((prefix (propertize "[ERROR] " 'face 'error))
+         (msg (if (numberp exit-code)
+                  (propertize (format "Error %s" exit-code) 'face 'error)
+                (concat (propertize "`blue'" 'face 'font-lock-constant-face)
+                        " command not found in "
+                        (propertize "`exec-path'" 'face 'font-lock-type-face))))
+         (msg* (concat prefix msg)))
+    (blue--log-output (concat msg* "\n"))
+    (message msg*)))
+
+
+;;; Cache.
 
 (defun blue--read-cache ()
   "Initialize `blue--cache-list' from `blue-cache-file'."
@@ -251,48 +306,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
     (cadr (assoc-string blueprint blue--cache-list))))
 
 
-;;; Command Execution.
-
-(defun blue--handle-error (exit-code)
-  "Handle and display command execution errors.
-
-Give a relevant error message according to EXIT-CODE."
-  (let* ((prefix (propertize "[ERROR] " 'face 'error))
-         (msg (if (numberp exit-code)
-                  (propertize (format "Error %s" exit-code) 'face 'error)
-                (concat (propertize "`blue'" 'face 'font-lock-constant-face)
-                        " command not found in "
-                        (propertize "`exec-path'" 'face 'font-lock-type-face))))
-         (msg* (concat prefix msg)))
-    (insert (concat msg* "\n\n"))
-    (message "%s" msg*)))
-
-
-(defun blue--format-header (command)
-  "Format COMMAND header for output buffer.
-
-TIME is the timestamp of the header."
-  (propertize (format "▶ %s  [%s]\n" command (current-time-string))
-              'face 'bold))
-
-(defun blue--format-footer (exit-code)
-  "Format status footer for output buffer.
-
-EXIT-CODE displays the status of the command."
-  (propertize (format "\n⏹ Status: %s\n\n" exit-code)
-              'face (if (= exit-code 0)
-                        'success
-                      'error)))
-
-(defun blue--log-output (command output exit-code)
-  "Log OUTPUT string to `blue--log-buffer'.
-
-COMMAND is the command string that generated OUTPUT.
-EXIT-CODE is the return value of CMD."
-  (with-current-buffer (blue--get-log-buffer)
-    (insert (blue--format-header command))
-    (insert output)
-    (insert (blue--format-footer exit-code))))
+;;; Serialization.
 
 (defun blue--execute-serialize (flags command)
   "Execute BLUE serialization COMMAND with FLAGS and return parsed output."
@@ -303,7 +317,7 @@ EXIT-CODE is the return value of CMD."
          (output (with-output-to-string
                    (setq exit-code
                          (apply #'call-process blue-binary nil standard-output nil args)))))
-    (blue--log-output command-string output exit-code)
+    (blue--log-output output command-string exit-code)
     (read output)))
 
 (defun blue--get-commands (blueprint)
@@ -445,6 +459,9 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
                  '("^.* at \\(.*?\\):\\([0-9]+\\)" 1 2))
     (setq default-directory dir)))
 
+;; FIXME: 'blue repl' stopped working after some commit in blue. This one is
+;; known to be working:
+;; https://codeberg.org/lapislazuli/blue/commit/017a3b3efa0ec53d742197ee1e74b338fdae77c4
 (defun blue--compile (command &optional configure-p comint-p)
   "Compile COMMAND with BLUE-specific setup.
 CONFIGURE-P runs command in `default-directory'.
