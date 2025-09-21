@@ -119,6 +119,15 @@ This is used when passing universal prefix argument `C-u' to
 
 ;;; Utilities
 
+(defun blue--check-blue-binary ()
+  "Check if `blue-binary' is in PATH."
+  (if (executable-find blue-binary)
+      t
+    (let ((output-buf (get-buffer-create blue--output-buffer)))
+      (with-current-buffer output-buf
+        (blue--handle-error 'missing)))
+    nil))
+
 ;; TODO: should we use 'blue' to locate the 'blueprint.scm'?
 (defun blue--find-blueprint (&optional path)
   "Return path to top-level `blueprint.scm'.
@@ -267,8 +276,8 @@ Give a relevant error message according to EXIT-CODE."
                 (concat (propertize "`blue'" 'face 'font-lock-constant-face)
                         " command not found in "
                         (propertize "`exec-path'" 'face 'font-lock-type-face))))
-         (msg* (concat prefix msg "\n\n")))
-    (insert msg*)
+         (msg* (concat prefix msg)))
+    (insert (concat msg* "\n\n"))
     (message "%s" msg*)))
 
 (defun blue--execute-serialize (flags command)
@@ -567,41 +576,43 @@ If CACHE is non nil, add directory to cache."
 
 (defun blue--prompt-for-commands ()
   "Interactive prompt for BLUE commands."
-  (blue--ensure-cache)
-  (setq blue--build-dir (car (blue--cache-get-build-dirs default-directory)))
+  (if (not (blue--check-blue-binary))
+      (list blue--unset)
+    (blue--ensure-cache)
+    (setq blue--build-dir (car (blue--cache-get-build-dirs default-directory)))
 
-  (let* ((prefix (car current-prefix-arg))
-         (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
-         (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
-         (blue--overiden-build-dir (when prompt-dir-p
-                                     (blue--prompt-dir t))))
-    (if-let* ((blue--blueprint (blue--find-blueprint))
-              (commands (blue--get-commands blue--blueprint))
-              (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
-              (completion-extra-properties
-               (blue--create-completion-properties commands invocations))
-              (crm-separator (propertize "[ \t]*--[ \t]+"
-                                         'separator "--"
-                                         'description "double-dash-separated list"))
-              (crm-prompt "[%d] [CMR%s] Command: "))
-        (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
-                (prog1 (completing-read-multiple "Command: " invocations)
-                  (when blue--build-dir
-                    (if blue--overiden-build-dir
-                        ;; FIXME: this should not be cached ONLY for projects
-                        ;; that use configuration.
+    (let* ((prefix (car current-prefix-arg))
+           (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
+           (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
+           (blue--overiden-build-dir (when prompt-dir-p
+                                       (blue--prompt-dir t))))
+      (if-let* ((blue--blueprint (blue--find-blueprint))
+                (commands (blue--get-commands blue--blueprint))
+                (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
+                (completion-extra-properties
+                 (blue--create-completion-properties commands invocations))
+                (crm-separator (propertize "[ \t]*--[ \t]+"
+                                           'separator "--"
+                                           'description "double-dash-separated list"))
+                (crm-prompt "[%d] [CMR%s] Command: "))
+          (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
+                  (prog1 (completing-read-multiple "Command: " invocations)
+                    (when blue--build-dir
+                      (if blue--overiden-build-dir
+                          ;; FIXME: this should not be cached ONLY for projects
+                          ;; that use configuration.
 
-                        ;; Do not set cache for this case since this is only
-                        ;; used for bringing the directory to the front of the
-                        ;; cache list and it could be that there is no
-                        ;; configuration command in the user input meaning that
-                        ;; this directory should not be cached. The caching will
-                        ;; be done later in `blue-run-command'.
-                        (setq blue--build-dir blue--overiden-build-dir)
-                      (blue--cache-add blue--build-dir)))))
-              commands
-              comint-flip)
-      (list blue--unset))))
+                          ;; Do not set cache for this case since this is only
+                          ;; used for bringing the directory to the front of the
+                          ;; cache list and it could be that there is no
+                          ;; configuration command in the user input meaning that
+                          ;; this directory should not be cached. The caching will
+                          ;; be done later in `blue-run-command'.
+                          (setq blue--build-dir blue--overiden-build-dir)
+                        (blue--cache-add blue--build-dir)))))
+                commands
+                comint-flip)
+        (list blue--unset)))))
 
 
 ;;; UI.
