@@ -119,11 +119,15 @@ This is used when passing universal prefix argument `C-u' to
 
 ;;; Utilities
 
+(defun blue--get-output-buffer ()
+  "Return `blue--output-buffer'."
+  (get-buffer-create blue--output-buffer))
+
 (defun blue--check-blue-binary ()
   "Check if `blue-binary' is in PATH."
   (if (executable-find blue-binary)
       t
-    (let ((output-buf (get-buffer-create blue--output-buffer)))
+    (let ((output-buf (blue--get-output-buffer)))
       (with-current-buffer output-buf
         (blue--handle-error 'missing)))
     nil))
@@ -282,7 +286,7 @@ Give a relevant error message according to EXIT-CODE."
 
 (defun blue--execute-serialize (flags command)
   "Execute BLUE serialization COMMAND with FLAGS and return parsed output."
-  (let* ((buffer (get-buffer-create blue--output-buffer))
+  (let* ((buffer (blue--get-output-buffer))
          (timestamp (current-time-string))
          (env (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (path exec-path)
