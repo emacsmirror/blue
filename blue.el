@@ -111,7 +111,7 @@ This is used when passing universal prefix argument `C-u' to
 (defvar blue--buffer-name-function #'blue--default-buffer-name
   "Function used by BLUE to name the compilation buffer.")
 
-(defvar blue--output-buffer " *blue output*"
+(defvar blue--log-buffer " *blue log*"
   "Buffer used to capture output from BLUE commands.")
 
 (defvar blue--hint-overlay nil
@@ -119,17 +119,16 @@ This is used when passing universal prefix argument `C-u' to
 
 ;;; Utilities
 
-(defun blue--get-output-buffer ()
-  "Return `blue--output-buffer'."
-  (get-buffer-create blue--output-buffer))
+(defun blue--get-log-buffer ()
+  "Return `blue--log-buffer'."
+  (get-buffer-create blue--log-buffer))
 
 (defun blue--check-blue-binary ()
   "Check if `blue-binary' is in PATH."
   (if (executable-find blue-binary)
       t
-    (let ((output-buf (blue--get-output-buffer)))
-      (with-current-buffer output-buf
-        (blue--handle-error 'missing)))
+    (with-current-buffer (blue--get-log-buffer)
+      (blue--handle-error 'missing))
     nil))
 
 ;; TODO: should we use 'blue' to locate the 'blueprint.scm'?
@@ -254,22 +253,6 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Command Execution.
 
-(defun blue--format-header (command time)
-  "Format COMMAND header for output buffer.
-
-TIME is the timestamp of the header."
-  (format "▶ %s  [%s]\n" command time))
-
-(defun blue--format-footer (exit-code)
-  "Format status footer for output buffer.
-
-EXIT-CODE displays the status of the command."
-  (propertize (format "⏹ Status: %s\n" exit-code)
-              'face (pcase exit-code
-                      (0 'success)
-                      ('missing 'error)
-                      (_ 'warning))))
-
 (defun blue--handle-error (exit-code)
   "Handle and display command execution errors.
 
@@ -284,44 +267,44 @@ Give a relevant error message according to EXIT-CODE."
     (insert (concat msg* "\n\n"))
     (message "%s" msg*)))
 
+
+(defun blue--format-header (command)
+  "Format COMMAND header for output buffer.
+
+TIME is the timestamp of the header."
+  (propertize (format "▶ %s  [%s]\n" command (current-time-string))
+              'face 'bold))
+
+(defun blue--format-footer (exit-code)
+  "Format status footer for output buffer.
+
+EXIT-CODE displays the status of the command."
+  (propertize (format "\n⏹ Status: %s\n\n" exit-code)
+              'face (if (= exit-code 0)
+                        'success
+                      'error)))
+
+(defun blue--log-output (command output exit-code)
+  "Log OUTPUT string to `blue--log-buffer'.
+
+COMMAND is the command string that generated OUTPUT.
+EXIT-CODE is the return value of CMD."
+  (with-current-buffer (blue--get-log-buffer)
+    (insert (blue--format-header command))
+    (insert output)
+    (insert (blue--format-footer exit-code))))
+
 (defun blue--execute-serialize (flags command)
   "Execute BLUE serialization COMMAND with FLAGS and return parsed output."
-  (let* ((buffer (blue--get-output-buffer))
-         (timestamp (current-time-string))
-         (env (cons "GUILE_AUTO_COMPILE=0" process-environment))
-         (path exec-path)
+  (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (args (append (or flags '()) (list command)))
          (command-string (string-join (cons blue-binary args) " "))
-         (header (blue--format-header command-string timestamp))
-         start-pos end-pos exit-code result)
-
-    (with-current-buffer buffer
-      (let ((process-environment env)
-            (exec-path path)
-            (inhibit-read-only t))
-        (goto-char (point-min))
-        (unless (bobp) (insert "\n"))
-
-        (insert (propertize header 'face 'bold))
-        (setq start-pos (point))
-
-        (condition-case _
-            (setq exit-code (apply #'call-process blue-binary nil buffer nil args))
-          (file-missing (setq exit-code 'missing)))
-
-        (setq end-pos (point))
-        (insert (blue--format-footer exit-code))
-
-        (if (eq exit-code 0)
-            (condition-case parse-error
-                (setq result (read (buffer-substring-no-properties start-pos end-pos)))
-              (error
-               (let ((error-message (propertize (format "[Parse error] %s\n" parse-error)
-                                                'face 'error)))
-                 (insert error-message)
-                 (message "%s" error-message))))
-          (blue--handle-error exit-code))))
-    result))
+         exit-code
+         (output (with-output-to-string
+                   (setq exit-code
+                         (apply #'call-process blue-binary nil standard-output nil args)))))
+    (blue--log-output command-string output exit-code)
+    (read output)))
 
 (defun blue--get-commands (blueprint)
   "Return the commands provided by BLUEPRINT."
