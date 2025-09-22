@@ -122,13 +122,20 @@ This is used when passing universal prefix argument `C-u' to
 
 (defun blue--get-log-buffer ()
   "Return `blue--log-buffer'."
-  (get-buffer-create blue--log-buffer))
+  (let ((buf (get-buffer blue--log-buffer)) ; Already existing.
+        (buf* (get-buffer-create blue--log-buffer)))
+    (unless buf
+      (with-current-buffer buf*
+        (outline-mode)
+        (setq-local outline-regexp "▶")
+        (read-only-mode 1)))
+    buf))
 
 (defun blue--check-blue-binary ()
   "Check if `blue-binary' is in PATH."
   (let ((bin (executable-find blue-binary)))
     (unless bin
-      (let* ((prefix (propertize "[ERROR] " 'face 'error))
+      (let* ((prefix (concat "▶ " (propertize "[ERROR] " 'face 'error)))
              (msg (concat (propertize "`blue'" 'face 'font-lock-constant-face)
                           " command not found in "
                           (propertize "`exec-path'" 'face 'font-lock-type-face)))
@@ -218,10 +225,13 @@ EXIT-CODE displays the status of the command."
 COMMAND is the command string that generated OUTPUT.
 EXIT-CODE is the return value of CMD."
   (with-current-buffer (blue--get-log-buffer)
-    (when command (insert (blue--format-header command)))
-    (insert output)
-    (insert "\n")
-    (when exit-code (insert (blue--format-footer exit-code)))))
+    (let ((inhibit-read-only t))
+      (save-excursion
+        (goto-char (point-min))
+        (when command (insert (blue--format-header command)))
+        (insert output)
+        (insert "\n")
+        (when exit-code (insert (blue--format-footer exit-code)))))))
 
 (defun blue--handle-error (exit-code)
   "Handle and display command execution errors.
