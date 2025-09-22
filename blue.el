@@ -93,13 +93,10 @@ Interactive commands will run in comint mode compilation buffers."
 
 ;;; Internal Variables
 
-(defvar blue--unset 'unset
-  "Unset symbol.")
-
 (defvar blue--blueprint nil
   "Current blueprint being processed.")
 
-(defvar blue--cache-list blue--unset
+(defvar blue--cache-list nil
   "List structure containing directories of known BLUE caches for project.")
 
 (defvar blue--build-dir nil
@@ -279,8 +276,7 @@ Give a relevant error message according to EXIT-CODE."
 
 (defun blue--ensure-cache ()
   "Initialize cache if needed and sanitize it."
-  (when (eq blue--cache-list blue--unset)
-    (blue--read-cache))
+  (blue--read-cache)
   (when blue--cache-list
     (blue--sanitize-cache)))
 
@@ -562,10 +558,8 @@ COMINT-P selects `comint-mode' for compilation buffer."
     (list :annotation-function (blue--create-annotation-fn commands width)
           :group-function (blue--create-group-fn commands))))
 
-(defun blue--prompt-dir (&optional cache)
-  "Prompt for directory, create it if it does not exists.
-
-If CACHE is non nil, add directory to cache."
+(defun blue--prompt-dir ()
+  "Prompt for directory."
   (let ((dir (expand-file-name (read-directory-name "Build directory: "))))
     (unless (file-exists-p dir)
       (mkdir dir t))
@@ -574,14 +568,12 @@ If CACHE is non nil, add directory to cache."
     ;; `blue--compile'.
     (setq default-directory dir
           blue--build-dir dir)
-    (when cache
-      (blue--cache-add dir))
     dir))
 
 (defun blue--prompt-for-commands ()
   "Interactive prompt for BLUE commands."
   (if (not (blue--check-blue-binary))
-      (list blue--unset)
+      (list nil)
     (blue--ensure-cache)
     (setq blue--build-dir (car (blue--cache-get-build-dirs default-directory)))
 
@@ -589,7 +581,7 @@ If CACHE is non nil, add directory to cache."
            (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
            (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
            (blue--overiden-build-dir (when prompt-dir-p
-                                       (blue--prompt-dir t))))
+                                       (blue--prompt-dir))))
       (if-let* ((blue--blueprint (blue--find-blueprint))
                 (commands (blue--get-commands blue--blueprint))
                 (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
@@ -602,21 +594,16 @@ If CACHE is non nil, add directory to cache."
           (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
                   (prog1 (completing-read-multiple "Command: " invocations)
                     (when blue--build-dir
-                      (if blue--overiden-build-dir
-                          ;; FIXME: this should not be cached ONLY for projects
-                          ;; that use configuration.
-
-                          ;; Do not set cache for this case since this is only
-                          ;; used for bringing the directory to the front of the
-                          ;; cache list and it could be that there is no
-                          ;; configuration command in the user input meaning that
-                          ;; this directory should not be cached. The caching will
-                          ;; be done later in `blue-run-command'.
-                          (setq blue--build-dir blue--overiden-build-dir)
-                        (blue--cache-add blue--build-dir)))))
+                      (when blue--overiden-build-dir
+                        ;; FIXME: this should not be cached ONLY for projects
+                        ;; that use configuration.
+                        (setq blue--build-dir blue--overiden-build-dir))
+                      ;; Bring `blue--build-dir' to the from of the list so it's
+                      ;; ordered by usage.
+                      (blue--cache-add blue--build-dir))))
                 commands
                 comint-flip)
-        (list blue--unset)))))
+        (list nil)))))
 
 
 ;;; UI.
@@ -670,7 +657,7 @@ COMMANDS contains command metadata.
 COMINT-FLIP inverts the interactive compilation logic."
   (interactive (blue--prompt-for-commands))
 
-  (unless (eq input blue--unset)
+  (when input
     (let* ((flags (blue--normalize-flags blue-default-flags))
            (tokens (mapcar #'string-split input))
            (analysis (blue--analyze-commands tokens commands))
