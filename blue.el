@@ -150,11 +150,11 @@ If PATH is non-nil, locate `blueprint.scm' from PATH."
        (directory-file-name
         (concat blueprint "/blueprint.scm")))
     (error
-     (warn (concat "Failed to locate "
-                   (propertize "`blueprint.scm'" 'face 'font-lock-constant-face)
-                   (when path
-                     (concat " in "
-                             (propertize path 'face 'font-lock-type-face))))))))
+     (concat "Failed to locate "
+             (propertize "`blueprint.scm'" 'face 'font-lock-constant-face)
+             (when path
+               (concat " in "
+                       (propertize path 'face 'font-lock-type-face)))))))
 
 (defun blue--normalize-flags (flags)
   "Normalize FLAGS to a list of strings."
