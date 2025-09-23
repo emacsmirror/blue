@@ -314,8 +314,10 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Serialization.
 
-(defun blue--execute-serialize (flags command)
-  "Execute BLUE serialization COMMAND with FLAGS and return parsed output."
+(defun blue--execute-serialize (flags command &optional raw)
+  "Execute BLUE serialization COMMAND with FLAGS and return parsed output.
+
+If RAW is non nil, don't evaluent the serialized string."
   (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (args (append (or flags '()) (list command)))
          (command-string (string-join (cons blue-binary args) " "))
@@ -324,7 +326,9 @@ If NO-SAVE is non-nil, don't save to disk immediately."
                    (setq exit-code
                          (apply #'call-process blue-binary nil standard-output nil args)))))
     (blue--log-output output command-string exit-code)
-    (read output)))
+    (if raw
+        output
+        (read output))))
 
 (defun blue--get-commands (blueprint)
   "Return the commands provided by BLUEPRINT."
