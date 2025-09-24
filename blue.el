@@ -634,12 +634,17 @@ not exist."
 (defun blue-forget-blueprint (blueprint)
   "Forget BLUEPRINT from cache."
   (interactive
-   (let ((blueprint (blue--find-blueprint default-directory)))
-     (list blueprint)))
+   (progn
+     (blue--ensure-cache)
+     (let ((blueprints (mapcar (lambda (entry)
+                                 (car entry))
+                               blue--cache-list)))
+       (list (completing-read "Forget blueprint: " blueprints nil t)))))
   (let ((updated-cache (seq-remove (lambda (entry)
                                      (string-equal blueprint (car entry)))
                                    (or blue--cache-list nil))))
-    (setq blue--cache-list updated-cache)))
+    (setq blue--cache-list updated-cache)
+    (blue--write-cache)))
 
 ;;;###autoload
 (defun blue-forget-build-dir (build-dir)
