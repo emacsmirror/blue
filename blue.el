@@ -129,7 +129,7 @@ This is used when passing universal prefix argument `C-u' to
         (outline-mode)
         (setq-local outline-regexp "▶")
         (read-only-mode 1)))
-    buf))
+    buf*))
 
 (defun blue--check-blue-binary ()
   "Check if `blue-binary' is in PATH."
