@@ -666,7 +666,8 @@ not exist."
          (updated-cache (if entry
                             (cons entry rest)
                           rest)))
-    (setq blue--cache-list updated-cache)))
+    (setq blue--cache-list updated-cache)
+    (blue--write-cache)))
 
 ;;;###autoload
 (defun blue-run-command (input &optional commands comint-flip)
