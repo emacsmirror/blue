@@ -39,32 +39,21 @@
 
 ;; FIXME: If the file is a hiden file (starts with a space), it's not properly
 ;; propertized.
-(defvar blue--replay-buffer "*blue replay*"
+(defvar blue-replay--buffer "*blue replay*"
   "Buffer to dump raw output of replay.")
 
 ;;; Utilities.
 
-(defmacro with-demo-buffer (buf &rest body)
-  (declare (indent 1))
-  `(let ((buffer (get-buffer-create ,buf)))
-     (with-current-buffer buffer
-       (let ((inhibit-read-only t))
-         (erase-buffer)
-         (magit-section-mode)
-         (magit-insert-section (demo-buffer)
-           ,@body)))
-     (switch-to-buffer-other-window buffer)))
+(defun blue-replay--get-buffer ()
+  "Return `blue-replay--buffer', creating it if needed."
+  (get-buffer-create blue-replay--buffer))
 
-(defun blue--get-replay-buffer ()
-  "Return `blue--replay-buffer', creating it if needed."
-  (get-buffer-create blue--replay-buffer))
-
-(defun blue--parse-recutils-to-plist (recutils-string)
-  "Parse a recutils format string into a list of property lists.
+(defun blue-replay--parse-recutils-to-plist (recutils)
+  "Parse a RECUTILS format string into a list of property lists.
 Each record becomes a plist with field names as keywords."
   (let ((recs '())
         (current-record '())
-        (lines (split-string recutils-string "\n"))
+        (lines (split-string recutils "\n"))
         (current-key nil))
 
     (dolist (line lines)
@@ -129,8 +118,8 @@ Each record becomes a plist with field names as keywords."
 
     (nreverse recs)))
 
-(defun blue--insert-record-section (rec rec-num)
-  "Insert a single rec as a magit section."
+(defun blue-replay--insert-record-section (rec)
+  "Insert a single REC as a magit section."
   (let* ((replay (plist-get rec :replay))
          (replay-hash (car (last (string-split replay))))
          (origin (plist-get rec :origin))
@@ -185,11 +174,11 @@ Each record becomes a plist with field names as keywords."
 
       (insert "\n"))))
 
-(defun blue--display-recutils-magit (recs dir)
-  "Display parsed recutils RECS in a magit-section
+(defun blue-replay--display-recutils-magit (recs dir)
+  "Display parsed recutils RECS in a 'magit-section' buffer.
 
 DIR is the directory where the replay data has been taken from."
-  (let ((buf-name (blue--get-replay-buffer)))
+  (let ((buf-name (blue-replay--get-buffer)))
     (with-current-buffer (get-buffer-create buf-name)
       (let ((inhibit-read-only t))
         (erase-buffer)
@@ -197,19 +186,17 @@ DIR is the directory where the replay data has been taken from."
         (magit-insert-section (blue-root)
           (magit-insert-heading
             (concat "Build directory: " (propertize dir 'font-lock-face 'link) "\n\n"))
-          (let ((rec-count 0))
-            (dolist (rec recs)
-              (setq rec-count (1+ rec-count))
-              (blue--insert-record-section rec rec-count))))
+          (dolist (rec recs)
+            (blue-replay--insert-record-section rec)))
         (goto-char (point-min)))
       (switch-to-buffer buf-name))))
 
-(defun blue--replay (blueprint dir)
-  "Return the replay data stored in DIR."
+(defun blue-replay--replay (blueprint dir)
+  "Return the replay data for BLUEPRINT stored in DIR."
   (let* ((flags (when blueprint
                   (list "--file" blueprint "--build-directory" dir)))
          (output (blue--execute-serialize flags "replay" t)))
-    (blue--parse-recutils-to-plist output)))
+    (blue-replay--parse-recutils-to-plist output)))
 
 
 ;;; UI.
@@ -219,7 +206,8 @@ DIR is the directory where the replay data has been taken from."
   "Display and interactive replay buffer."
   (interactive)
   (let* ((blueprint (blue--find-blueprint))
-         (rec-data (blue--replay blueprint default-directory)))
-    (blue--display-recutils-magit rec-data default-directory)))
+         (rec-data (blue-replay--replay blueprint default-directory)))
+    (blue-replay--display-recutils-magit rec-data default-directory)))
 
 (provide 'blue-replay)
+;;; blue-replay.el ends here.
