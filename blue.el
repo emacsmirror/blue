@@ -477,9 +477,8 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
 ;; FIXME: 'blue repl' stopped working after some commit in blue. This one is
 ;; known to be working:
 ;; https://codeberg.org/lapislazuli/blue/commit/017a3b3efa0ec53d742197ee1e74b338fdae77c4
-(defun blue--compile (command &optional configure-p comint-p)
+(defun blue--compile (command &optional comint-p)
   "Compile COMMAND with BLUE-specific setup.
-CONFIGURE-P runs command in `default-directory'.
 COMINT-P selects `comint-mode' for compilation buffer."
   (interactive
    (list
@@ -504,15 +503,12 @@ COMINT-P selects `comint-mode' for compilation buffer."
                                                       command name-of-mode)))
          (buf (get-buffer-create
                (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
-         (dir (if configure-p
-                  default-directory
-                (or blue--build-dir default-directory))))
-
-    (setq-default compilation-directory dir)
-    (blue--setup-buffer buf dir)
-
-    (let ((default-directory dir))
-      (compilation-start command comint-p))))
+         (default-directory (if blue--build-dir
+                                blue--build-dir
+                                default-directory)))
+    (setq-default compilation-directory default-directory)
+    (blue--setup-buffer buf default-directory)
+    (compilation-start command comint-p)))
 
 
 ;;; Command Analysis.
@@ -593,13 +589,14 @@ not exist."
   (if (not (blue--check-blue-binary))
       (list nil)
     (blue--ensure-cache)
-    (setq blue--build-dir (car (blue--cache-get-build-dirs default-directory)))
 
     (let* ((prefix (car current-prefix-arg))
            (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
-           (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
-           (blue--overiden-build-dir (when prompt-dir-p
-                                       (blue--prompt-dir t))))
+           (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
+      (setq blue--overiden-build-dir (when prompt-dir-p
+                                       (blue--prompt-dir t))
+            blue--build-dir (or blue--overiden-build-dir
+                                (car (blue--cache-get-build-dirs default-directory))))
       (if-let* ((blue--blueprint (blue--find-blueprint))
                 (commands (blue--get-commands blue--blueprint))
                 (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
@@ -610,19 +607,7 @@ not exist."
                                            'description "double-dash-separated list"))
                 (crm-prompt "[%d] [CMR%s] Command: "))
           (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
-                  (prog1 (completing-read-multiple "Command: " invocations)
-                    (when blue--build-dir
-                      (when blue--overiden-build-dir
-                        ;; Needed to force the change of the execution directory since for the
-                        ;; configure command the value of `default-directory' is respected in
-                        ;; `blue--compile'.
-                        (setq default-directory blue--overiden-build-dir
-                              blue--build-dir blue--overiden-build-dir))
-                      ;; FIXME: this should not be cached ONLY for projects
-                      ;; that use configuration.
-                      ;; Bring `blue--build-dir' to the from of the list so it's
-                      ;; ordered by usage.
-                      (blue--cache-add blue--build-dir))))
+                  (completing-read-multiple "Command: " invocations))
                 commands
                 comint-flip)
         (list nil)))))
@@ -689,32 +674,17 @@ COMINT-FLIP inverts the interactive compilation logic."
     (let* ((flags (blue--normalize-flags blue-default-flags))
            (tokens (mapcar #'string-split input))
            (analysis (blue--analyze-commands tokens commands))
-           (comint (xor (plist-get analysis :interactive-p) comint-flip))
-           (configure-p (plist-get analysis :configure-p))
-           (needs-config-p (plist-get analysis :needs-config-p)))
-      (cond
-       ((and needs-config-p
-             (not blue--build-dir)
-             (not configure-p))
-        (let ((conf-dir (read-directory-name "Configuration directory: ")))
-          (unless (file-exists-p conf-dir)
-            (mkdir conf-dir t))
-          ;; Needed to force the change of the execution directory since for the
-          ;; configure command the value of `default-directory' is respected in
-          ;; `blue--compile'.
-          (setq default-directory conf-dir
-                blue--build-dir conf-dir)))
-       (configure-p
-        (message (concat "Configuration requested, next command requiring configuration will "
-                         "run under " (propertize "`blue--build-dir'" 'face 'bold) " directory."))
-        (blue--cache-add default-directory)))
-
+           (comint (xor (plist-get analysis :interactive-p) comint-flip)))
       (let ((command-string (string-join
                              (cons blue-binary
                                    (append (when flags flags)
                                            (cons (string-join input " -- ") nil)))
                              " ")))
-        (blue--compile command-string configure-p comint)))))
+        ;; Bring `blue--build-dir' to the from of the list so it's
+        ;; ordered by usage.
+        (when blue--build-dir
+          (blue--cache-add blue--build-dir))
+        (blue--compile command-string comint)))))
 
 (provide 'blue)
 ;;; blue.el ends here.
