@@ -572,10 +572,14 @@ COMINT-P selects `comint-mode' for compilation buffer."
     (list :annotation-function (blue--create-annotation-fn commands width)
           :group-function (blue--create-group-fn commands))))
 
-(defun blue--prompt-dir ()
-  "Prompt for directory."
+(defun blue--prompt-dir (&optional create-p)
+  "Prompt for directory.
+
+If CREATE-P is non nil, create the directory and it's parents if they do
+not exist."
   (let ((dir (expand-file-name (read-directory-name "Build directory: "))))
-    (unless (file-exists-p dir)
+    (when (and create-p
+               (not (file-exists-p dir)))
       (mkdir dir t))
     ;; Needed to force the change of the execution directory since for the
     ;; configure command the value of `default-directory' is respected in
@@ -595,7 +599,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
            (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
            (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
            (blue--overiden-build-dir (when prompt-dir-p
-                                       (blue--prompt-dir))))
+                                       (blue--prompt-dir t))))
       (if-let* ((blue--blueprint (blue--find-blueprint))
                 (commands (blue--get-commands blue--blueprint))
                 (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))

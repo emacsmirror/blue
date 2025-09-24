@@ -202,12 +202,22 @@ DIR is the directory where the replay data has been taken from."
 ;;; UI.
 
 ;;;###autoload
-(defun blue-replay ()
-  "Display and interactive replay buffer."
-  (interactive)
+(defun blue-replay (dir)
+  "Interactively display replay data from DIR."
+  (interactive
+   (progn
+     (blue--ensure-cache)
+     (let* ((known (blue--cache-get-build-dirs default-directory))
+            (cur-dir (directory-file-name (expand-file-name default-directory)))
+            (cached (member cur-dir known))
+            (prefix (car current-prefix-arg)))
+       (list (if (and cached
+                      (not prefix))
+                 cur-dir
+               (blue--prompt-dir))))))
   (let* ((blueprint (blue--find-blueprint))
-         (rec-data (blue-replay--replay blueprint default-directory)))
-    (blue-replay--display-recutils-magit rec-data default-directory)))
+         (rec-data (blue-replay--replay blueprint dir)))
+    (blue-replay--display-recutils-magit rec-data dir)))
 
 (provide 'blue-replay)
 ;;; blue-replay.el ends here.
