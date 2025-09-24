@@ -317,7 +317,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 (defun blue--execute-serialize (flags command &optional raw)
   "Execute BLUE serialization COMMAND with FLAGS and return parsed output.
 
-If RAW is non nil, don't evaluent the serialized string."
+If RAW is non nil, the serialized string will not be evaluated."
   (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (args (append (or flags '()) (list command)))
          (command-string (string-join (cons blue-binary args) " "))
@@ -326,20 +326,25 @@ If RAW is non nil, don't evaluent the serialized string."
                    (setq exit-code
                          (apply #'call-process blue-binary nil standard-output nil args)))))
     (blue--log-output output command-string exit-code)
-    (if raw
-        output
-        (read output))))
+    (cons (if raw
+              output
+            (read output))
+          exit-code)))
 
 (defun blue--get-commands (blueprint)
   "Return the commands provided by BLUEPRINT."
-  (let ((flags (when blueprint (list "--file" blueprint))))
-    (blue--execute-serialize flags ".elisp-serialize-commands")))
+  (let* ((flags (when blueprint (list "--file" blueprint)))
+         (output (blue--execute-serialize flags ".elisp-serialize-commands"))
+         (data (car output)))
+    data))
 
 (defun blue--get-config (blueprint dir)
   "Return the BLUEPRINT configuration stored in DIR."
-  (let ((flags (when blueprint
-                 (list "--file" blueprint "--build-directory" dir))))
-    (blue--execute-serialize flags ".elisp-serialize-configuration")))
+  (let* ((flags (when blueprint
+                  (list "--file" blueprint "--build-directory" dir)))
+         (output (blue--execute-serialize flags ".elisp-serialize-configuration"))
+         (data (car output)))
+    data))
 
 (defun blue--config-get (var config)
   "Retrieve variable VAR value from CONFIG."
