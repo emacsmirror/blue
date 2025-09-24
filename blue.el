@@ -586,11 +586,6 @@ not exist."
     (when (and create-p
                (not (file-exists-p dir)))
       (mkdir dir t))
-    ;; Needed to force the change of the execution directory since for the
-    ;; configure command the value of `default-directory' is respected in
-    ;; `blue--compile'.
-    (setq default-directory dir
-          blue--build-dir dir)
     dir))
 
 (defun blue--prompt-for-commands ()
@@ -618,9 +613,13 @@ not exist."
                   (prog1 (completing-read-multiple "Command: " invocations)
                     (when blue--build-dir
                       (when blue--overiden-build-dir
-                        ;; FIXME: this should not be cached ONLY for projects
-                        ;; that use configuration.
-                        (setq blue--build-dir blue--overiden-build-dir))
+                        ;; Needed to force the change of the execution directory since for the
+                        ;; configure command the value of `default-directory' is respected in
+                        ;; `blue--compile'.
+                        (setq default-directory blue--overiden-build-dir
+                              blue--build-dir blue--overiden-build-dir))
+                      ;; FIXME: this should not be cached ONLY for projects
+                      ;; that use configuration.
                       ;; Bring `blue--build-dir' to the from of the list so it's
                       ;; ordered by usage.
                       (blue--cache-add blue--build-dir))))
