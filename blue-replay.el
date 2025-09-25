@@ -185,7 +185,10 @@ DIR is the directory where the replay data has been taken from."
         (magit-section-mode)
         (magit-insert-section (blue-root)
           (magit-insert-heading
-            (concat "Build directory: " (propertize dir 'font-lock-face 'link) "\n\n"))
+            (concat "Build directory: " (buttonize dir (lambda (dir)
+                                                         (find-file dir))
+                                                   dir)
+                    "\n\n"))
           (dolist (rec recs)
             (blue-replay--insert-record-section rec)))
         (goto-char (point-min)))
