@@ -82,8 +82,12 @@ Interactive commands will run in comint mode compilation buffers."
   '((t :inherit shadow :strike-through t))
   "Face used to separate hint overlay.")
 
+(defface blue-hint-index
+  '((t :inherit bold :foreground "MediumPurple1"))
+  "Face used to draw attention in hint overlay.")
+
 (defface blue-hint-highlight
-  '((t :inherit bold :foreground "#3f578f" :background "#e0f2fa"))
+  '((t :inherit bold :foreground "DodgerBlue4" :background "LightBlue1"))
   "Face used to draw attention in hint overlay.")
 
 (defface blue-hint-faded
@@ -395,7 +399,7 @@ If CURRENT is non-nil the entry will be highlighted."
                   'blue-hint-highlight
                 'blue-hint-faded)))
     (concat
-     (propertize (number-to-string index) 'face 'font-lock-keyword-face)
+     (propertize (number-to-string index) 'face 'blue-hint-index)
      " "
      (propertize build-dir 'face face))))
 

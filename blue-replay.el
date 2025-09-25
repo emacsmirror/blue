@@ -33,7 +33,7 @@
 (require 'blue)
 
 (defface blue-replay--file-heading
-  '((t :extend t :weight bold :foreground "#0031a9"))
+  '((t :extend t :weight bold :foreground "DodgerBlue"))
   "Face for diff file headings."
   :group 'blue-faces)
 
