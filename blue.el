@@ -578,7 +578,9 @@ COMINT-P selects `comint-mode' for compilation buffer."
 
 If CREATE-P is non nil, create the directory and it's parents if they do
 not exist."
-  (let ((dir (expand-file-name (read-directory-name "Build directory: "))))
+  (let ((dir (directory-file-name
+              (expand-file-name
+               (read-directory-name "Build directory: ")))))
     (when (and create-p
                (not (file-exists-p dir)))
       (mkdir dir t))
