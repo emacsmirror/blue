@@ -194,7 +194,7 @@ DIR is the directory where the replay data has been taken from."
         ;; NOTE: `magit-insert-section' does not automatically display the
         ;; visibility indicators.
         (magit-map-sections #'magit-section-maybe-update-visibility-indicator)))
-    (switch-to-buffer buf-name)))
+    (display-buffer buf-name)))
 
 (defun blue-replay--replay (blueprint dir)
   "Return the replay data for BLUEPRINT stored in DIR."
