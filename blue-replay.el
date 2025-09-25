@@ -48,6 +48,10 @@
   "Return `blue-replay--buffer', creating it if needed."
   (get-buffer-create blue-replay--buffer))
 
+(defun blue-replay--exec-replay (replay)
+  "Replay REPLAY item."
+  (blue--compile replay))
+
 (defun blue-replay--parse-recutils-to-plist (recutils)
   "Parse a RECUTILS format string into a list of property lists.
 Each record becomes a plist with field names as keywords."
@@ -138,7 +142,10 @@ Each record becomes a plist with field names as keywords."
 
       (when replay
         (magit-insert-section (blue-field :replay)
-          (insert (format "%-10s %s\n" "replay:" replay))))
+          (insert (format "%-10s %s\n" "replay:"
+                          (propertize
+                           (buttonize replay #'blue-replay--exec-replay replay)
+                           'font-lock-face 'custom-button)))))
 
       (when class
         (magit-insert-section (blue-field :class)
