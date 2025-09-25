@@ -183,16 +183,18 @@ DIR is the directory where the replay data has been taken from."
       (let ((inhibit-read-only t))
         (erase-buffer)
         (magit-section-mode)
-        (magit-insert-section (blue-root)
-          (magit-insert-heading
-            (concat "Build directory: " (buttonize dir (lambda (dir)
+        (save-excursion
+          (magit-insert-section (blue-root)
+            (insert "Build directory: " (buttonize dir (lambda (dir)
                                                          (find-file dir))
                                                    dir)
-                    "\n\n"))
-          (dolist (rec recs)
-            (blue-replay--insert-record-section rec)))
-        (goto-char (point-min)))
-      (switch-to-buffer buf-name))))
+                    "\n\n")
+            (dolist (rec recs)
+              (blue-replay--insert-record-section rec))))
+        ;; NOTE: `magit-insert-section' does not automatically display the
+        ;; visibility indicators.
+        (magit-map-sections #'magit-section-maybe-update-visibility-indicator)))
+    (switch-to-buffer buf-name)))
 
 (defun blue-replay--replay (blueprint dir)
   "Return the replay data for BLUEPRINT stored in DIR."
