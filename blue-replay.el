@@ -190,7 +190,10 @@ DIR is the directory where the replay data has been taken from."
       (setq default-directory dir) ; Update directory of buffer.
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (magit-section-mode)
+        ;; Reset cache before redisplaying data. This ensures that the
+        ;; section visibility is properly updated.
+        (setq magit-section-visibility-cache nil)
+        (blue-replay-mode)
         (save-excursion
           (magit-insert-section (blue-root)
             (insert "Build directory: " (buttonize dir (lambda (dir)
@@ -235,6 +238,23 @@ DIR is the directory where the replay data has been taken from."
   (let* ((blueprint (blue--find-blueprint))
          (rec-data (blue-replay--replay blueprint dir)))
     (blue-replay--display-recutils-magit rec-data dir)))
+
+(defun blue-replay-revert ()
+  "Revert BLUE replay buffer."
+  (interactive)
+  (let ((pt (point)))
+    (blue-replay default-directory)
+    (goto-char pt)))
+
+(defvar-keymap blue-replay-mode-map
+  :doc "Keymap for `blue-replay-mode'."
+  :parent magit-section-mode-map
+  "g" #'blue-replay-revert)
+
+(define-derived-mode blue-replay-mode magit-section-mode "Blue-replay"
+  "Mode for looking at BLUE replay data."
+  :interactive nil
+  :group 'blue)
 
 (provide 'blue-replay)
 ;;; blue-replay.el ends here.
