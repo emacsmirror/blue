@@ -186,7 +186,7 @@ Each record becomes a plist with field names as keywords."
 
 DIR is the directory where the replay data has been taken from."
   (let ((buf-name (blue-replay--get-buffer)))
-    (with-current-buffer (get-buffer-create buf-name)
+    (with-current-buffer buf-name
       (setq default-directory dir) ; Update directory of buffer.
       (let ((inhibit-read-only t))
         (erase-buffer)
