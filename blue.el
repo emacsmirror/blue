@@ -106,6 +106,12 @@ Interactive commands will run in comint mode compilation buffers."
 (defvar blue--build-dir nil
   "Path to last known build directory.")
 
+(defvar blue--search-path nil
+  "Directories where to search for files.
+
+These directories are used for extending `compilation-search-path' and
+locating BLUE replay file references.")
+
 (defvar blue--overiden-build-dir nil
   "Internal variable used to override `blue--build-dir'.
 
@@ -342,10 +348,15 @@ If RAW is non nil, the serialized string will not be evaluated."
          (data (car output)))
     data))
 
-(defun blue--get-config (blueprint dir)
-  "Return the BLUEPRINT configuration stored in DIR."
-  (let* ((flags (when blueprint
-                  (list "--file" blueprint "--build-directory" dir)))
+(defun blue--get-config (blueprint &optional dir)
+  "Return the BLUEPRINT configuration.
+
+If DIR is non-nil return the configuration stored in DIR."
+  (let* ((file-flag (when blueprint
+                      (list "--file" blueprint)))
+         (build-dir-flag (when dir
+                           (list "--build-directory" dir)))
+         (flags (append file-flag build-dir-flag))
          (output (blue--execute-serialize flags ".elisp-serialize-configuration"))
          (data (car output)))
     data))
@@ -470,13 +481,23 @@ COMMAND is the invocation passed to BLUE.
 NAME-OF-MODE is the major mode name that the compilation buffer will use."
   (format "*%s | %s*" name-of-mode command))
 
-(defun blue--setup-buffer (buffer dir)
+(defun blue--setup-buffer (buffer)
   "Setup compilation BUFFER with DIR and error patterns."
   (with-current-buffer buffer
     (make-local-variable 'compilation-error-regexp-alist)
     (add-to-list 'compilation-error-regexp-alist
                  '("^.* at \\(.*?\\):\\([0-9]+\\)" 1 2))
-    (setq default-directory dir)))
+    ;; Bound dynamicaly for the context of this function, let's write it buffer
+    ;; locally so it persists after the dynamic context ends.
+    (setq default-directory default-directory)))
+
+(defun blue--set-search-path (blueprint)
+  "Set search path for BLUEPRINT."
+  (let* ((conf (blue--get-config blueprint))
+         (srcdir (blue--config-get "srcdir" conf)))
+    ;; Make 'srcdir' errors searchable in compilation buffer.
+    (setq-local blue--search-path (seq-uniq (cons srcdir compilation-search-path))
+                compilation-search-path blue--search-path)))
 
 ;; FIXME: 'blue repl' stopped working after some commit in blue. This one is
 ;; known to be working:
@@ -511,8 +532,11 @@ COMINT-P selects `comint-mode' for compilation buffer."
                                 blue--build-dir
                                 default-directory)))
     (setq-default compilation-directory default-directory)
-    (blue--setup-buffer buf default-directory)
-    (compilation-start command comint-p)))
+    (blue--setup-buffer buf)
+    (compilation-start command comint-p))
+
+  ;; Make 'srcdir' errors searchable in compilation buffer.
+  (blue--set-search-path (blue--find-blueprint)))
 
 
 ;;; Command Analysis.
