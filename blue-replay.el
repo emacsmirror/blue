@@ -196,10 +196,7 @@ DIR is the directory where the replay data has been taken from."
         (blue-replay-mode)
         (save-excursion
           (magit-insert-section (blue-root)
-            (insert "Build directory: " (buttonize dir (lambda (dir)
-                                                         (find-file dir))
-                                                   dir)
-                    "\n\n")
+            (insert "Build directory: " dir "\n\n")
             (dolist (rec recs)
               (blue-replay--insert-record-section rec))))
         ;; NOTE: `magit-insert-section' does not automatically display the
@@ -246,6 +243,144 @@ DIR is the directory where the replay data has been taken from."
     (blue-replay default-directory)
     (goto-char pt)))
 
+;; --- Fontification
+
+(defface blue-replay-header-face
+  '((t :foreground "#4A90E2" :weight bold))
+  "Face for build output headers."
+  :group 'blue-faces)
+
+(defface blue-replay-record-face
+  '((t :foreground "#7B68EE" :weight bold))
+  "Face for record identifiers."
+  :group 'blue-faces)
+
+(defface blue-replay-field-face
+  '((t :foreground "#50C878" :weight bold))
+  "Face for field names."
+  :group 'blue-faces)
+
+(defface blue-replay-path-face
+  '((t :inherit link :mouse-face highlight))
+  "Face for file paths."
+  :group 'blue-faces)
+
+(defface blue-replay-class-face
+  '((t :foreground "#DA70D6" :weight bold))
+  "Face for class names."
+  :group 'blue-faces)
+
+(defface blue-replay-error-face
+  '((t :foreground "#FF6B6B" :weight bold))
+  "Face for error indicators."
+  :group 'blue-faces)
+
+(defface blue-replay-error-detail-face
+  '((t :foreground "#FF9999"))
+  "Face for error details."
+  :group 'blue-faces)
+
+(defface blue-replay-keyword-face
+  '((t :foreground "#20B2AA"))
+  "Face for keywords and symbols."
+  :group 'blue-faces)
+
+(defface blue-replay-list-face
+  '((t :foreground "#FFA500"))
+  "Face for numbers."
+  :group 'blue-faces)
+
+(defun blue-replay--visit-location (file &optional line column)
+  "Open FILE and move point to LINE and COLUMN if provided."
+  (when (file-exists-p file)
+    (find-file file)
+    (when line
+      (goto-char (point-min))
+      (forward-line (1- line)))
+    (when column
+      (move-to-column (1- column)))))
+
+(defvar blue-replay--file-rx
+  (rx (group
+       (or
+        (group (group (zero-or-more "/")
+                      (one-or-more (any alnum "_./-")))
+               ":"
+               (group (one-or-more digit))
+               ":"
+               (group (one-or-more digit)))
+        (group "/" (one-or-more (any alnum "_./-"))))))
+  "Rx matcher for files.
+
+We cannot try to mach relative file paths as that would be too
+permissive.  So we match absolute paths or relative paths with
+line:column information.")
+
+(defvar blue-replay-font-lock-keywords
+  `(
+    ;; Field names (origin, replay, class, etc.) - not at start of line to avoid headers
+    ("^\\(\\(origin\\|replay\\|class\\):\\)"
+     (1 'blue-replay-field-face))
+
+    ;; Class names in angle brackets
+    ("\\(#*<[^>]+>\\)"
+     (1 'blue-replay-class-face))
+
+    ;; Make files clickable if they exist.
+    (,blue-replay--file-rx
+
+     (0
+      (prog1 'blue-replay-path-face
+        (let ((path (or (match-string-no-properties 3)
+                        (match-string-no-properties 6)))
+              (line (match-string-no-properties 4))
+              (col (match-string-no-properties 5)))
+          (message "Does path %s exists?" path)
+          (when (file-exists-p path)
+            (make-text-button (match-beginning 0) (match-end 0)
+                              'action `(lambda (_)
+                                         (blue-replay--visit-location ,path ,line ,col))
+                              'follow-link t
+                              'help-echo (format "Click to open %s" path)))))))
+
+    ;; Keywords with colons (#:log, #:trs, #:cov)
+    ("\\(#:[a-zA-Z-]+\\)"
+     (1 'font-lock-keyword-face))
+
+    ;; ERROR: labels
+    ("^\s*ERROR:" . 'error)
+
+    ;; Numbered error items
+    ("^\s*\\([0-9]+\\.\\)"
+     (1 'blue-replay-list-face))
+
+    ;; Error types (&origin, &irritants, &message, etc.)
+    ("\\(&[a-zA-Z-]+\\)"
+     (1 'font-lock-type-face))
+
+    ;; Quoted strings - check if they're file paths and make clickable
+    ("\"\\([^\"]+\\)\""
+     (1 (prog1 'blue-replay-path-face
+          (let ((path (match-string 1)))
+            (when (and path (file-exists-p path))
+              (make-text-button (match-beginning 1) (match-end 1)
+                                'action `(lambda (_button) (find-file ,path))
+                                'follow-link t
+                                'help-echo (format "Click to open %s" path)))))))
+
+    ;; Plus signs for list items
+    ("^\s*\\(\\+\\)" . 'blue-replay-list-face))
+  "Font lock keywords for blue build output.")
+
+;; Integration with blue-replay-mode
+(defun blue-replay-setup-font-lock ()
+  "Set up font-lock for `blue-replay-mode'."
+  (setq font-lock-defaults '(blue-replay-font-lock-keywords t)
+        font-lock-extra-managed-props '(mouse-face keymap help-echo action follow-link button))
+  (font-lock-mode 1))
+
+;; --- Fontification
+
 (defvar-keymap blue-replay-mode-map
   :doc "Keymap for `blue-replay-mode'."
   :parent magit-section-mode-map
@@ -254,7 +389,8 @@ DIR is the directory where the replay data has been taken from."
 (define-derived-mode blue-replay-mode magit-section-mode "Blue-replay"
   "Mode for looking at BLUE replay data."
   :interactive nil
-  :group 'blue)
+  :group 'blue
+  (blue-replay-setup-font-lock))
 
 (provide 'blue-replay)
 ;;; blue-replay.el ends here.
