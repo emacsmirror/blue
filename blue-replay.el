@@ -142,6 +142,8 @@ Each record becomes a plist with field names as keywords."
 
       (when replay
         (magit-insert-section (blue-field :replay)
+          ;; FIXME: not working after latests commits. `font-lock-keywords' is
+          ;; likely overriding the button face.
           (insert (format "%-10s %s\n" "replay:"
                           (propertize
                            (buttonize replay #'blue-replay--exec-replay replay)
@@ -234,7 +236,8 @@ DIR is the directory where the replay data has been taken from."
                (blue--prompt-dir))))))
   (let* ((blueprint (blue--find-blueprint))
          (rec-data (blue-replay--replay blueprint dir)))
-    (blue-replay--display-recutils-magit rec-data dir)))
+    (blue-replay--display-recutils-magit rec-data dir)
+    (blue--set-search-path blueprint)))
 
 (defun blue-replay-revert ()
   "Revert BLUE replay buffer."
@@ -292,13 +295,15 @@ DIR is the directory where the replay data has been taken from."
 
 (defun blue-replay--visit-location (file &optional line column)
   "Open FILE and move point to LINE and COLUMN if provided."
-  (when (file-exists-p file)
-    (find-file file)
-    (when line
-      (goto-char (point-min))
-      (forward-line (1- line)))
-    (when column
-      (move-to-column (1- column)))))
+  (when-let* ((path (if (file-exists-p file)
+                        file
+                      (locate-file file blue--search-path))))
+    (when (file-exists-p path)
+      (find-file path)
+      (when line
+        (goto-line line))
+      (when column
+        (move-to-column column)))))
 
 (defvar blue-replay--file-rx
   (rx (group
@@ -331,17 +336,19 @@ line:column information.")
 
      (0
       (prog1 'blue-replay-path-face
-        (let ((path (or (match-string-no-properties 3)
-                        (match-string-no-properties 6)))
-              (line (match-string-no-properties 4))
-              (col (match-string-no-properties 5)))
-          (message "Does path %s exists?" path)
-          (when (file-exists-p path)
-            (make-text-button (match-beginning 0) (match-end 0)
-                              'action `(lambda (_)
-                                         (blue-replay--visit-location ,path ,line ,col))
-                              'follow-link t
-                              'help-echo (format "Click to open %s" path)))))))
+        (let* ((path (or (match-string-no-properties 3)
+                         (match-string-no-properties 6)))
+               (line-str (match-string-no-properties 4))
+               (line (when line-str
+                       (string-to-number line-str)))
+               (col-str (match-string-no-properties 5))
+               (col (when col-str
+                      (string-to-number col-str))))
+          (make-text-button (match-beginning 0) (match-end 0)
+                            'action `(lambda (_)
+                                       (blue-replay--visit-location ,path ,line ,col))
+                            'follow-link t
+                            'help-echo (format "Click to open %s" path))))))
 
     ;; Keywords with colons (#:log, #:trs, #:cov)
     ("\\(#:[a-zA-Z-]+\\)"
