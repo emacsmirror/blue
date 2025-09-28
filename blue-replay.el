@@ -142,8 +142,6 @@ Each record becomes a plist with field names as keywords."
 
       (when replay
         (magit-insert-section (blue-field :replay)
-          ;; FIXME: not working after latests commits. `font-lock-keywords' is
-          ;; likely overriding the button face.
           (insert (format "%-10s %s\n" "replay:"
                           (propertize
                            (buttonize replay #'blue-replay--exec-replay replay)
@@ -382,8 +380,7 @@ line:column information.")
 ;; Integration with blue-replay-mode
 (defun blue-replay-setup-font-lock ()
   "Set up font-lock for `blue-replay-mode'."
-  (setq font-lock-defaults '(blue-replay-font-lock-keywords t)
-        font-lock-extra-managed-props '(mouse-face keymap help-echo action follow-link button))
+  (setq font-lock-defaults '(blue-replay-font-lock-keywords t))
   (font-lock-mode 1))
 
 ;; --- Fontification
