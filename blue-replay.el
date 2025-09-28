@@ -58,10 +58,6 @@ Each record becomes a plist with field names as keywords."
     (dolist (line lines)
       (let ((original-line line))
         (setq line (string-trim line))
-        ;; Debug: uncomment to see what's happening
-        ;; (when (string-match "^[0-9]+\\." line)
-        ;;   (message "Line: '%s' | Original: '%s' | Starts with space: %s"
-        ;;            line original-line (string-match "^[ \t]" original-line)))
         (cond
          ;; Empty line marks end of record
          ((string-empty-p line)
@@ -70,13 +66,13 @@ Each record becomes a plist with field names as keywords."
             (setq current-record '())
             (setq current-key nil)))
 
-         ;; Line starting with + is a continuation/list item
+         ;; Line starting with + is a continuation/list item.
          ((string-match "^\\+ " line)
           (when current-key
             (let* ((value (substring line 2))
                    (existing-value (plist-get current-record current-key)))
               (if existing-value
-                  ;; If value already exists, make it a list or append to list
+                  ;; If value already exists, make it a list or append to list.
                   (if (listp existing-value)
                       (setq current-record
                             (plist-put current-record current-key
@@ -84,11 +80,11 @@ Each record becomes a plist with field names as keywords."
                     (setq current-record
                           (plist-put current-record current-key
                                      (list existing-value value))))
-                ;; First continuation item - replace the original value
+                ;; First continuation item - replace the original value.
                 (setq current-record
                       (plist-put current-record current-key (list value)))))))
 
-         ;; Multi-line value continuation - line starts with whitespace
+         ;; Multi-line value continuation - line starts with whitespace.
          ((and current-key (string-match "^[ \t]" original-line))
           (let* ((existing-value (plist-get current-record current-key))
                  (continuation original-line)) ; Keep original indentation
@@ -99,7 +95,8 @@ Each record becomes a plist with field names as keywords."
               (setq current-record
                     (plist-put current-record current-key continuation)))))
 
-         ;; Regular field: key: value (only if original line doesn't start with whitespace)
+         ;; Regular field: key: value (only if original line doesn't start with
+         ;; whitespace).
          ((and (not (string-match "^[ \t]" original-line))
                (string-match "^\\([^:]+\\):\\s-*\\(.*\\)" line))
           (let* ((key-name (match-string 1 line))
@@ -109,7 +106,9 @@ Each record becomes a plist with field names as keywords."
             ;; Build plist in order by appending to end
             (setq current-record
                   (append current-record
-                          (list key (if (string-empty-p value) nil value)))))))))
+                          (list key (if (string-empty-p value)
+                                        nil
+                                      value)))))))))
 
     ;; Don't forget the last record if there's no trailing newline
     (when current-record
@@ -215,36 +214,6 @@ DIR is the directory where the replay data has been taken from."
       (error (string-remove-suffix "\n" data)))))
 
 
-;;; UI.
-
-;;;###autoload
-(defun blue-replay (dir)
-  "Interactively display replay data from DIR."
-  (interactive
-   (progn
-     (blue--ensure-cache)
-     (let* ((known (blue--cache-get-build-dirs default-directory))
-            (cur-dir (directory-file-name (expand-file-name default-directory)))
-            (cached (member cur-dir known))
-            (prefix (car current-prefix-arg)))
-       (list (if (and cached
-                      (not prefix))
-                 cur-dir
-               (blue--prompt-dir))))))
-  ;; TODO: homogenize dynamic binding reliance. Some functions take
-  ;; `blue--blueprint' as an argument, other rely on the dynamic binding.
-  (let* ((blue--blueprint (blue--find-blueprint)) ; Bounded dynamicaly.
-         (rec-data (blue-replay--replay blue--blueprint dir)))
-    (blue-replay--display-recutils-magit rec-data dir)))
-
-(defun blue-replay-revert ()
-  "Revert BLUE replay buffer."
-  (interactive)
-  (let ((pt (point)))
-    (blue-replay default-directory)
-    (goto-char pt)))
-
-
 ;;; Fontification
 
 (defun blue-replay--visit-location (file &optional line column)
@@ -295,7 +264,8 @@ line:column information.")
                       (string-to-number col-str))))
           (make-text-button (match-beginning 0) (match-end 0)
                             'action `(lambda (_)
-                                       (blue-replay--visit-location ,path ,line ,col))
+                                       (blue-replay--visit-location
+                                        ,path ,line ,col))
                             'follow-link t
                             'help-echo (format "Click to open %s" path))))))
 
@@ -324,6 +294,16 @@ line:column information.")
   (setq font-lock-defaults '(blue-replay-font-lock-keywords t))
   (font-lock-mode 1))
 
+
+;;; UI.
+
+(defun blue-replay-revert ()
+  "Revert BLUE replay buffer."
+  (interactive)
+  (let ((pt (point)))
+    (blue-replay default-directory)
+    (goto-char pt)))
+
 (defvar-keymap blue-replay-mode-map
   :doc "Keymap for `blue-replay-mode'."
   :parent magit-section-mode-map
@@ -334,6 +314,26 @@ line:column information.")
   :interactive nil
   :group 'blue
   (blue-replay-setup-font-lock))
+
+;;;###autoload
+(defun blue-replay (dir)
+  "Interactively display replay data from DIR."
+  (interactive
+   (progn
+     (blue--ensure-cache)
+     (let* ((known (blue--cache-get-build-dirs default-directory))
+            (cur-dir (directory-file-name (expand-file-name default-directory)))
+            (cached (member cur-dir known))
+            (prefix (car current-prefix-arg)))
+       (list (if (and cached
+                      (not prefix))
+                 cur-dir
+               (blue--prompt-dir))))))
+  ;; TODO: homogenize dynamic binding reliance. Some functions take
+  ;; `blue--blueprint' as an argument, other rely on the dynamic binding.
+  (let* ((blue--blueprint (blue--find-blueprint)) ; Bounded dynamicaly.
+         (rec-data (blue-replay--replay blue--blueprint dir)))
+    (blue-replay--display-recutils-magit rec-data dir)))
 
 (provide 'blue-replay)
 ;;; blue-replay.el ends here.
