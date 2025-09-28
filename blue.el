@@ -79,15 +79,15 @@ Interactive commands will run in comint mode compilation buffers."
   "Face used to highlight documentation strings.")
 
 (defface blue-hint-separator
-  '((t :inherit shadow :strike-through t))
+  '((t :inherit completions-group-separator :weight regular))
   "Face used to separate hint overlay.")
 
 (defface blue-hint-index
-  '((t :inherit bold :foreground "MediumPurple1"))
+  '((t :inherit font-lock-keyword-face/regular))
   "Face used to draw attention in hint overlay.")
 
 (defface blue-hint-highlight
-  '((t :inherit bold :foreground "DodgerBlue4" :background "LightBlue1"))
+  '((t :inherit completions-common-part))
   "Face used to draw attention in hint overlay.")
 
 (defface blue-hint-faded
@@ -428,7 +428,7 @@ If OVERRIDE is non nil disable CONFIGS."
                           (concat
                            (blue--format-build-dir-hint 0 override override)
                            "\n"
-                           (propertize lines 'face '(:inherit blue-hint-faded :strike-through t)))
+                           (propertize lines 'face 'blue-hint-separator))
                         lines)))
     (concat
      "Previous build directory (M-<num> to select):\n"
