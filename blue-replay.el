@@ -249,9 +249,11 @@ line:column information.")
     ("\\(#*<.*>\\)"
      (1 'font-lock-variable-use-face))
 
+    ("\\(\"[^\"]+\"\\)"
+     (1 'font-lock-string-face))
+
     ;; Make files clickable if they exist.
     (,blue-replay--file-rx
-
      (0
       (prog1 'button
         (let* ((path (or (match-string-no-properties 3)
@@ -267,7 +269,9 @@ line:column information.")
                                        (blue-replay--visit-location
                                         ,path ,line ,col))
                             'follow-link t
-                            'help-echo (format "Click to open %s" path))))))
+                            'help-echo (format "Click to open %s" path))))
+      ;; Allow overriding previous fontification, eg. refontify strings.
+      t))
 
     ;; Keywords with colons (#:log, #:trs, #:cov)
     ("\\(#:[a-zA-Z-]+\\)"
