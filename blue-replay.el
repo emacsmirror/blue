@@ -30,6 +30,7 @@
 ;;; Code:
 
 (require 'magit-section)
+(require 'cus-edit) ; Required for `custom-button' face.
 (require 'blue)
 
 ;; FIXME: If the file is a hiden file (starts with a space), it's not properly
