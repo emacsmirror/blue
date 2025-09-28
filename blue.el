@@ -3,7 +3,7 @@
 ;; Copyright © 2025 Sergio Pastor Pérez
 ;;
 ;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
-;; Version: 0.0.5
+;; Version: 0.0.6
 ;; Package-Requires: ((emacs "30.1"))
 ;; Keywords: blue, tools
 ;; URL: https://codeberg.org/lapislazuli/blue.el
@@ -688,8 +688,13 @@ not exist."
 (defun blue-run-command (input &optional commands comint-flip)
   "Run a BLUE command interactively.
 
+The prompt will hint for a directory where to run the BLUE command in a
+directory.  The hinted directories are directories where BLUE has been
+previously executed by `blue.el'.  The execution directory can be
+changed using 'M-<num>'.
+
 Invoked with universal prefix argument '\\[universal-argument]', prompt
-for a directory use when running 'blue'.
+for a directory to use when running 'blue'.
 
 Invoked with double universal prefix argument '\\[universal-argument]
 \\[universal-argument]', invert the interactive heuristics configured by

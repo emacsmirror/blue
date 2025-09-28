@@ -17,15 +17,19 @@ Features:
   requires interactive usage, such as the ~repl~ command.
 
 * Screenshots
-[[file:screenshot.png]]
+- Run command:
+[[file:screenshots/blue-run-command.png]]
+
+- Replay:
+[[file:screenshots/blue-replay.png]]
+
 
 * Installation
 This package is available on [[https://melpa.org/][MELPA]]!
 
 Add this to your configuration file to install it from source:
 #+begin_src emacs-lisp
-(use-package blue
-  :vc (:url "https://codeberg.org/lapislazuli/blue.el"))
+(use-package blue)
 #+end_src
 
 * Usage
@@ -39,8 +43,8 @@ meaning that you can use ~complete-symbol~, generally bound to =C-M-i= to
 complete the arguments, you can complete [[https://codeberg.org/lapislazuli/blue][BLUE]] options such as ~--always-build~
 or command arguments such as ~--prefix=~.
 
-*Note* that some [[https://codeberg.org/lapislazuli/blue][BLUE]] commands require configuration, [[file:blue.el][blue.el]] is smart enough to
-identify those commands and it will try to run them in a previously configured
-directory. The configuration directory will be stored after running the
-configure command and it will be persistent across restarts as long as
-[[https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html][project.el]] knows about the project.
+There is more information about how to use this command in its docstring, use
+~M-x describe-function RET blue-run-command~ to display it.
+
+Additionally, this package provides an interactive interface for the BLUE replay
+command. Display it with ~M-x blue-replay~.

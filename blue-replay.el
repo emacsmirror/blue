@@ -1,12 +1,6 @@
 ;;; blue-replay.el --- BLUE build system replay interface -*- lexical-binding: t -*-
 ;;
 ;; Copyright © 2025 Sergio Pastor Pérez
-;;
-;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
-;; Version: 0.0.5
-;; Package-Requires: ((emacs "30.1"))
-;; Keywords: blue, tools
-;; URL: https://codeberg.org/lapislazuli/blue-replay.el
 
 ;;; Commentary:
 
