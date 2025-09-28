@@ -199,7 +199,8 @@ DIR is the directory where the replay data has been taken from."
               (blue-replay--insert-record-section rec))))
         ;; NOTE: `magit-insert-section' does not automatically display the
         ;; visibility indicators.
-        (magit-map-sections #'magit-section-maybe-update-visibility-indicator)))
+        (magit-map-sections #'magit-section-maybe-update-visibility-indicator))
+      (blue--set-search-path blue--blueprint))
     (display-buffer buf-name)))
 
 (defun blue-replay--replay (blueprint dir)
@@ -230,10 +231,11 @@ DIR is the directory where the replay data has been taken from."
                       (not prefix))
                  cur-dir
                (blue--prompt-dir))))))
-  (let* ((blueprint (blue--find-blueprint))
-         (rec-data (blue-replay--replay blueprint dir)))
-    (blue-replay--display-recutils-magit rec-data dir)
-    (blue--set-search-path blueprint)))
+  ;; TODO: homogenize dynamic binding reliance. Some functions take
+  ;; `blue--blueprint' as an argument, other rely on the dynamic binding.
+  (let* ((blue--blueprint (blue--find-blueprint)) ; Bounded dynamicaly.
+         (rec-data (blue-replay--replay blue--blueprint dir)))
+    (blue-replay--display-recutils-magit rec-data dir)))
 
 (defun blue-replay-revert ()
   "Revert BLUE replay buffer."

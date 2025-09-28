@@ -106,7 +106,7 @@ Interactive commands will run in comint mode compilation buffers."
 (defvar blue--build-dir nil
   "Path to last known build directory.")
 
-(defvar blue--search-path nil
+(defvar-local blue--search-path nil
   "Directories where to search for files.
 
 These directories are used for extending `compilation-search-path' and
@@ -533,10 +533,10 @@ COMINT-P selects `comint-mode' for compilation buffer."
                                 default-directory)))
     (setq-default compilation-directory default-directory)
     (blue--setup-buffer buf)
-    (compilation-start command comint-p))
-
-  ;; Make 'srcdir' errors searchable in compilation buffer.
-  (blue--set-search-path (blue--find-blueprint)))
+    (compilation-start command comint-p)
+    ;; Make 'srcdir' errors searchable in compilation buffer.
+    (with-current-buffer buf
+      (blue--set-search-path (blue--find-blueprint)))))
 
 
 ;;; Command Analysis.
