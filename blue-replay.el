@@ -32,11 +32,6 @@
 (require 'magit-section)
 (require 'blue)
 
-(defface blue-replay--file-heading
-  '((t :extend t :weight bold :foreground "DodgerBlue"))
-  "Face for diff file headings."
-  :group 'blue-faces)
-
 ;; FIXME: If the file is a hiden file (starts with a space), it's not properly
 ;; propertized.
 (defvar blue-replay--buffer "*blue replay*"
@@ -133,7 +128,10 @@ Each record becomes a plist with field names as keywords."
          (heading (concat "Record " replay-hash)))
 
     (magit-insert-section (blue-record rec)
-      (magit-insert-heading (propertize heading 'font-lock-face 'blue-replay--file-heading))
+      (magit-insert-heading
+        (propertize heading
+                    'font-lock-face
+                    '(:inherit font-lock-constant-face :weight bold)))
 
       ;; Insert basic info
       (when origin
@@ -244,52 +242,8 @@ DIR is the directory where the replay data has been taken from."
     (blue-replay default-directory)
     (goto-char pt)))
 
-;; --- Fontification
-
-(defface blue-replay-header-face
-  '((t :foreground "#4A90E2" :weight bold))
-  "Face for build output headers."
-  :group 'blue-faces)
-
-(defface blue-replay-record-face
-  '((t :foreground "#7B68EE" :weight bold))
-  "Face for record identifiers."
-  :group 'blue-faces)
-
-(defface blue-replay-field-face
-  '((t :foreground "#50C878" :weight bold))
-  "Face for field names."
-  :group 'blue-faces)
-
-(defface blue-replay-path-face
-  '((t :inherit link :mouse-face highlight))
-  "Face for file paths."
-  :group 'blue-faces)
-
-(defface blue-replay-class-face
-  '((t :foreground "#DA70D6" :weight bold))
-  "Face for class names."
-  :group 'blue-faces)
-
-(defface blue-replay-error-face
-  '((t :foreground "#FF6B6B" :weight bold))
-  "Face for error indicators."
-  :group 'blue-faces)
-
-(defface blue-replay-error-detail-face
-  '((t :foreground "#FF9999"))
-  "Face for error details."
-  :group 'blue-faces)
-
-(defface blue-replay-keyword-face
-  '((t :foreground "#20B2AA"))
-  "Face for keywords and symbols."
-  :group 'blue-faces)
-
-(defface blue-replay-list-face
-  '((t :foreground "#FFA500"))
-  "Face for numbers."
-  :group 'blue-faces)
+
+;;; Fontification
 
 (defun blue-replay--visit-location (file &optional line column)
   "Open FILE and move point to LINE and COLUMN if provided."
@@ -320,20 +274,15 @@ permissive.  So we match absolute paths or relative paths with
 line:column information.")
 
 (defvar blue-replay-font-lock-keywords
-  `(
-    ;; Field names (origin, replay, class, etc.) - not at start of line to avoid headers
-    ("^\\(\\(origin\\|replay\\|class\\):\\)"
-     (1 'blue-replay-field-face))
-
-    ;; Class names in angle brackets
-    ("\\(#*<[^>]+>\\)"
-     (1 'blue-replay-class-face))
+  `(;; Class names in angle brackets
+    ("\\(#*<.*>\\)"
+     (1 'font-lock-variable-use-face))
 
     ;; Make files clickable if they exist.
     (,blue-replay--file-rx
 
      (0
-      (prog1 'blue-replay-path-face
+      (prog1 'button
         (let* ((path (or (match-string-no-properties 3)
                          (match-string-no-properties 6)))
                (line-str (match-string-no-properties 4))
@@ -357,24 +306,14 @@ line:column information.")
 
     ;; Numbered error items
     ("^\s*\\([0-9]+\\.\\)"
-     (1 'blue-replay-list-face))
+     (1 'font-lock-number-face))
 
     ;; Error types (&origin, &irritants, &message, etc.)
     ("\\(&[a-zA-Z-]+\\)"
      (1 'font-lock-type-face))
 
-    ;; Quoted strings - check if they're file paths and make clickable
-    ("\"\\([^\"]+\\)\""
-     (1 (prog1 'blue-replay-path-face
-          (let ((path (match-string 1)))
-            (when (and path (file-exists-p path))
-              (make-text-button (match-beginning 1) (match-end 1)
-                                'action `(lambda (_button) (find-file ,path))
-                                'follow-link t
-                                'help-echo (format "Click to open %s" path)))))))
-
     ;; Plus signs for list items
-    ("^\s*\\(\\+\\)" . 'blue-replay-list-face))
+    ("^\s*\\(\\+\\)" . 'font-lock-comment-face))
   "Font lock keywords for blue build output.")
 
 ;; Integration with blue-replay-mode
@@ -382,8 +321,6 @@ line:column information.")
   "Set up font-lock for `blue-replay-mode'."
   (setq font-lock-defaults '(blue-replay-font-lock-keywords t))
   (font-lock-mode 1))
-
-;; --- Fontification
 
 (defvar-keymap blue-replay-mode-map
   :doc "Keymap for `blue-replay-mode'."
