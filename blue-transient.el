@@ -31,8 +31,8 @@
 (defcustom blue-transient-menu-columns-limit nil
   "If non-nil, limits maximum allowed number of menu columns.
 Used by `blue-transient--menu-columns-function'."
-  :package-version '(transient-compile . "0.1")
-  :group 'transient-compile
+  :package-version '(blue-compile . "0.1")
+  :group 'blue-compile
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
 
@@ -67,26 +67,24 @@ targets, and places fallback group first."
                                     (eq gr fallback-group))
                                   groups)))))
 
-(defun blue-transient--menu-columns-function (groups)
+(defun blue-transient--menu-columns-function (items)
   "Return menu column count.
 
 Takes assoc list returned by `blue-transient-split-function'.
 Returns desired number of columns.
 
-`blue-transient' will arange GROUPS into N columns by inserting
-a break after each Nth group."
-  (let* ((max-width
-          (max
-           ;; longest group name
-           (apply 'max (seq-map 'length
-                                (seq-map 'car groups)))
-           ;; longest target name
-           (apply 'max (seq-map 'length
-                                (seq-mapcat 'cdr groups)))))
-         ;; how much columns we can fit
-         (max-columns
-          (max (/ (frame-width) (+ max-width 10))
-               1))) ; At least 1 column.
+`blue-transient--build-grid' will arange ITEMS into N columns by
+inserting a break after each Nth group."
+  (let* ((categories (mapcar #'car items))
+         (longest-category (apply #'max
+                                  (mapcar #'length categories)))
+         ;; FIXME: this does not return the correct thing.
+         (command-invokes (seq-mapcat #'cdr items))
+         (longest-invoke (apply #'max
+                                (mapcar #'length command-invokes)))
+         (max-width (max longest-category longest-invoke))
+         (max-columns (max (/ (frame-width) (+ max-width 10))
+                           1))) ; At least 1 column.
     (if (and blue-transient-menu-columns-limit
              (> blue-transient-menu-columns-limit 0))
         (min blue-transient-menu-columns-limit
@@ -259,6 +257,60 @@ a break after each Nth group."
            category-commands))))
      sorted-commands-by-category)))
 
+(defun blue-transient--menu-columns-function (categories)
+  "Return menu column count to fit CATEGORIES.
+
+This function respects `blue-transient-menu-columns-limit' and
+`frame-width'."
+  (let* ((max-width
+          (max
+           ;; longest category name
+           (apply 'max (seq-map 'length
+                                (seq-map 'car categories)))
+           ;; longest command invoke
+           (apply 'max (seq-map 'length
+                                (seq-mapcat 'cdr categories)))))
+         ;; how much columns we can fit
+         (max-columns
+          (max (/ (frame-width) (+ max-width 10))
+               1))) ; At least 1 column.
+    (if (and blue-transient-menu-columns-limit
+             (> blue-transient-menu-columns-limit 0))
+        (min blue-transient-menu-columns-limit
+             max-columns)
+      max-columns)))
+
+(defun blue-transient--build-grid (menu-heading items)
+  "Align menu items into a grid.
+
+MENU-HEADING COLUMN-COUNT ITEMS."
+  (let* ((column-count (blue-transient--menu-columns-function items))
+         (columns (make-list column-count nil))
+         (index 0))
+    (dolist (item items)
+      (setf (nth index columns) (append (nth index columns)
+                                        (list item)))
+      (setq index (% (1+ index) column-count)))
+    (let* ((row-count (apply 'max (seq-map 'length columns)))
+           (rows (make-list row-count nil)))
+      (dotimes (row-index row-count)
+        (dotimes (col-index column-count)
+          (when (< row-index (length (nth col-index columns)))
+            (setf (nth row-index rows) (append (nth row-index rows)
+                                               (list (nth row-index (nth col-index columns))))))))
+      (let ((grid (seq-map-indexed (lambda (row index)
+                                     (vconcat
+                                      (append (when (and menu-heading (eq index 0))
+                                                `(:description ,(s-concat menu-heading "\n")))
+                                              (list :class 'transient-columns)
+                                              (seq-map 'vconcat row))))
+                                   rows)))
+        (when transient-compile-menu-columns-spread
+          (setq grid (append `(:column-widths
+                               ',(make-list column-count (/ (frame-width) column-count)))
+                             grid)))
+        grid))))
+
 
 ;;; UI.
 
@@ -308,7 +360,9 @@ keeps running in the compilation buffer."
     ;;              sorted-targets))))
     ;; ;; Open menu.
     ;; (blue-transient--menu)
-    (blue-transient--build-menu commands)))
+    (pp (blue-transient--build-grid
+         blue-transient-menu-heading
+         (blue-transient--build-menu commands)))))
 
 (provide 'blue-transient)
 ;;; blue-transient.el ends here.
