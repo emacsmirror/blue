@@ -95,7 +95,7 @@ Interactive commands will run in comint mode compilation buffers."
   "Face used to display inactive items in hint overlay.")
 
 
-;;; Internal Variables
+;;; Internal Variables.
 
 (defvar blue--blueprint nil
   "Current blueprint being processed.")
@@ -499,9 +499,6 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
     (setq-local blue--search-path (seq-uniq (cons srcdir compilation-search-path))
                 compilation-search-path blue--search-path)))
 
-;; FIXME: 'blue repl' stopped working after some commit in blue. This one is
-;; known to be working:
-;; https://codeberg.org/lapislazuli/blue/commit/017a3b3efa0ec53d742197ee1e74b338fdae77c4
 (defun blue--compile (command &optional comint-p)
   "Compile COMMAND with BLUE-specific setup.
 COMINT-P selects `comint-mode' for compilation buffer."
