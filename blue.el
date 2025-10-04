@@ -33,6 +33,7 @@
 (require 'compile)
 (require 'crm)
 (require 'pcomplete)
+(require 'seq)
 
 
 ;;; Configuration
