@@ -208,6 +208,9 @@ a break after each Nth group."
 
 (defun blue-transient--build-menu (commands)
   "Build transient menu for BLUE COMMANDS."
+  ;; TODO: we don't really need category names, `blue-transient--assign-keys'
+  ;; should be refactored to take a symbols instead of strings and the target
+  ;; label creation can be removed since it's not needed.
   (let* ((categories (seq-uniq (mapcar (lambda (command)
                                          (alist-get 'category command))
                                        commands)))
@@ -215,15 +218,46 @@ a break after each Nth group."
                                    (symbol-name category))
                                  categories))
          (category-keys (blue-transient--assign-keys category-names t))
-         ;; Sorted commands by category.
-         (sorted-commands (mapcar (lambda (category)
-                                    (cons category
-                                          (seq-filter (lambda (command)
-                                                        (eq (alist-get 'category command)
-                                                            category))
-                                                      commands)))
-                                  categories)))
-    (pp sorted-commands)))
+         (sorted-commands-by-category
+          (mapcar (lambda (category)
+                    (cons category
+                          (seq-filter (lambda (command)
+                                        (eq (alist-get 'category command)
+                                            category))
+                                      commands)))
+                  categories)))
+    (mapcar
+     (lambda (category)
+       (let* ((category-name (symbol-name (car category)))
+              (category-commands (cdr category))
+              (category-command-names (mapcar (lambda (command)
+                                                (alist-get 'invoke command))
+                                              category-commands))
+              (category-command-keys (blue-transient--assign-keys category-command-names nil)))
+         (append
+          (list category-name)
+          (mapcar
+           (lambda (command)
+             (let* ((command-invoke (alist-get 'invoke command))
+                    (command-key
+                     (if (> (length commands) 1)
+                         (s-concat (caddr (assoc category-name category-keys))
+                                   (caddr (assoc command-invoke category-command-keys)))
+                       (caddr (assoc command-invoke category-command-keys))))
+                    ;; TODO: Make this the full blue command and think how
+                    ;; to fit arguments.
+                    (command-string command-invoke)
+                    ;; TODO: use `blue--build-dir'.
+                    (build-dir default-directory)
+                    (command-synopsis (alist-get 'synopsis command)))
+               `(,command-key
+                 ,command-invoke
+                 (lambda () ,command-synopsis (interactive)
+                   ;; TODO: Handle properly the `comint-p' argument of
+                   ;; `blue--compile'.
+                   (blue--compile ,command-string nil)))))
+           category-commands))))
+     sorted-commands-by-category)))
 
 
 ;;; UI.
