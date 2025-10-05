@@ -34,7 +34,6 @@
 (defcustom blue-transient-menu-columns-limit nil
   "If non-nil, limits maximum allowed number of menu columns.
 Used by `blue-transient--menu-columns-function'."
-  :package-version '(blue-compile . "0.1")
   :group 'blue-compile
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
@@ -45,7 +44,6 @@ Used by `blue-transient--menu-columns-function'."
 If non-nil, columns will have spacing between them and will
 occupy the entire frame width.  Otherwise, columns will have
 the minimum width needed to fit the contents."
-  :package-version '(blue-transient . "0.4")
   :group 'blue-transient
   :type 'boolean)
 
@@ -65,7 +63,6 @@ in the key-map.
 
 The function can return nil if it doesn't have a good key.
 In this case default algorithm is used for this word."
-  :package-version '(blue-transient . "0.1")
   :group 'blue-transient
   :type '(choice (const :tag "Default" nil)
                  function))
@@ -75,7 +72,6 @@ In this case default algorithm is used for this word."
 
 If non-nil, allow using upcase and downcase variants of the original
 character as the key character."
-  :package-version '(blue-transient . "0.1")
   :group 'blue-transient
   :type 'boolean)
 
@@ -84,7 +80,6 @@ character as the key character."
 
 Only those characters in group and target names, which match this regex,
 can become key characters."
-  :package-version '(blue-transient . "0.1")
   :group 'blue-transient
   :type 'regexp)
 
