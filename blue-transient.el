@@ -88,9 +88,8 @@ can become key characters."
 (defvar blue-transient-group-fallback 'unknown
   "The name of the fallback group for targets without group.")
 
-(defvar blue-transient-menu-heading
-  (propertize "Choose command" 'face 'bold)
-  "Header for BLUE transient.")
+(defvar blue-transient--command nil
+  "List of BLUE command strings.")
 
 (defconst blue-transient--keychar-table
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -100,6 +99,28 @@ This is used to create the `blue-transient' menu.")
 
 
 ;;; Utilities.
+
+(defun blue-transient--menu-heading ()
+  "Dynamic header for BLUE transient."
+  (let* ((header (propertize "Command: " 'face 'bold))
+         (command (string-join blue-transient--command " -- "))
+         (padding (- (frame-width) (length header)))
+         (formated-command (propertize (string-pad command padding)
+                                       'face 'widget-field)))
+    (concat header formated-command "\n")))
+
+(defun blue-transient--dispatcher ()
+  "Command dispatcher for `blue-transient'."
+  (interactive)
+  ;; TODO: Think how to fit arguments.
+  (let* ((flags (blue--normalize-flags blue-default-flags))
+         (command-string (string-join
+                          (cons blue-binary
+                                (append (when flags flags)
+                                        blue-transient--command))
+                          " ")))
+    ;; TODO: Handle `comint-p' argument.
+    (blue--compile command-string nil)))
 
 (defun blue-transient--menu-columns (items)
   "Return bounded menu column count.
@@ -303,25 +324,20 @@ to be specially handled."
                          (s-concat (caddr (assoc category-name category-keys))
                                    (caddr (assoc command-invoke category-command-keys)))
                        (caddr (assoc command-invoke category-command-keys))))
-                    ;; TODO: Think how to fit arguments.
-                    (flags (blue--normalize-flags blue-default-flags))
-                    (command-string (string-join
-                                     (cons blue-binary
-                                           (append (when flags flags)
-                                                   (list command-invoke)))
-                                     " "))
                     (command-synopsis (alist-get 'synopsis command)))
                `(,command-key
                  ,command-invoke
                  (lambda () ,command-synopsis (interactive)
-                   (blue--compile ,command-string ,command-interactive-p)))))
+                   (setq blue-transient--command
+                         (append blue-transient--command (list ,command-invoke))))
+                 :transient t)))
            category-commands))))
      sorted-commands-by-category)))
 
 (defun blue-transient--build-grid (menu-heading items)
   "Align menu items into a grid.
 
-MENU-HEADING COLUMN-COUNT ITEMS."
+MENU-HEADING ITEMS."
   (let* ((column-count (blue-transient--menu-columns items))
          (columns (make-list column-count nil))
          (index 0))
@@ -336,18 +352,18 @@ MENU-HEADING COLUMN-COUNT ITEMS."
           (when (< row-index (length (nth col-index columns)))
             (setf (nth row-index rows) (append (nth row-index rows)
                                                (list (nth row-index (nth col-index columns))))))))
-      (let ((grid (seq-map-indexed (lambda (row index)
-                                     (vconcat
-                                      (append (when (and menu-heading (eq index 0))
-                                                `(:description ,(s-concat menu-heading "\n")))
-                                              (list :class 'transient-columns)
-                                              (seq-map 'vconcat row))))
-                                   rows)))
-        (when blue-transient-menu-columns-spread
-          (setq grid (append `(:column-widths
-                               ',(make-list column-count (/ (frame-width) column-count)))
-                             grid)))
-        grid))))
+      (let* ((grid (seq-map-indexed (lambda (row index)
+                                      (vconcat
+                                       (append (when (and menu-heading (eq index 0))
+                                                 `(:description ,menu-heading))
+                                               (list :class 'transient-columns)
+                                               (seq-map 'vconcat row))))
+                                    rows)))
+        (if blue-transient-menu-columns-spread
+            (append `(:column-widths
+                      ',(make-list column-count (/ (frame-width) column-count)))
+                    grid)
+          grid)))))
 
 
 ;;; UI.
@@ -361,7 +377,7 @@ The following steps are performed:
  - For each command, a unique key sequence is assigned.  See
    `blue-transient-keychar-function' and other related options.
 
- - Transient menu is built.  See `blue-transient-menu-heading' and
+ - Transient menu is built.  See `blue-transient--menu-heading' and
    `blue-transient--menu-columns' for altering its appearance.
 
  - Transient menu is opened.  Now we wait until selects target using its
@@ -372,10 +388,11 @@ keeps running in the compilation buffer."
   (interactive)
   (let* ((blue--blueprint (blue--find-blueprint))
          (commands (blue--get-commands blue--blueprint)))
+    (setq blue-transient--command nil) ; Reset command.
     ;; Rebuild menu.
     (eval `(transient-define-prefix blue-transient--menu ()
              ,@(blue-transient--build-grid
-                blue-transient-menu-heading
+                #'blue-transient--menu-heading
                 (blue-transient--build-menu commands))))
     ;; Open menu.
     (blue-transient--menu)))
