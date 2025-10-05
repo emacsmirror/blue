@@ -138,8 +138,7 @@ inserting a break after each Nth group."
          (longest-invoke (apply #'max
                                 (mapcar #'length command-invokes)))
          (max-width (max longest-category longest-invoke))
-         ;; 10 is for giving some extra room.
-         (max-columns (max (/ (frame-width) (+ max-width 10))
+         (max-columns (max (/ (frame-width) max-width)
                            1))) ; At least 1 column.
     (if (and blue-transient-menu-columns-limit
              (> blue-transient-menu-columns-limit 0))
