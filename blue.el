@@ -584,20 +584,17 @@ COMINT-P selects `comint-mode' for compilation buffer."
                       commands))
           invocations))
 
-(defun blue--analyze-commands (input-tokens commands)
-  "Analyze INPUT-TOKENS against COMMANDS to extract properties."
-  (let* ((invocations (blue--parse-invocations input-tokens))
-         (entries (blue--find-command-entries invocations commands)))
-    (list :invocations invocations
-          :entries entries
-          :interactive-p (seq-some (lambda (cmd)
-                                     (when (member cmd blue-interactive-commands)
-                                       t))
-                                   invocations)
-          :needs-config-p (seq-some (lambda (entry)
-                                      (alist-get 'requires-configuration? entry))
-                                    entries)
-          :configure-p (member "configure" invocations))))
+(defun blue--interactive-p (command)
+  "Return t if COMMAND is a member of `blue-interactive-commands'."
+  (when (member command blue-interactive-commands)
+    t))
+
+(defun blue--any-interactive-p (input-tokens)
+  "Return t if an interactive command is part of INPUT-TOKENS.
+
+A comand is considered interactive if it is a member of `blue-interactive-commands'."
+  (let ((invocations (blue--parse-invocations input-tokens)))
+    (seq-some #'blue--interactive-p invocations)))
 
 
 ;;; Command Prompt.
@@ -740,8 +737,8 @@ COMINT-FLIP inverts the interactive compilation logic."
   (when input
     (let* ((flags (blue--normalize-flags blue-default-flags))
            (tokens (mapcar #'string-split input))
-           (analysis (blue--analyze-commands tokens commands))
-           (comint (xor (plist-get analysis :interactive-p) comint-flip)))
+           (is-interactive (blue--any-interactive-p tokens))
+           (comint (xor is-interactive comint-flip)))
       (let ((command-string (string-join
                              (cons blue-binary
                                    (append (when flags flags)
