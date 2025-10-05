@@ -78,11 +78,11 @@ inserting a break after each Nth group."
   (let* ((categories (mapcar #'car items))
          (longest-category (apply #'max
                                   (mapcar #'length categories)))
-         ;; FIXME: this does not return the correct thing.
-         (command-invokes (seq-mapcat #'cdr items))
+         (command-invokes (mapcar #'cadr (seq-mapcat #'cdr items)))
          (longest-invoke (apply #'max
                                 (mapcar #'length command-invokes)))
          (max-width (max longest-category longest-invoke))
+         ;; 10 is for giving some extra room.
          (max-columns (max (/ (frame-width) (+ max-width 10))
                            1))) ; At least 1 column.
     (if (and blue-transient-menu-columns-limit
@@ -256,29 +256,6 @@ inserting a break after each Nth group."
                    (blue--compile ,command-string nil)))))
            category-commands))))
      sorted-commands-by-category)))
-
-(defun blue-transient--menu-columns-function (categories)
-  "Return menu column count to fit CATEGORIES.
-
-This function respects `blue-transient-menu-columns-limit' and
-`frame-width'."
-  (let* ((max-width
-          (max
-           ;; longest category name
-           (apply 'max (seq-map 'length
-                                (seq-map 'car categories)))
-           ;; longest command invoke
-           (apply 'max (seq-map 'length
-                                (seq-mapcat 'cdr categories)))))
-         ;; how much columns we can fit
-         (max-columns
-          (max (/ (frame-width) (+ max-width 10))
-               1))) ; At least 1 column.
-    (if (and blue-transient-menu-columns-limit
-             (> blue-transient-menu-columns-limit 0))
-        (min blue-transient-menu-columns-limit
-             max-columns)
-      max-columns)))
 
 (defun blue-transient--build-grid (menu-heading items)
   "Align menu items into a grid.
