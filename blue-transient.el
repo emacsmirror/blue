@@ -33,7 +33,7 @@
 
 (defcustom blue-transient-menu-columns-limit nil
   "If non-nil, limits maximum allowed number of menu columns.
-Used by `blue-transient--menu-columns-function'."
+Used by `blue-transient--menu-columns'."
   :group 'blue-compile
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
@@ -101,28 +101,10 @@ This is used to create the `blue-transient' menu.")
 
 ;;; Utilities.
 
-(defun blue-transient--sort-function (categories)
-  "Function to sort CATEGORIES and targets inside the categories.
+(defun blue-transient--menu-columns (items)
+  "Return bounded menu column count.
 
-The function is allowed to sort both categories and targets inside the
-categories.
-
-Default implementation sorts categories alphabetically, does not sort
-targets, and places fallback group first."
-  (let ((fallback-group (assoc blue-transient-group-fallback categories)))
-    (append (when fallback-group
-              (list fallback-group))
-            (seq-sort (lambda (a b)
-                        (string< (car a) (car b)))
-                      (seq-remove (lambda (gr)
-                                    (eq gr fallback-group))
-                                  categories)))))
-
-(defun blue-transient--menu-columns-function (items)
-  "Return menu column count.
-
-Takes assoc list returned by `blue-transient-split-function'.
-Returns desired number of columns.
+Takes assoc list returned by `blue-transient--build-menu'.
 
 `blue-transient--build-grid' will arange ITEMS into N columns by
 inserting a break after each Nth group."
@@ -198,11 +180,11 @@ to be specially handled."
                           ;; Special case: custom user-provided key.
                           (unless (characterp key)
                             (user-error
-                             "Got non-char key %S from blue-transient-keychar-function"
+                             "Got non-char key %S from `blue-transient-keychar-function'"
                              key))
                           (when (gethash key key-map)
                             (user-error
-                             "Got duplicate key %s from blue-transient-keychar-function"
+                             "Got duplicate key %s from `blue-transient-keychar-function'"
                              (string key)))
                           (setq word w
                                 word-index (seq-position word key)
@@ -328,8 +310,6 @@ to be specially handled."
                                            (append (when flags flags)
                                                    (list command-invoke)))
                                      " "))
-                    ;; TODO: use `blue--build-dir'.
-                    (build-dir default-directory)
                     (command-synopsis (alist-get 'synopsis command)))
                `(,command-key
                  ,command-invoke
@@ -342,7 +322,7 @@ to be specially handled."
   "Align menu items into a grid.
 
 MENU-HEADING COLUMN-COUNT ITEMS."
-  (let* ((column-count (blue-transient--menu-columns-function items))
+  (let* ((column-count (blue-transient--menu-columns items))
          (columns (make-list column-count nil))
          (index 0))
     (dolist (item items)
@@ -378,29 +358,14 @@ MENU-HEADING COLUMN-COUNT ITEMS."
 
 The following steps are performed:
 
- - Available targets are collected according to the `:targets' function
-   of the selected tool from `blue-transient-tool-alist'.
-
- - Targets are organized into groups.  See
-   `blue-transient-group-function', `blue-transient-split-function',
-   `blue-transient--sort-function' and other related options.
-
- - For each target, a unique key sequence is assigned.  See
+ - For each command, a unique key sequence is assigned.  See
    `blue-transient-keychar-function' and other related options.
 
- - Transient menu is built.  See `blue-transient-menu-heading-function'
-   and `blue-transient--menu-columns-function' for altering its
-   appearance.
+ - Transient menu is built.  See `blue-transient-menu-heading' and
+   `blue-transient--menu-columns' for altering its appearance.
 
  - Transient menu is opened.  Now we wait until selects target using its
    key sequence, or cancels operation.
-
- - After user have selected target, compilation command is formatted
-   using `:command' function of the selected tool from
-   `blue-transient-tool-alist'.
-
- - Formatted command is padded to `compile', or `project-compile', or
-   other function.  See `blue-transient-function'.
 
 After that, `blue-transient' closes menu and returns, while the command
 keeps running in the compilation buffer."
