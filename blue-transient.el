@@ -283,6 +283,39 @@ to be specially handled."
           (puthash word-key t key-map))))
     word-keys))
 
+(defun blue-transient--group-commands (categories category-keys)
+  "Group commands by CATEGORIES and assign CATEGORY-KEYS."
+  (mapcar
+   (lambda (category)
+     (let* ((category-name (symbol-name (car category)))
+            (category-commands (cdr category))
+            (category-command-names (mapcar (lambda (command)
+                                              (alist-get 'invoke command))
+                                            category-commands))
+            (category-command-keys (blue-transient--assign-keys category-command-names nil)))
+       (append
+        (list category-name)
+        (mapcar
+         (lambda (command)
+           (let* ((command-invoke (alist-get 'invoke command))
+                  (command-interactive-p (when (member command-invoke
+                                                       blue-interactive-commands)
+                                           t))
+                  (command-key
+                   (if (> (length category-commands) 1)
+                       (s-concat (caddr (assoc category-name category-keys))
+                                 (caddr (assoc command-invoke category-command-keys)))
+                     (caddr (assoc command-invoke category-command-keys))))
+                  (command-synopsis (alist-get 'synopsis command)))
+             `(,command-key
+               ,command-invoke
+               (lambda () ,command-synopsis (interactive)
+                 (setq blue-transient--command
+                       (append blue-transient--command (list ,command-invoke))))
+               :transient t)))
+         category-commands))))
+   categories))
+
 (defun blue-transient--build-menu (commands)
   "Build transient menu for BLUE COMMANDS."
   ;; TODO: we don't really need category names, `blue-transient--assign-keys'
@@ -303,36 +336,7 @@ to be specially handled."
                                             category))
                                       commands)))
                   categories)))
-    (mapcar
-     (lambda (category)
-       (let* ((category-name (symbol-name (car category)))
-              (category-commands (cdr category))
-              (category-command-names (mapcar (lambda (command)
-                                                (alist-get 'invoke command))
-                                              category-commands))
-              (category-command-keys (blue-transient--assign-keys category-command-names nil)))
-         (append
-          (list category-name)
-          (mapcar
-           (lambda (command)
-             (let* ((command-invoke (alist-get 'invoke command))
-                    (command-interactive-p (when (member command-invoke
-                                                         blue-interactive-commands)
-                                             t))
-                    (command-key
-                     (if (> (length commands) 1)
-                         (s-concat (caddr (assoc category-name category-keys))
-                                   (caddr (assoc command-invoke category-command-keys)))
-                       (caddr (assoc command-invoke category-command-keys))))
-                    (command-synopsis (alist-get 'synopsis command)))
-               `(,command-key
-                 ,command-invoke
-                 (lambda () ,command-synopsis (interactive)
-                   (setq blue-transient--command
-                         (append blue-transient--command (list ,command-invoke))))
-                 :transient t)))
-           category-commands))))
-     sorted-commands-by-category)))
+    (blue-transient--group-commands sorted-commands-by-category category-keys)))
 
 (defun blue-transient--build-grid (menu-heading items)
   "Align menu items into a grid.
