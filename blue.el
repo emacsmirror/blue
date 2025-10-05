@@ -258,7 +258,8 @@ EXIT-CODE is the return value of CMD."
         (goto-char (point-min))
         (when command (insert (blue--format-header command)))
         (insert output)
-        (insert "\n")
+        (unless (equal (point) (line-beginning-position))
+          (insert "\n"))
         (when exit-code (insert (blue--format-footer exit-code)))))))
 
 (defun blue--handle-error (exit-code)
