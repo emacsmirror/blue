@@ -27,6 +27,8 @@
 ;;; Code:
 
 (require 'blue)
+(require 'cus-edit) ; For `custom-button' face.
+(require 'wid-edit) ; For `widget-field' face.
 
 
 ;;; Configuration
