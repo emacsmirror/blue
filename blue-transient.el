@@ -42,7 +42,7 @@ Used by `blue-transient--menu-columns-function'."
   "The name of the fallback group for targets without group.")
 
 (defvar blue-transient-menu-heading
-  (propertize "Choose target:" 'face 'blue-transient-heading)
+  (propertize "Choose command" 'face 'transient-compile-heading)
   "Header for BLUE transient.")
 
 
@@ -326,20 +326,13 @@ keeps running in the compilation buffer."
   (interactive)
   (let* ((blue--blueprint (blue--find-blueprint))
          (commands (blue--get-commands blue--blueprint)))
-    ;; ;; Rebuild menu.
-    ;; (eval `(transient-define-prefix blue-transient--menu ()
-    ;;          ,@(blue-transient--build-grid
-    ;;             blue-transient-menu-heading
-    ;;             menu-columns
-    ;;             (blue-transient--build-menu
-    ;;              tool
-    ;;              directory
-    ;;              sorted-targets))))
-    ;; ;; Open menu.
-    ;; (blue-transient--menu)
-    (pp (blue-transient--build-grid
-         blue-transient-menu-heading
-         (blue-transient--build-menu commands)))))
+    ;; Rebuild menu.
+    (eval `(transient-define-prefix blue-transient--menu ()
+             ,@(blue-transient--build-grid
+                blue-transient-menu-heading
+                (blue-transient--build-menu commands))))
+    ;; Open menu.
+    (blue-transient--menu)))
 
 (provide 'blue-transient)
 ;;; blue-transient.el ends here.
