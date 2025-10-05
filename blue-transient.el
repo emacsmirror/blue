@@ -125,8 +125,13 @@ This is used to create the `blue-transient' menu.")
   "Run BLUE commands."
   (interactive)
   ;; TODO: Think how to fit arguments.
-  (let* ((flags (blue--normalize-flags blue-default-flags))
+  (let* ((args (transient-args (oref transient-current-prefix command)))
+         (comint-flip (seq-some (lambda (arg)
+                                  (string-equal arg "flip"))
+                                args))
+         (flags (blue--normalize-flags blue-default-flags))
          (is-interactive (blue--any-interactive-p blue-transient--command))
+         (comint (xor is-interactive comint-flip))
          (commands (mapcar (lambda (token)
                              (string-join token " "))
                            blue-transient--command))
@@ -136,7 +141,7 @@ This is used to create the `blue-transient' menu.")
                             (append (when flags flags)
                                     (list input)))
                       " ")))
-    (blue--compile full-input is-interactive)))
+    (blue--compile full-input comint)))
 
 (defun blue-transient--menu-columns (items)
   "Return bounded menu column count.
@@ -359,7 +364,8 @@ to be specially handled."
          (dispatcher-category (list (list "RET" (propertize "Run" 'face 'custom-button)
                                           #'blue-transient--dispatcher)
                                     (list "DEL" "Del"
-                                           #'blue-transient--del :transient t))))
+                                          #'blue-transient--del :transient t)
+                                    '("^" "Comint flip" "flip"))))
     (append grouped-commands (list dispatcher-category))))
 
 (defun blue-transient--build-grid (menu-heading items)
