@@ -5,6 +5,9 @@
 ;;; Commentary:
 
 ;; Transient interface for the BLUE.
+;;
+;; This module is based on:
+;; https://github.com/gavv/transient-compile
 
 ;;; License:
 
@@ -36,36 +39,89 @@ Used by `blue-transient--menu-columns-function'."
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
 
+(defcustom blue-transient-menu-columns-spread nil
+  "Whether to spread the columns so they span across the frame.
+
+If non-nil, columns will have spacing between them and will
+occupy the entire frame width.  Otherwise, columns will have
+the minimum width needed to fit the contents."
+  :package-version '(blue-transient . "0.4")
+  :group 'blue-transient
+  :type 'boolean)
+
+(defcustom blue-transient-keychar-function nil
+  "Custom function that chooses unique key character for a word.
+
+The function should take 3 arguments:
+  - name - group or target name for which we choose a key
+  - all-names - list of all names, among which the key must be unique
+  - key-map - hashtable of taken keys
+  - group-p - whether it's group or target
+
+The function should return character to be used as a key.
+Character must not be taken by other words (other groups
+or other targets in group), i.e. it must not be present
+in the key-map.
+
+The function can return nil if it doesn't have a good key.
+In this case default algorithm is used for this word."
+  :package-version '(blue-transient . "0.1")
+  :group 'blue-transient
+  :type '(choice (const :tag "Default" nil)
+                 function))
+
+(defcustom blue-transient-keychar-unfold t
+  "Whether to use upcase/downcase key characters.
+
+If non-nil, allow using upcase and downcase variants of the original
+character as the key character."
+  :package-version '(blue-transient . "0.1")
+  :group 'blue-transient
+  :type 'boolean)
+
+(defcustom blue-transient-keychar-regexp "[[:alnum:]]"
+  "Regexp for allowed key characters.
+
+Only those characters in group and target names, which match this regex,
+can become key characters."
+  :package-version '(blue-transient . "0.1")
+  :group 'blue-transient
+  :type 'regexp)
+
 
 ;;; Internal variables.
 (defvar blue-transient-group-fallback 'unknown
   "The name of the fallback group for targets without group.")
 
 (defvar blue-transient-menu-heading
-  (propertize "Choose command" 'face 'transient-compile-heading)
+  (propertize "Choose command" 'face 'bold)
   "Header for BLUE transient.")
+
+(defconst blue-transient--keychar-table
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+  "Valid characters used to form the keys to dispatch commands.
+
+This is used to create the `blue-transient' menu.")
 
 
 ;;; Utilities.
 
-(defun blue-transient--sort-function (groups)
-  "Function to sort GROUPS and targets inside groups.
+(defun blue-transient--sort-function (categories)
+  "Function to sort CATEGORIES and targets inside the categories.
 
-Takes assoc list returned by `transient-compile-split-function', and
-returns its sorted version.
+The function is allowed to sort both categories and targets inside the
+categories.
 
-The function is allowed to sort both groups and targets inside groups.
-
-Default implementation sorts groups alphabetically, does not sort
+Default implementation sorts categories alphabetically, does not sort
 targets, and places fallback group first."
-  (let ((fallback-group (assoc blue-transient-group-fallback groups)))
+  (let ((fallback-group (assoc blue-transient-group-fallback categories)))
     (append (when fallback-group
               (list fallback-group))
             (seq-sort (lambda (a b)
                         (string< (car a) (car b)))
                       (seq-remove (lambda (gr)
                                     (eq gr fallback-group))
-                                  groups)))))
+                                  categories)))))
 
 (defun blue-transient--menu-columns-function (items)
   "Return menu column count.
@@ -91,8 +147,38 @@ inserting a break after each Nth group."
              max-columns)
       max-columns)))
 
+(defun blue-transient--keychar-p (char)
+  "Check if CHAR can be used as a key."
+  (string-match-p
+   blue-transient-keychar-regexp (string char)))
+
+(defun blue-transient--random-key (word key-map)
+  "Generate random key for WORD, trying to return same results for same words.
+
+The function ensures that the assigned key is not already present in KEY-MAP."
+  (let ((counter 0)
+        result)
+    (while (not result)
+      (cl-incf counter)
+      (let* ((hash (abs (sxhash word)))
+             (index (mod hash (length blue-transient--keychar-table)))
+             (char (elt blue-transient--keychar-table index)))
+        (if (and (blue-transient--keychar-p char)
+                 (not (gethash char key-map)))
+            ;; Hit!
+            (setq result char)
+          (if (< counter (length blue-transient--keychar-table))
+              ;; Repeat with hash of hash, and so on.
+              (setq word (number-to-string hash))
+            ;; Give up.
+            "_"))))
+    result))
+
 (defun blue-transient--assign-keys (words group-p)
-  "Map words to unique keys."
+  "Map WORDS to unique keys.
+
+GROUP-P is passed to `blue-transient-keychar-function' in case it needs
+to be specially handled."
   (let* ((key-map (make-hash-table :test 'equal))
          (shared-prefix (seq-reduce 's-shared-start
                                     words
@@ -107,10 +193,10 @@ inserting a break after each Nth group."
       (let (word
             word-index
             word-key)
-        (unless (and transient-compile-keychar-function
+        (unless (and blue-transient-keychar-function
                      (seq-find
                       (lambda (w)
-                        (when-let* ((key (funcall transient-compile-keychar-function
+                        (when-let* ((key (funcall blue-transient-keychar-function
                                                   w
                                                   words
                                                   key-map
@@ -118,11 +204,11 @@ inserting a break after each Nth group."
                           ;; Special case: custom user-provided key.
                           (unless (characterp key)
                             (user-error
-                             "Got non-char key %S from transient-compile-keychar-function"
+                             "Got non-char key %S from blue-transient-keychar-function"
                              key))
                           (when (gethash key key-map)
                             (user-error
-                             "Got duplicate key %s from transient-compile-keychar-function"
+                             "Got duplicate key %s from blue-transient-keychar-function"
                              (string key)))
                           (setq word w
                                 word-index (seq-position word key)
@@ -153,7 +239,7 @@ inserting a break after each Nth group."
                                   (lambda (word)
                                     (and (not (assoc word word-keys))
                                          (> (length word) index)
-                                         (transient-compile--keychar-p (elt word index))
+                                         (blue-transient--keychar-p (elt word index))
                                          (not (gethash
                                                (funcall casefn (elt word index)) key-map))
                                          (or prefer-first
@@ -172,7 +258,7 @@ inserting a break after each Nth group."
                                     max-len)))
                 ;; Repeat above search a few times: first try characters as-is, then try
                 ;; their upper-case and down-case variants.
-                (if transient-compile-keychar-unfold
+                (if blue-transient-keychar-unfold
                     (list 'identity 'upcase 'downcase)
                   (list 'identity))))
              ;; If group-p is set, do above search once with prefer-first set to t.
@@ -190,13 +276,9 @@ inserting a break after each Nth group."
           (setq word (seq-find (lambda (w)
                                  (not (assoc w word-keys)))
                                sorted-words)
-                word-key (transient-compile--random-key word key-map)
+                word-key (blue-transient--random-key word key-map)
                 word-index (seq-position word word-key)))
         (let ((word-label (substring word 0)))
-          (when (and transient-compile-keychar-highlight
-                     word-index)
-            (aset word-label word-index word-key)
-            (transient-compile--propertize-key word-label word-index group-p))
           (push (list word
                       word-label
                       (string word-key))
@@ -282,7 +364,7 @@ MENU-HEADING COLUMN-COUNT ITEMS."
                                               (list :class 'transient-columns)
                                               (seq-map 'vconcat row))))
                                    rows)))
-        (when transient-compile-menu-columns-spread
+        (when blue-transient-menu-columns-spread
           (setq grid (append `(:column-widths
                                ',(make-list column-count (/ (frame-width) column-count)))
                              grid)))
