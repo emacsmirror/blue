@@ -318,23 +318,28 @@ to be specially handled."
           (mapcar
            (lambda (command)
              (let* ((command-invoke (alist-get 'invoke command))
+                    (command-interactive-p (when (member command-invoke
+                                                         blue-interactive-commands)
+                                             t))
                     (command-key
                      (if (> (length commands) 1)
                          (s-concat (caddr (assoc category-name category-keys))
                                    (caddr (assoc command-invoke category-command-keys)))
                        (caddr (assoc command-invoke category-command-keys))))
-                    ;; TODO: Make this the full blue command and think how
-                    ;; to fit arguments.
-                    (command-string command-invoke)
+                    ;; TODO: Think how to fit arguments.
+                    (flags (blue--normalize-flags blue-default-flags))
+                    (command-string (string-join
+                                     (cons blue-binary
+                                           (append (when flags flags)
+                                                   (list command-invoke)))
+                                     " "))
                     ;; TODO: use `blue--build-dir'.
                     (build-dir default-directory)
                     (command-synopsis (alist-get 'synopsis command)))
                `(,command-key
                  ,command-invoke
                  (lambda () ,command-synopsis (interactive)
-                   ;; TODO: Handle properly the `comint-p' argument of
-                   ;; `blue--compile'.
-                   (blue--compile ,command-string nil)))))
+                   (blue--compile ,command-string ,command-interactive-p)))))
            category-commands))))
      sorted-commands-by-category)))
 
