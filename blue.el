@@ -32,6 +32,7 @@
 
 (require 'compile)
 (require 'crm)
+(require 'outline)
 (require 'pcomplete)
 (require 'seq)
 
