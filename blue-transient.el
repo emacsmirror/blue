@@ -121,6 +121,11 @@ This is used to create the `blue-transient' menu.")
   (interactive)
   (setq blue-transient--command (butlast blue-transient--command)))
 
+(defun blue-transient--clear ()
+  "Clean command prompt."
+  (interactive)
+  (setq blue-transient--command nil))
+
 (defun blue-transient--dispatcher ()
   "Run BLUE commands."
   (interactive)
@@ -365,6 +370,8 @@ to be specially handled."
                                           #'blue-transient--dispatcher)
                                     (list "DEL" "Del"
                                           #'blue-transient--del :transient t)
+                                    (list "C-l" "Clear"
+                                          #'blue-transient--clear :transient t)
                                     '("^" "Comint flip" "flip"))))
     (append grouped-commands (list dispatcher-category))))
 
