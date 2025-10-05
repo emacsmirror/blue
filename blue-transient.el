@@ -126,6 +126,7 @@ This is used to create the `blue-transient' menu.")
   (interactive)
   ;; TODO: Think how to fit arguments.
   (let* ((flags (blue--normalize-flags blue-default-flags))
+         (is-interactive (blue--any-interactive-p blue-transient--command))
          (commands (mapcar (lambda (token)
                              (string-join token " "))
                            blue-transient--command))
@@ -135,8 +136,7 @@ This is used to create the `blue-transient' menu.")
                             (append (when flags flags)
                                     (list input)))
                       " ")))
-    ;; TODO: Handle `comint-p' argument.
-    (blue--compile full-input nil)))
+    (blue--compile full-input is-interactive)))
 
 (defun blue-transient--menu-columns (items)
   "Return bounded menu column count.
