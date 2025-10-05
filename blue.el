@@ -59,6 +59,14 @@ Interactive commands will run in comint mode compilation buffers."
   :type 'file
   :group 'blue)
 
+(defcustom blue-require-build-directory nil
+  "Whether to ensure that BLUE commands run under a known build directory.
+
+This makes `blue-run-command' prompt for a build directory if no build
+directory has been stored in the cache."
+  :group 'blue
+  :type 'boolean)
+
 (defcustom blue-default-flags nil
   "String or list of strings passed as arguments to BLUE."
   :group 'blue
@@ -628,12 +636,15 @@ not exist."
     (blue--ensure-cache)
 
     (let* ((prefix (car current-prefix-arg))
-           (prompt-dir-p (eql prefix 4)) ; Single universal argument 'C-u'.
+           (build-dirs (blue--cache-get-build-dirs default-directory))
+           (last-build-dir (car build-dirs))
+           (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
+                             (and blue-require-build-directory
+                                  (not last-build-dir))))
            (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
       (setq blue--overiden-build-dir (when prompt-dir-p
                                        (blue--prompt-dir t))
-            blue--build-dir (or blue--overiden-build-dir
-                                (car (blue--cache-get-build-dirs default-directory))))
+            blue--build-dir (or blue--overiden-build-dir last-build-dir))
       (if-let* ((blue--blueprint (blue--find-blueprint))
                 (commands (blue--get-commands blue--blueprint))
                 (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
