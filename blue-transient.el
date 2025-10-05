@@ -111,18 +111,24 @@ This is used to create the `blue-transient' menu.")
                                        'face 'widget-field)))
     (concat header formated-command "\n")))
 
+(defun blue-transient--del ()
+  "Delete last inserted command."
+  (interactive)
+  (setq blue-transient--command (butlast blue-transient--command)))
+
 (defun blue-transient--dispatcher ()
-  "Command dispatcher for `blue-transient'."
+  "Run BLUE commands."
   (interactive)
   ;; TODO: Think how to fit arguments.
   (let* ((flags (blue--normalize-flags blue-default-flags))
-         (command-string (string-join
-                          (cons blue-binary
-                                (append (when flags flags)
-                                        blue-transient--command))
-                          " ")))
+         (commands (string-join blue-transient--command " -- "))
+         (full-command (string-join
+                        (cons blue-binary
+                              (append (when flags flags)
+                                      (list commands)))
+                        " ")))
     ;; TODO: Handle `comint-p' argument.
-    (blue--compile command-string nil)))
+    (blue--compile full-command nil)))
 
 (defun blue-transient--menu-columns (items)
   "Return bounded menu column count.
@@ -342,7 +348,9 @@ to be specially handled."
           (blue-transient--group-commands sorted-commands-by-category
                                           category-keys))
          (dispatcher-category (list (list "RET" (propertize "Run" 'face 'custom-button)
-                                           #'blue-transient--dispatcher))))
+                                          #'blue-transient--dispatcher)
+                                    (list "DEL" "Del"
+                                           #'blue-transient--del :transient t))))
     (append grouped-commands (list dispatcher-category))))
 
 (defun blue-transient--build-grid (menu-heading items)
