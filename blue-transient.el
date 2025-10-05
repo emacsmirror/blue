@@ -337,8 +337,13 @@ to be specially handled."
                                         (eq (alist-get 'category command)
                                             category))
                                       commands)))
-                  categories)))
-    (blue-transient--group-commands sorted-commands-by-category category-keys)))
+                  categories))
+         (grouped-commands
+          (blue-transient--group-commands sorted-commands-by-category
+                                          category-keys))
+         (dispatcher-category (list (list "RET" (propertize "Run" 'face 'custom-button)
+                                           #'blue-transient--dispatcher))))
+    (append grouped-commands (list dispatcher-category))))
 
 (defun blue-transient--build-grid (menu-heading items)
   "Align menu items into a grid.
