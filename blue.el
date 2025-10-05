@@ -139,15 +139,27 @@ This is used when passing universal prefix argument `C-u' to
 
 ;;; Utilities.
 
+(defvar-keymap blue-log-mode-map
+  :doc "Keymap for `blue-replay-mode'."
+  :parent outline-mode-map
+  "q" #'quit-window
+  "n" #'outline-next-visible-heading
+  "p" #'outline-previous-visible-heading)
+
+(define-derived-mode blue-log-mode outline-mode "Blue-log"
+  "Mode for looking at BLUE logs."
+  :interactive nil
+  :group 'blue
+  (setq-local outline-regexp "▶")
+  (read-only-mode 1))
+
 (defun blue--get-log-buffer ()
   "Return `blue--log-buffer'."
   (let ((buf (get-buffer blue--log-buffer)) ; Already existing.
         (buf* (get-buffer-create blue--log-buffer)))
     (unless buf
       (with-current-buffer buf*
-        (outline-mode)
-        (setq-local outline-regexp "▶")
-        (read-only-mode 1)))
+        (blue-log-mode)))
     buf*))
 
 (defun blue--check-blue-binary ()
