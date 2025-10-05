@@ -346,8 +346,14 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Return the commands provided by BLUEPRINT."
   (let* ((flags (when blueprint (list "--file" blueprint)))
          (output (blue--execute-serialize flags ".elisp-serialize-commands"))
-         (data (car output)))
-    data))
+         (data (car output))
+         (exit-code (cdr output)))
+    (if (zerop exit-code)
+        data
+      (with-current-buffer blue--log-buffer
+        (goto-char (point-min)))
+      (display-buffer blue--log-buffer)
+      (error "[BLUE] Command serialization failed"))))
 
 (defun blue--get-config (blueprint &optional dir)
   "Return the BLUEPRINT configuration.
@@ -359,8 +365,14 @@ If DIR is non-nil return the configuration stored in DIR."
                            (list "--build-directory" dir)))
          (flags (append file-flag build-dir-flag))
          (output (blue--execute-serialize flags ".elisp-serialize-configuration"))
-         (data (car output)))
-    data))
+         (data (car output))
+         (exit-code (cdr output)))
+    (if (zerop exit-code)
+        data
+      (with-current-buffer blue--log-buffer
+        (goto-char (point-min)))
+      (display-buffer blue--log-buffer)
+      (error "[BLUE] Configuration serialization failed"))))
 
 (defun blue--config-get (var config)
   "Retrieve variable VAR value from CONFIG."
