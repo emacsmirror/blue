@@ -296,7 +296,7 @@ to be specially handled."
                                             category-commands))
             (category-command-keys (blue-transient--assign-keys category-command-names nil)))
        (append
-        (list category-name)
+        (list (capitalize category-name))
         (mapcar
          (lambda (command)
            (let* ((command-invoke (alist-get 'invoke command))
@@ -310,7 +310,7 @@ to be specially handled."
                      (caddr (assoc command-invoke category-command-keys))))
                   (command-synopsis (alist-get 'synopsis command)))
              `(,command-key
-               ,command-invoke
+               ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
                  (setq blue-transient--command
                        (append blue-transient--command (list ,command-invoke))))
