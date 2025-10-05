@@ -167,12 +167,9 @@ If PATH is non-nil, locate `blueprint.scm' from PATH."
       (file-truename
        (directory-file-name
         (concat blueprint "/blueprint.scm")))
-    (error
-     (concat "Failed to locate "
-             (propertize "`blueprint.scm'" 'face 'font-lock-constant-face)
-             (when path
-               (concat " in "
-                       (propertize path 'face 'font-lock-type-face)))))))
+    (error (concat "[BLUE] Failed to locate `blueprint.scm'"
+                   (when path
+                     (concat " in " path))))))
 
 (defun blue--normalize-flags (flags)
   "Normalize FLAGS to a list of strings."
@@ -268,9 +265,9 @@ Give a relevant error message according to EXIT-CODE."
         (with-temp-buffer
           (insert-file-contents blue-cache-file)
           (setq blue--cache-list (read (current-buffer))))
-      (error
-       (warn "Failed to read BLUE cache file: %s" (error-message-string err))
-       (setq blue--cache-list nil)))))
+      (error (concat "[BLUE] Failed to read cache file: "
+                     (error-message-string err))
+             (setq blue--cache-list nil)))))
 
 (defun blue--write-cache ()
   "Save `blue--cache-list' to `blue-cache-file'."
@@ -281,8 +278,8 @@ Give a relevant error message according to EXIT-CODE."
               (print-level nil))
           (pp blue--cache-list (current-buffer)))
         (write-region nil nil blue-cache-file nil 'silent))
-    (error
-     (warn "Failed to write BLUE cache file: %s" (error-message-string err)))))
+    (error (concat "[BLUE] Failed to write cache file: "
+                   (error-message-string err)))))
 
 (defun blue--sanitize-cache ()
   "Remove non-existent directories from cache list."
@@ -350,10 +347,10 @@ If RAW is non nil, the serialized string will not be evaluated."
          (exit-code (cdr output)))
     (if (zerop exit-code)
         data
-      (with-current-buffer blue--log-buffer
-        (goto-char (point-min)))
-      (display-buffer blue--log-buffer)
-      (error "[BLUE] Command serialization failed"))))
+      (error "[BLUE] Command serialization failed"
+             (with-current-buffer blue--log-buffer
+               (goto-char (point-min)))
+             (display-buffer blue--log-buffer)))))
 
 (defun blue--get-config (blueprint &optional dir)
   "Return the BLUEPRINT configuration.
@@ -369,10 +366,10 @@ If DIR is non-nil return the configuration stored in DIR."
          (exit-code (cdr output)))
     (if (zerop exit-code)
         data
-      (with-current-buffer blue--log-buffer
-        (goto-char (point-min)))
-      (display-buffer blue--log-buffer)
-      (error "[BLUE] Configuration serialization failed"))))
+      (error "[BLUE] Configuration serialization failed"
+             (with-current-buffer blue--log-buffer
+               (goto-char (point-min)))
+             (display-buffer blue--log-buffer)))))
 
 (defun blue--config-get (var config)
   "Retrieve variable VAR value from CONFIG."
