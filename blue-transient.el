@@ -107,9 +107,12 @@ This is used to create the `blue-transient' menu.")
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
   (let* ((header (propertize "Command: " 'face 'bold))
-         (command (string-join blue-transient--command " -- "))
+         (commands (mapcar (lambda (token)
+                             (string-join token " "))
+                           blue-transient--command))
+         (input (string-join commands " -- "))
          (padding (- (frame-width) (length header)))
-         (formated-command (propertize (string-pad command padding)
+         (formated-command (propertize (string-pad input padding)
                                        'face 'widget-field)))
     (concat header formated-command "\n")))
 
@@ -123,14 +126,17 @@ This is used to create the `blue-transient' menu.")
   (interactive)
   ;; TODO: Think how to fit arguments.
   (let* ((flags (blue--normalize-flags blue-default-flags))
-         (commands (string-join blue-transient--command " -- "))
-         (full-command (string-join
-                        (cons blue-binary
-                              (append (when flags flags)
-                                      (list commands)))
-                        " ")))
+         (commands (mapcar (lambda (token)
+                             (string-join token " "))
+                           blue-transient--command))
+         (input (string-join commands " -- "))
+         (full-input (string-join
+                      (cons blue-binary
+                            (append (when flags flags)
+                                    (list input)))
+                      " ")))
     ;; TODO: Handle `comint-p' argument.
-    (blue--compile full-command nil)))
+    (blue--compile full-input nil)))
 
 (defun blue-transient--menu-columns (items)
   "Return bounded menu column count.
@@ -321,7 +327,8 @@ to be specially handled."
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
                  (setq blue-transient--command
-                       (append blue-transient--command (list ,command-invoke))))
+                       (append blue-transient--command
+                               (list '(,command-invoke)))))
                :transient t)))
          category-commands))))
    categories))
