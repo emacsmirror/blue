@@ -731,10 +731,10 @@ COMINT-FLIP inverts the interactive compilation logic."
       (let ((command-string (string-join
                              (cons blue-binary
                                    (append (when flags flags)
-                                           (cons (string-join input " -- ") nil)))
+                                           (list (string-join input " -- "))))
                              " ")))
-        ;; Bring `blue--build-dir' to the from of the list so it's
-        ;; ordered by usage.
+        ;; Bring `blue--build-dir' to the from of the list so it's ordered by
+        ;; usage.
         (when blue--build-dir
           (blue--cache-add blue--build-dir))
         (blue--compile command-string comint)))))
