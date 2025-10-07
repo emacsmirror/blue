@@ -68,7 +68,7 @@ directory has been stored in the cache."
   :group 'blue
   :type 'boolean)
 
-(defcustom blue-default-flags nil
+(defcustom blue-default-options nil
   "String or list of strings passed as arguments to BLUE."
   :group 'blue
   :type '(choice
@@ -192,13 +192,13 @@ If PATH is non-nil, locate `blueprint.scm' from PATH."
                    (when path
                      (concat " in " path))))))
 
-(defun blue--normalize-flags (flags)
-  "Normalize FLAGS to a list of strings."
+(defun blue--normalize-options (options)
+  "Normalize OPTIONS to a list of strings."
   (cond
-   ((null flags) nil)
-   ((stringp flags) (string-split flags))
-   ((listp flags) flags)
-   (t (list (format "%s" flags)))))
+   ((null options) nil)
+   ((stringp options) (string-split options))
+   ((listp options) options)
+   (t (list (format "%s" options)))))
 
 (defun blue--file-safe-p (file)
   "Return t if FILE exists and is readable."
@@ -344,12 +344,12 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Serialization.
 
-(defun blue--execute-serialize (flags command &optional raw)
-  "Execute BLUE serialization COMMAND with FLAGS and return parsed output.
+(defun blue--execute-serialize (options command &optional raw)
+  "Execute BLUE serialization COMMAND with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
   (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
-         (args (append (or flags '()) (list command)))
+         (args (append (or options '()) (list command)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
          (output (with-output-to-string
@@ -363,8 +363,8 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (defun blue--get-commands (blueprint)
   "Return the commands provided by BLUEPRINT."
-  (let* ((flags (when blueprint (list "--file" blueprint)))
-         (output (blue--execute-serialize flags ".elisp-serialize-commands"))
+  (let* ((options (when blueprint (list "--file" blueprint)))
+         (output (blue--execute-serialize options ".elisp-serialize-commands"))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
@@ -382,8 +382,8 @@ If DIR is non-nil return the configuration stored in DIR."
                       (list "--file" blueprint)))
          (build-dir-flag (when dir
                            (list "--build-directory" dir)))
-         (flags (append file-flag build-dir-flag))
-         (output (blue--execute-serialize flags ".elisp-serialize-configuration"))
+         (options (append file-flag build-dir-flag))
+         (output (blue--execute-serialize options ".elisp-serialize-configuration"))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
@@ -735,13 +735,13 @@ COMINT-FLIP inverts the interactive compilation logic."
   (interactive (blue--prompt-for-commands))
 
   (when input
-    (let* ((flags (blue--normalize-flags blue-default-flags))
+    (let* ((options (blue--normalize-options blue-default-options))
            (tokens (mapcar #'string-split input))
            (is-interactive (blue--any-interactive-p tokens))
            (comint (xor is-interactive comint-flip)))
       (let ((command-string (string-join
                              (cons blue-binary
-                                   (append (when flags flags)
+                                   (append (when options options)
                                            (list (string-join input " -- "))))
                              " ")))
         ;; Bring `blue--build-dir' to the from of the list so it's ordered by
