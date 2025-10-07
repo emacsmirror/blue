@@ -128,6 +128,10 @@ This is used to create the `blue-transient' menu.")
                       (blue--normalize-options blue-default-options)))
          (is-interactive (blue--any-interactive-p blue-transient--command))
          (comint (xor is-interactive comint-flip))
+         (known-build-dirs (blue--cache-get-build-dirs default-directory))
+         (blue--build-dir (seq-find (lambda (dir)
+                                      (transient-arg-value dir args))
+                                    known-build-dirs))
          (commands (mapcar (lambda (token)
                              (string-join token " "))
                            blue-transient--command))
@@ -388,11 +392,16 @@ The following steps are performed:
 After that, `blue-transient' closes menu and returns, while the command
 keeps running in the compilation buffer."
   (interactive)
+  (blue--ensure-cache)
   (let* ((blue--blueprint (blue--find-blueprint))
-         (commands (blue--get-commands blue--blueprint)))
+         (commands (blue--get-commands blue--blueprint))
+         (build-dirs (blue--cache-get-build-dirs blue--blueprint))
+         (indices (number-sequence 1 (length build-dirs))))
     (setq blue-transient--command nil) ; Reset command.
     ;; Rebuild menu.
     (eval `(transient-define-prefix blue-transient--menu ()
+             :incompatible ',(list build-dirs)
+             :value '(,(car build-dirs))
              ;; Heading
              [:description
               blue-transient--menu-heading
@@ -410,6 +419,12 @@ keeps running in the compilation buffer."
                                  #'blue--completion-at-point nil t))
                    (read-from-minibuffer prompt initial-input
                                          nil nil history))))]
+             ;; Build dirs.
+             ["Previous build directory"
+              ,@(seq-mapn (lambda (idx build-dir)
+                            (list (number-to-string idx) "" build-dir
+                                  :format "%k %v"))
+                          indices build-dirs)]
              ;; Commands
              ["Commands"
               ,@(blue-transient--build-menu commands)]))
