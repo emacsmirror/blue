@@ -29,6 +29,7 @@
 (require 'blue)
 (require 'cus-edit) ; For `custom-button' face.
 (require 's)
+(require 'seq)
 (require 'transient)
 (require 'wid-edit) ; For `widget-field' face.
 
