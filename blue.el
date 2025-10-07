@@ -309,9 +309,9 @@ Give a relevant error message according to EXIT-CODE."
         (delq nil
               (mapcar (lambda (entry)
                         (let ((project (car entry))
-                              (configs (cadr entry)))
+                              (build-dirs (cadr entry)))
                           (when (file-exists-p project)
-                            (list project (seq-filter #'file-exists-p configs)))))
+                            (list project (seq-filter #'file-exists-p build-dirs)))))
                       blue--cache-list))))
 
 (defun blue--ensure-cache ()
@@ -429,9 +429,9 @@ If DIR is non-nil return the configuration stored in DIR."
      ;; whitespace between the prompt and the user input. For example, the
      ;; `transient-infix' default prompts, eg.: 'output=...'.
      (let ((beg-no-prompt (max beg (minibuffer-prompt-end))))
-         (list beg-no-prompt end
-           (completion-table-with-cache #'blue--completion-table)
-           :exclusive 'no)))))
+       (list beg-no-prompt end
+             (completion-table-with-cache #'blue--completion-table)
+             :exclusive 'no)))))
 
 
 ;;; Minibuffer Hints.
@@ -457,8 +457,8 @@ If CURRENT is non-nil the entry will be highlighted."
 If OVERRIDE is non nil disable CONFIGS."
   (when-let* (build-dirs
               (indices (number-sequence 1 (length build-dirs)))
-              (formatted (seq-mapn (lambda (idx config)
-                                     (blue--format-build-dir-hint idx config current))
+              (formatted (seq-mapn (lambda (idx dir)
+                                     (blue--format-build-dir-hint idx dir current))
                                    indices build-dirs))
               (lines (string-join formatted "\n"))
               (lines* (if override
@@ -477,8 +477,8 @@ If OVERRIDE is non nil disable CONFIGS."
 
 (defun blue--show-hints (&rest _)
   "Display build directory hints in minibuffer overlay."
-  (when-let* ((configs (blue--cache-get-build-dirs blue--blueprint))
-              (content (blue--create-hint-overlay configs blue--build-dir blue--overiden-build-dir)))
+  (when-let* ((build-dirs (blue--cache-get-build-dirs blue--blueprint))
+              (content (blue--create-hint-overlay build-dirs blue--build-dir blue--overiden-build-dir)))
     (unless blue--hint-overlay
       (setq blue--hint-overlay (make-overlay (point) (point))))
     (overlay-put blue--hint-overlay 'after-string content)
@@ -503,8 +503,8 @@ If OVERRIDE is non nil disable CONFIGS."
   (use-local-map (copy-keymap (current-local-map)))
   (define-key (current-local-map) (kbd "SPC") nil)
   (unless blue--overiden-build-dir
-    (let ((configs (blue--cache-get-build-dirs blue--blueprint)))
-      (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length configs)))))
+    (let ((build-dirs (blue--cache-get-build-dirs blue--blueprint)))
+      (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length build-dirs)))))
   (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
   (blue--show-hints))
 
@@ -564,7 +564,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
                (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
          (default-directory (if blue--build-dir
                                 blue--build-dir
-                                default-directory)))
+                              default-directory)))
     (setq-default compilation-directory default-directory)
     (blue--setup-buffer buf)
     (compilation-start command comint-p)
