@@ -424,9 +424,14 @@ If DIR is non-nil return the configuration stored in DIR."
   "`completion-at-point' function for `blue-run-command'."
   (pcase (bounds-of-thing-at-point 'symbol)
     (`(,beg . ,end)
-     (list beg end
+     ;; `beg-no-prompt' is required to ensure that completion receives the
+     ;; correct user input bounds even for prompts that do not leave any
+     ;; whitespace between the prompt and the user input. For example, the
+     ;; `transient-infix' default prompts, eg.: 'output=...'.
+     (let ((beg-no-prompt (max beg (minibuffer-prompt-end))))
+         (list beg-no-prompt end
            (completion-table-with-cache #'blue--completion-table)
-           :exclusive 'no))))
+           :exclusive 'no)))))
 
 
 ;;; Minibuffer Hints.

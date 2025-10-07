@@ -43,15 +43,6 @@ Used by `blue-transient--menu-columns'."
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
 
-(defcustom blue-transient-menu-columns-spread nil
-  "Whether to spread the columns so they span across the frame.
-
-If non-nil, columns will have spacing between them and will
-occupy the entire frame width.  Otherwise, columns will have
-the minimum width needed to fit the contents."
-  :group 'blue-transient
-  :type 'boolean)
-
 (defcustom blue-transient-keychar-function nil
   "Custom function that chooses unique key character for a word.
 
@@ -132,10 +123,9 @@ This is used to create the `blue-transient' menu.")
   (interactive)
   ;; TODO: Think how to fit arguments.
   (let* ((args (transient-args (oref transient-current-prefix command)))
-         (comint-flip (seq-some (lambda (arg)
-                                  (string-equal arg "flip"))
-                                args))
-         (options (blue--normalize-options blue-default-options))
+         (comint-flip (transient-arg-value "flip" args))
+         (options (or (transient-arg-value "options=" args)
+                      (blue--normalize-options blue-default-options)))
          (is-interactive (blue--any-interactive-p blue-transient--command))
          (comint (xor is-interactive comint-flip))
          (commands (mapcar (lambda (token)
@@ -150,12 +140,9 @@ This is used to create the `blue-transient' menu.")
     (blue--compile full-input comint)))
 
 (defun blue-transient--menu-columns (items)
-  "Return bounded menu column count.
+  "Return bounded menu column count from ITEMS.
 
-Takes assoc list returned by `blue-transient--build-menu'.
-
-`blue-transient--build-grid' will arange ITEMS into N columns by
-inserting a break after each Nth group."
+Takes assoc list returned by `blue-transient--build-menu'."
   (let* ((categories (mapcar #'car items))
          (longest-category (apply #'max
                                   (mapcar #'length categories)))
@@ -373,39 +360,12 @@ to be specially handled."
                                           #'blue-transient--del :transient t)
                                     (list "C-l" "Clear"
                                           #'blue-transient--clear :transient t)
-                                    '("^" "Comint flip" "flip"))))
-    (append grouped-commands (list dispatcher-category))))
-
-(defun blue-transient--build-grid (menu-heading items)
-  "Align menu items into a grid.
-
-MENU-HEADING ITEMS."
-  (let* ((column-count (blue-transient--menu-columns items))
-         (columns (make-list column-count nil))
-         (index 0))
-    (dolist (item items)
-      (setf (nth index columns) (append (nth index columns)
-                                        (list item)))
-      (setq index (% (1+ index) column-count)))
-    (let* ((row-count (apply 'max (seq-map 'length columns)))
-           (rows (make-list row-count nil)))
-      (dotimes (row-index row-count)
-        (dotimes (col-index column-count)
-          (when (< row-index (length (nth col-index columns)))
-            (setf (nth row-index rows) (append (nth row-index rows)
-                                               (list (nth row-index (nth col-index columns))))))))
-      (let* ((grid (seq-map-indexed (lambda (row index)
-                                      (vconcat
-                                       (append (when (and menu-heading (eq index 0))
-                                                 `(:description ,menu-heading))
-                                               (list :class 'transient-columns)
-                                               (seq-map 'vconcat row))))
-                                    rows)))
-        (if blue-transient-menu-columns-spread
-            (append `(:column-widths
-                      ',(make-list column-count (/ (frame-width) column-count)))
-                    grid)
-          grid)))))
+                                    '("^" "Comint flip" "flip")))
+         (menu-list (append grouped-commands (list dispatcher-category))))
+    ;; Make each menu entry a vector.
+    (mapcar (lambda (item)
+              (apply #'vector item))
+            menu-list)))
 
 
 ;;; UI.
@@ -433,9 +393,26 @@ keeps running in the compilation buffer."
     (setq blue-transient--command nil) ; Reset command.
     ;; Rebuild menu.
     (eval `(transient-define-prefix blue-transient--menu ()
-             ,@(blue-transient--build-grid
-                #'blue-transient--menu-heading
-                (blue-transient--build-menu commands))))
+             ;; Heading
+             [:description
+              blue-transient--menu-heading
+              ("." "Blue options" "options="
+               :reader
+               (lambda (prompt initial-input history)
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (use-local-map (copy-keymap (current-local-map)))
+                       (define-key (current-local-map) (kbd "TAB")
+                                   #'completion-at-point)
+                       ;; NOTE: `corfu--minibuffer-on` won't enable `corfu-mode'
+                       ;; if `completion-at-point-functions` isn't local.
+                       (add-hook 'completion-at-point-functions
+                                 #'blue--completion-at-point nil t))
+                   (read-from-minibuffer prompt initial-input
+                                         nil nil history))))]
+             ;; Commands
+             ["Commands"
+              ,@(blue-transient--build-menu commands)]))
     ;; Open menu.
     (blue-transient--menu)))
 
