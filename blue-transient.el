@@ -93,6 +93,12 @@ can become key characters."
 
 This is used to create the `blue-transient' menu.")
 
+(defvar blue-transient--menu-expresion nil
+  "Last evaluated transient.
+
+This is used to prevent reevaluating the same transient, losing any
+possible saved state.")
+
 
 ;;; Utilities.
 
@@ -121,6 +127,7 @@ This is used to create the `blue-transient' menu.")
 (defun blue-transient--run ()
   "Run BLUE commands."
   (interactive)
+  (transient-set)
   (let* ((args (transient-args (oref transient-current-prefix command)))
          (comint-flip (transient-arg-value "flip" args))
          (options (or (list (transient-arg-value "options=" args))
@@ -431,31 +438,36 @@ keeps running in the compilation buffer."
   (let* ((blue--blueprint (blue--find-blueprint))
          (commands (blue--get-commands blue--blueprint))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
-         (indices (number-sequence 1 (length build-dirs))))
-    ;; Rebuild menu.
-    (eval `(transient-define-prefix blue-transient--menu ()
-             :incompatible ',(list build-dirs)
-             :value '(,(car build-dirs))
-             ;; Heading
-             [:description
-              blue-transient--menu-heading
-              ("." "Blue options" "options="
-               :reader
-               (lambda (prompt initial-input history)
-                 (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
-                   (read-from-minibuffer prompt initial-input nil nil history))))
-              ("," "Last command args"
-               blue-transient--prompt-args
-               :transient t)]
-             ;; Build dirs.
-             ["Previous build directory"
-              ,@(seq-mapn (lambda (idx build-dir)
-                            (list (number-to-string idx) "" build-dir
-                                  :format "%k %v"))
-                          indices build-dirs)]
-             ;; Commands
-             ["Commands"
-              ,@(blue-transient--build-menu commands)]))
+         (indices (number-sequence 1 (length build-dirs)))
+         ;; Rebuild menu.
+         (transient `(transient-define-prefix blue-transient--menu ()
+                       :incompatible ',(list build-dirs)
+                       :value '(,(car build-dirs))
+                       ;; Heading
+                       [:description
+                        blue-transient--menu-heading
+                        ("." "Blue options" "options="
+                         :reader
+                         (lambda (prompt initial-input history)
+                           (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                             (read-from-minibuffer prompt initial-input nil nil history))))
+                        ("," "Last command args"
+                         blue-transient--prompt-args
+                         :transient t)]
+                       ;; Build dirs.
+                       ["Previous build directory"
+                        ,@(seq-mapn (lambda (idx build-dir)
+                                      (list (number-to-string idx) "" build-dir
+                                            :format "%k %v"))
+                                    indices build-dirs)]
+                       ;; Commands
+                       ["Commands"
+                        ,@(blue-transient--build-menu commands)])))
+    ;; Only evaluate menu if it has changed since the last invocation. This
+    ;; ensures that any saved state (eg.: `transient-set') is preserved.
+    (unless (equal transient blue-transient--menu-expresion)
+      (setq blue-transient--menu-expresion transient)
+      (eval transient))
     ;; Open menu.
     (blue-transient--menu)))
 
