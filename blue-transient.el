@@ -363,19 +363,11 @@ to be specially handled."
                   categories))
          (grouped-commands
           (blue-transient--group-commands sorted-commands-by-category
-                                          category-keys))
-         (dispatcher-category (list (list "RET" (propertize "Run" 'face 'custom-button)
-                                          #'blue-transient--run)
-                                    (list "DEL" "Del"
-                                          #'blue-transient--del :transient t)
-                                    (list "C-l" "Clear"
-                                          #'blue-transient--clear :transient t)
-                                    '("^" "Comint flip" "flip")))
-         (menu-list (append grouped-commands (list dispatcher-category))))
+                                          category-keys)))
     ;; Make each menu entry a vector.
     (mapcar (lambda (item)
               (apply #'vector item))
-            menu-list)))
+            grouped-commands)))
 
 
 ;;; UI.
@@ -443,7 +435,7 @@ keeps running in the compilation buffer."
          (transient `(transient-define-prefix blue-transient--menu ()
                        :incompatible ',(list build-dirs)
                        :value '(,(car build-dirs))
-                       ;; Heading
+                       ;; Heading.
                        [:description
                         blue-transient--menu-heading
                         ("." "Blue options" "options="
@@ -460,9 +452,14 @@ keeps running in the compilation buffer."
                                       (list (number-to-string idx) "" build-dir
                                             :format "%k %v"))
                                     indices build-dirs)]
-                       ;; Commands
+                       ;; Commands.
                        ["Commands"
-                        ,@(blue-transient--build-menu commands)])))
+                        ,@(blue-transient--build-menu commands)
+                        ;; Controls.
+                        [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)
+                         ("DEL" "Del" blue-transient--del :transient t)
+                         ("C-l" "Clear" blue-transient--clear :transient t)
+                         ("^" "Comint flip" "flip")]])))
     ;; Only evaluate menu if it has changed since the last invocation. This
     ;; ensures that any saved state (eg.: `transient-set') is preserved.
     (unless (equal transient blue-transient--menu-expresion)
