@@ -98,7 +98,7 @@ This is used to create the `blue-transient' menu.")
 
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
-  (let* ((header (propertize "Command: " 'face 'bold))
+  (let* ((header (propertize "Commands: " 'face 'bold))
          (commands (mapcar (lambda (token)
                              (string-join token " "))
                            blue-transient--command))
@@ -118,13 +118,12 @@ This is used to create the `blue-transient' menu.")
   (interactive)
   (setq blue-transient--command nil))
 
-(defun blue-transient--dispatcher ()
+(defun blue-transient--run ()
   "Run BLUE commands."
   (interactive)
-  ;; TODO: Think how to fit arguments.
   (let* ((args (transient-args (oref transient-current-prefix command)))
          (comint-flip (transient-arg-value "flip" args))
-         (options (or (transient-arg-value "options=" args)
+         (options (or (list (transient-arg-value "options=" args))
                       (blue--normalize-options blue-default-options)))
          (is-interactive (blue--any-interactive-p blue-transient--command))
          (comint (xor is-interactive comint-flip))
@@ -359,7 +358,7 @@ to be specially handled."
           (blue-transient--group-commands sorted-commands-by-category
                                           category-keys))
          (dispatcher-category (list (list "RET" (propertize "Run" 'face 'custom-button)
-                                          #'blue-transient--dispatcher)
+                                          #'blue-transient--run)
                                     (list "DEL" "Del"
                                           #'blue-transient--del :transient t)
                                     (list "C-l" "Clear"
@@ -373,6 +372,42 @@ to be specially handled."
 
 
 ;;; UI.
+
+;; TODO: Implement command arguments as a value transient option that always
+;; affects the last inputed command.
+
+(defun blue-transient--setup-minibuffer ()
+  "Setup keybindings and completion for minibuffer prompt."
+  (use-local-map (copy-keymap (current-local-map)))
+  (define-key (current-local-map) (kbd "TAB")
+              #'completion-at-point)
+  ;; NOTE: `corfu--minibuffer-on` won't enable `corfu-mode'
+  ;; if `completion-at-point-functions` isn't local.
+  (add-hook 'completion-at-point-functions
+            #'blue--completion-at-point nil t))
+
+(defun blue-transient--prompt-args ()
+  "Helper for prompting BLUE command arguments."
+  (interactive)
+  (let* ((front (butlast blue-transient--command))
+         (last-cmd (caar (last blue-transient--command)))
+         (last-cmd-prompt (concat last-cmd " "))
+         (initial-contents (when last-cmd (propertize last-cmd-prompt
+                                                      'face 'shadow
+                                                      'read-only t
+                                                      'rear-nonsticky t)))
+         ;; HACK: `blue-transient--setup-minibuffer' fills the completion table
+         ;; from user input, this is why here we use feed `initial-contents'
+         ;; instead of formating the prompt.
+         (input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                  (read-from-minibuffer "args=" initial-contents nil nil nil)))
+         (args (string-trim-left input last-cmd-prompt))
+         (cmd/args (cons last-cmd (list args))))
+    (setq blue-transient--command
+          (if front
+              (append front
+                      (list cmd/args))
+            (list cmd/args)))))
 
 ;;;###autoload
 (defun blue-transient ()
@@ -397,7 +432,6 @@ keeps running in the compilation buffer."
          (commands (blue--get-commands blue--blueprint))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
          (indices (number-sequence 1 (length build-dirs))))
-    (setq blue-transient--command nil) ; Reset command.
     ;; Rebuild menu.
     (eval `(transient-define-prefix blue-transient--menu ()
              :incompatible ',(list build-dirs)
@@ -408,17 +442,11 @@ keeps running in the compilation buffer."
               ("." "Blue options" "options="
                :reader
                (lambda (prompt initial-input history)
-                 (minibuffer-with-setup-hook
-                     (lambda ()
-                       (use-local-map (copy-keymap (current-local-map)))
-                       (define-key (current-local-map) (kbd "TAB")
-                                   #'completion-at-point)
-                       ;; NOTE: `corfu--minibuffer-on` won't enable `corfu-mode'
-                       ;; if `completion-at-point-functions` isn't local.
-                       (add-hook 'completion-at-point-functions
-                                 #'blue--completion-at-point nil t))
-                   (read-from-minibuffer prompt initial-input
-                                         nil nil history))))]
+                 (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                   (read-from-minibuffer prompt initial-input nil nil history))))
+              ("," "Last command args"
+               blue-transient--prompt-args
+               :transient t)]
              ;; Build dirs.
              ["Previous build directory"
               ,@(seq-mapn (lambda (idx build-dir)
