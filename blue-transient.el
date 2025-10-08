@@ -100,29 +100,60 @@ This is used to prevent reevaluating the same transient, losing any
 possible saved state.")
 
 
+;;; Undo/Redo
+
+(defvar blue-transient--undo-stack nil
+  "Undo stack for `blue-transient--command'.")
+
+(defvar blue-transient--redo-stack nil
+  "Redo stack for `blue-transient--command'.")
+
+(defun blue-transient--save-state ()
+  "Save current state of `blue-transient--command' to the undo stack."
+  (push (copy-tree blue-transient--command) blue-transient--undo-stack)
+  (setq blue-transient--redo-stack nil)) ; Clear redo when new change happens.
+
+(defun blue-transient-undo ()
+  "Undo last change to `blue-transient--command'."
+  (interactive)
+  (when blue-transient--undo-stack
+    (push (copy-tree blue-transient--command) blue-transient--redo-stack)
+    (setq blue-transient--command (pop blue-transient--undo-stack))))
+
+(defun blue-transient-redo ()
+  "Redo last undone change to `blue-transient--command'."
+  (interactive)
+  (when blue-transient--redo-stack
+    (push (copy-tree blue-transient--command) blue-transient--undo-stack)
+    (setq blue-transient--command (pop blue-transient--redo-stack))))
+
+
 ;;; Utilities.
 
-(defun blue-transient--menu-heading ()
-  "Dynamic header for BLUE transient."
-  (let* ((header (propertize "Commands: " 'face 'bold))
-         (commands (mapcar (lambda (token)
-                             (string-join token " "))
-                           blue-transient--command))
-         (input (string-join commands " -- "))
-         (padding (- (frame-width) (length header)))
-         (formated-command (propertize (string-pad input padding)
-                                       'face 'widget-field)))
-    (concat header formated-command "\n")))
-
 (defun blue-transient--del ()
-  "Delete last inserted command."
+  "Delete the last argument or command in `blue-transient--command'.
+
+If the last command still has arguments, remove its last argument.
+If it has none left, remove the entire command."
   (interactive)
-  (setq blue-transient--command (butlast blue-transient--command)))
+  (when blue-transient--command
+    (blue-transient--save-state)
+    (let* ((last-cmd (car (last blue-transient--command)))
+           (args (cdr last-cmd)))
+      (if args
+          ;; Remove last argument.
+          (setcar (last blue-transient--command)
+                  (butlast last-cmd))
+        ;; Remove entire command.
+        (setq blue-transient--command
+              (butlast blue-transient--command))))))
 
 (defun blue-transient--clear ()
   "Clean command prompt."
   (interactive)
-  (setq blue-transient--command nil))
+  (when blue-transient--command
+    (blue-transient--save-state)
+    (setq blue-transient--command nil)))
 
 (defun blue-transient--run ()
   "Run BLUE commands."
@@ -150,6 +181,18 @@ possible saved state.")
                                     (list input)))
                       " ")))
     (blue--compile full-input comint)))
+
+(defun blue-transient--menu-heading ()
+  "Dynamic header for BLUE transient."
+  (let* ((header (propertize "Commands: " 'face 'bold))
+         (commands (mapcar (lambda (token)
+                             (string-join token " "))
+                           blue-transient--command))
+         (input (string-join commands " -- "))
+         (padding (- (frame-width) (length header)))
+         (formated-command (propertize (string-pad input padding)
+                                       'face 'widget-field)))
+    (concat header formated-command "\n")))
 
 (defun blue-transient--menu-columns (items)
   "Return bounded menu column count from ITEMS.
@@ -336,9 +379,10 @@ to be specially handled."
              `(,command-key
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
+                 (blue-transient--save-state)
                  (setq blue-transient--command
                        (append blue-transient--command
-                               (list '(,command-invoke)))))
+                               (list (list ,command-invoke)))))
                :transient t)))
          category-commands))))
    categories))
@@ -390,25 +434,26 @@ to be specially handled."
 (defun blue-transient--prompt-args ()
   "Helper for prompting BLUE command arguments."
   (interactive)
-  (let* ((front (butlast blue-transient--command))
-         (last-cmd (caar (last blue-transient--command)))
-         (last-cmd-prompt (concat last-cmd " "))
-         (initial-contents (when last-cmd (propertize last-cmd-prompt
-                                                      'face 'shadow
-                                                      'read-only t
-                                                      'rear-nonsticky t)))
-         ;; HACK: `blue-transient--setup-minibuffer' fills the completion table
-         ;; from user input, this is why here we use feed `initial-contents'
-         ;; instead of formating the prompt.
-         (input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
-                  (read-from-minibuffer "args=" initial-contents nil nil nil)))
-         (args (string-trim-left input last-cmd-prompt))
-         (cmd/args (cons last-cmd (list args))))
-    (setq blue-transient--command
-          (if front
-              (append front
-                      (list cmd/args))
-            (list cmd/args)))))
+  (when blue-transient--command
+    (let* ((front (butlast blue-transient--command))
+           (last-cmd (caar (last blue-transient--command)))
+           (last-cmd-prompt (concat last-cmd " "))
+           (initial-contents (when last-cmd
+                               (propertize last-cmd-prompt
+                                           'face 'shadow
+                                           'read-only t
+                                           'rear-nonsticky t)))
+           ;; HACK: `blue-transient--setup-minibuffer' fills the completion table
+           ;; from user input, this is why here we use `initial-contents'
+           (input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                    (read-from-minibuffer "args=" initial-contents nil nil nil)))
+           (args (string-trim-left input last-cmd-prompt))
+           (cmd/args (cons last-cmd (list args))))
+      (blue-transient--save-state)
+      (setq blue-transient--command
+            (if front
+                (append front (list cmd/args))
+              (list cmd/args))))))
 
 ;;;###autoload
 (defun blue-transient ()
@@ -461,7 +506,9 @@ keeps running in the compilation buffer."
                         [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)
                          ("DEL" "Del" blue-transient--del :transient t)
                          ("C-l" "Clear" blue-transient--clear :transient t)
-                         ("^" "Comint flip" "flip")]])))
+                         ("^" "Comint flip" "flip")
+                         ("_" "Undo" blue-transient-undo :transient t)
+                         ("M-_" "Redo" blue-transient-redo :transient t)]])))
     ;; Only evaluate menu if it has changed since the last invocation. This
     ;; ensures that any saved state (eg.: `transient-set') is preserved.
     (unless (equal transient blue-transient--menu-expresion)
