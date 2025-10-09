@@ -32,6 +32,7 @@
 
 (require 'compile)
 (require 'crm)
+(require 'outline)
 (require 'pcomplete)
 (require 'seq)
 
@@ -67,7 +68,7 @@ directory has been stored in the cache."
   :group 'blue
   :type 'boolean)
 
-(defcustom blue-default-flags nil
+(defcustom blue-default-options nil
   "String or list of strings passed as arguments to BLUE."
   :group 'blue
   :type '(choice
@@ -139,15 +140,27 @@ This is used when passing universal prefix argument `C-u' to
 
 ;;; Utilities.
 
+(defvar-keymap blue-log-mode-map
+  :doc "Keymap for `blue-replay-mode'."
+  :parent outline-mode-map
+  "q" #'quit-window
+  "n" #'outline-next-visible-heading
+  "p" #'outline-previous-visible-heading)
+
+(define-derived-mode blue-log-mode outline-mode "Blue-log"
+  "Mode for looking at BLUE logs."
+  :interactive nil
+  :group 'blue
+  (setq-local outline-regexp "▶")
+  (read-only-mode 1))
+
 (defun blue--get-log-buffer ()
   "Return `blue--log-buffer'."
   (let ((buf (get-buffer blue--log-buffer)) ; Already existing.
         (buf* (get-buffer-create blue--log-buffer)))
     (unless buf
       (with-current-buffer buf*
-        (outline-mode)
-        (setq-local outline-regexp "▶")
-        (read-only-mode 1)))
+        (blue-log-mode)))
     buf*))
 
 (defun blue--check-blue-binary ()
@@ -179,13 +192,13 @@ If PATH is non-nil, locate `blueprint.scm' from PATH."
                    (when path
                      (concat " in " path))))))
 
-(defun blue--normalize-flags (flags)
-  "Normalize FLAGS to a list of strings."
+(defun blue--normalize-options (options)
+  "Normalize OPTIONS to a list of strings."
   (cond
-   ((null flags) nil)
-   ((stringp flags) (string-split flags))
-   ((listp flags) flags)
-   (t (list (format "%s" flags)))))
+   ((null options) nil)
+   ((stringp options) (string-split options))
+   ((listp options) options)
+   (t (list (format "%s" options)))))
 
 (defun blue--file-safe-p (file)
   "Return t if FILE exists and is readable."
@@ -246,7 +259,8 @@ EXIT-CODE is the return value of CMD."
         (goto-char (point-min))
         (when command (insert (blue--format-header command)))
         (insert output)
-        (insert "\n")
+        (unless (equal (point) (line-beginning-position))
+          (insert "\n"))
         (when exit-code (insert (blue--format-footer exit-code)))))))
 
 (defun blue--handle-error (exit-code)
@@ -295,9 +309,9 @@ Give a relevant error message according to EXIT-CODE."
         (delq nil
               (mapcar (lambda (entry)
                         (let ((project (car entry))
-                              (configs (cadr entry)))
+                              (build-dirs (cadr entry)))
                           (when (file-exists-p project)
-                            (list project (seq-filter #'file-exists-p configs)))))
+                            (list project (seq-filter #'file-exists-p build-dirs)))))
                       blue--cache-list))))
 
 (defun blue--ensure-cache ()
@@ -330,12 +344,12 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Serialization.
 
-(defun blue--execute-serialize (flags command &optional raw)
-  "Execute BLUE serialization COMMAND with FLAGS and return parsed output.
+(defun blue--execute-serialize (options command &optional raw)
+  "Execute BLUE serialization COMMAND with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
   (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
-         (args (append (or flags '()) (list command)))
+         (args (append (or options '()) (list command)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
          (output (with-output-to-string
@@ -349,8 +363,8 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (defun blue--get-commands (blueprint)
   "Return the commands provided by BLUEPRINT."
-  (let* ((flags (when blueprint (list "--file" blueprint)))
-         (output (blue--execute-serialize flags ".elisp-serialize-commands"))
+  (let* ((options (when blueprint (list "--file" blueprint)))
+         (output (blue--execute-serialize options ".elisp-serialize-commands"))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
@@ -368,8 +382,8 @@ If DIR is non-nil return the configuration stored in DIR."
                       (list "--file" blueprint)))
          (build-dir-flag (when dir
                            (list "--build-directory" dir)))
-         (flags (append file-flag build-dir-flag))
-         (output (blue--execute-serialize flags ".elisp-serialize-configuration"))
+         (options (append file-flag build-dir-flag))
+         (output (blue--execute-serialize options ".elisp-serialize-configuration"))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
@@ -410,9 +424,14 @@ If DIR is non-nil return the configuration stored in DIR."
   "`completion-at-point' function for `blue-run-command'."
   (pcase (bounds-of-thing-at-point 'symbol)
     (`(,beg . ,end)
-     (list beg end
-           (completion-table-with-cache #'blue--completion-table)
-           :exclusive 'no))))
+     ;; `beg-no-prompt' is required to ensure that completion receives the
+     ;; correct user input bounds even for prompts that do not leave any
+     ;; whitespace between the prompt and the user input. For example, the
+     ;; `transient-infix' default prompts, eg.: 'output=...'.
+     (let ((beg-no-prompt (max beg (minibuffer-prompt-end))))
+       (list beg-no-prompt end
+             (completion-table-with-cache #'blue--completion-table)
+             :exclusive 'no)))))
 
 
 ;;; Minibuffer Hints.
@@ -438,8 +457,8 @@ If CURRENT is non-nil the entry will be highlighted."
 If OVERRIDE is non nil disable CONFIGS."
   (when-let* (build-dirs
               (indices (number-sequence 1 (length build-dirs)))
-              (formatted (seq-mapn (lambda (idx config)
-                                     (blue--format-build-dir-hint idx config current))
+              (formatted (seq-mapn (lambda (idx dir)
+                                     (blue--format-build-dir-hint idx dir current))
                                    indices build-dirs))
               (lines (string-join formatted "\n"))
               (lines* (if override
@@ -458,8 +477,8 @@ If OVERRIDE is non nil disable CONFIGS."
 
 (defun blue--show-hints (&rest _)
   "Display build directory hints in minibuffer overlay."
-  (when-let* ((configs (blue--cache-get-build-dirs blue--blueprint))
-              (content (blue--create-hint-overlay configs blue--build-dir blue--overiden-build-dir)))
+  (when-let* ((build-dirs (blue--cache-get-build-dirs blue--blueprint))
+              (content (blue--create-hint-overlay build-dirs blue--build-dir blue--overiden-build-dir)))
     (unless blue--hint-overlay
       (setq blue--hint-overlay (make-overlay (point) (point))))
     (overlay-put blue--hint-overlay 'after-string content)
@@ -484,8 +503,8 @@ If OVERRIDE is non nil disable CONFIGS."
   (use-local-map (copy-keymap (current-local-map)))
   (define-key (current-local-map) (kbd "SPC") nil)
   (unless blue--overiden-build-dir
-    (let ((configs (blue--cache-get-build-dirs blue--blueprint)))
-      (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length configs)))))
+    (let ((build-dirs (blue--cache-get-build-dirs blue--blueprint)))
+      (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length build-dirs)))))
   (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
   (blue--show-hints))
 
@@ -545,7 +564,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
                (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
          (default-directory (if blue--build-dir
                                 blue--build-dir
-                                default-directory)))
+                              default-directory)))
     (setq-default compilation-directory default-directory)
     (blue--setup-buffer buf)
     (compilation-start command comint-p)
@@ -570,20 +589,17 @@ COMINT-P selects `comint-mode' for compilation buffer."
                       commands))
           invocations))
 
-(defun blue--analyze-commands (input-tokens commands)
-  "Analyze INPUT-TOKENS against COMMANDS to extract properties."
-  (let* ((invocations (blue--parse-invocations input-tokens))
-         (entries (blue--find-command-entries invocations commands)))
-    (list :invocations invocations
-          :entries entries
-          :interactive-p (seq-some (lambda (cmd)
-                                     (when (member cmd blue-interactive-commands)
-                                       t))
-                                   invocations)
-          :needs-config-p (seq-some (lambda (entry)
-                                      (alist-get 'requires-configuration? entry))
-                                    entries)
-          :configure-p (member "configure" invocations))))
+(defun blue--interactive-p (command)
+  "Return t if COMMAND is a member of `blue-interactive-commands'."
+  (when (member command blue-interactive-commands)
+    t))
+
+(defun blue--any-interactive-p (input-tokens)
+  "Return t if an interactive command is part of INPUT-TOKENS.
+
+A comand is considered interactive if it is a member of `blue-interactive-commands'."
+  (let ((invocations (blue--parse-invocations input-tokens)))
+    (seq-some #'blue--interactive-p invocations)))
 
 
 ;;; Command Prompt.
@@ -724,17 +740,17 @@ COMINT-FLIP inverts the interactive compilation logic."
   (interactive (blue--prompt-for-commands))
 
   (when input
-    (let* ((flags (blue--normalize-flags blue-default-flags))
+    (let* ((options (blue--normalize-options blue-default-options))
            (tokens (mapcar #'string-split input))
-           (analysis (blue--analyze-commands tokens commands))
-           (comint (xor (plist-get analysis :interactive-p) comint-flip)))
+           (is-interactive (blue--any-interactive-p tokens))
+           (comint (xor is-interactive comint-flip)))
       (let ((command-string (string-join
                              (cons blue-binary
-                                   (append (when flags flags)
-                                           (cons (string-join input " -- ") nil)))
+                                   (append (when options options)
+                                           (list (string-join input " -- "))))
                              " ")))
-        ;; Bring `blue--build-dir' to the from of the list so it's
-        ;; ordered by usage.
+        ;; Bring `blue--build-dir' to the from of the list so it's ordered by
+        ;; usage.
         (when blue--build-dir
           (blue--cache-add blue--build-dir))
         (blue--compile command-string comint)))))
