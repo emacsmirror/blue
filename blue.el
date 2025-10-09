@@ -381,7 +381,7 @@ If RAW is non nil, the serialized string will not be evaluated."
                (goto-char (point-min)))
              (display-buffer blue--log-buffer)))))
 
-(defun blue--get-config (blueprint &optional dir)
+(defun blue--get-execution-environment (blueprint &optional dir)
   "Return the BLUEPRINT configuration.
 
 If DIR is non-nil return the configuration stored in DIR."
@@ -389,7 +389,7 @@ If DIR is non-nil return the configuration stored in DIR."
          (options (when blueprint (list "--file" blueprint
                                         "--store-directory" temp-dir)))
          (output (unwind-protect
-                     (blue--execute-serialize options ".elisp-serialize-configuration")
+                     (blue--execute-serialize options ".elisp-serialize-execution-environment")
                    (delete-directory temp-dir t)))
          (data (car output))
          (exit-code (cdr output)))
@@ -542,7 +542,7 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
 
 (defun blue--set-search-path (blueprint)
   "Set search path for BLUEPRINT."
-  (let* ((conf (blue--get-config blueprint))
+  (let* ((conf (blue--get-execution-environment blueprint))
          (srcdir (blue--config-get "srcdir" conf)))
     ;; Make 'srcdir' errors searchable in compilation buffer.
     (setq-local blue--search-path (seq-uniq (cons srcdir compilation-search-path))
