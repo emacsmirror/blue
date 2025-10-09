@@ -20,6 +20,9 @@ Features:
 - Run command:
 [[file:screenshots/blue-run-command.png]]
 
+- Transient menu:
+[[file:screenshots/blue-transient.png]]
+
 - Replay:
 [[file:screenshots/blue-replay.png]]
 
@@ -33,7 +36,11 @@ Add this to your configuration file to install it from source:
 #+end_src
 
 * Usage
-Run ~M-x blue-run-command~ in a [[https://codeberg.org/lapislazuli/blue][BLUE]] project.
+A detailed usage of any of the following commands can be displayed through ~M-x
+describe-function RET blue-run-command~.
+
+** Run command
+Execute ~M-x blue-run-command~ in a [[https://codeberg.org/lapislazuli/blue][BLUE]] project.
 
 You will be prompted by a command, in this minibuffer you can chain commands
 through the =--= separator, after inserting a space the completion will update
@@ -43,8 +50,9 @@ meaning that you can use ~complete-symbol~, generally bound to =C-M-i= to
 complete the arguments, you can complete [[https://codeberg.org/lapislazuli/blue][BLUE]] options such as ~--always-build~
 or command arguments such as ~--prefix=~.
 
-There is more information about how to use this command in its docstring, use
-~M-x describe-function RET blue-run-command~ to display it.
+** Transient
+If you prefer a transient menu, this package provides ~M-x blue-transient~.
 
+** Replay
 Additionally, this package provides an interactive interface for the BLUE replay
 command. Display it with ~M-x blue-replay~.
