@@ -509,7 +509,7 @@ keeps running in the compilation buffer."
                            blue-transient--prompt-args
                            :transient t)]
                          ;; Build dirs.
-                         ["Previous build directory"
+                         ["Build directory"
                           ,@(seq-mapn (lambda (idx build-dir)
                                         (list (number-to-string idx) "" build-dir
                                               :format "%k %v"))

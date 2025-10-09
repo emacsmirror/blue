@@ -480,7 +480,7 @@ If OVERRIDE is non nil disable CONFIGS."
                            (propertize lines 'face 'blue-hint-separator))
                         lines)))
     (concat
-     "Previous build directory (M-<num> to select):\n"
+     "Build directory (M-<num> to select):\n"
      lines*
      "\n"
      (propertize " " 'face 'blue-hint-separator
