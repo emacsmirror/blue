@@ -363,8 +363,15 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (defun blue--get-commands (blueprint)
   "Return the commands provided by BLUEPRINT."
-  (let* ((options (when blueprint (list "--file" blueprint)))
-         (output (blue--execute-serialize options ".elisp-serialize-commands"))
+  ;; Running in `temp-dir' is done to ensure that `.blue-store' does not get
+  ;; created in the current directory when invoking `blue' commands.
+  (let* ((temp-dir (make-temp-file "blue-" t))
+         (options (when blueprint
+                    (list "--file" blueprint
+                          "--store-directory" temp-dir)))
+         (output (unwind-protect
+                     (blue--execute-serialize options ".elisp-serialize-commands")
+                   (delete-directory temp-dir t)))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
@@ -378,12 +385,12 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Return the BLUEPRINT configuration.
 
 If DIR is non-nil return the configuration stored in DIR."
-  (let* ((file-flag (when blueprint
-                      (list "--file" blueprint)))
-         (build-dir-flag (when dir
-                           (list "--build-directory" dir)))
-         (options (append file-flag build-dir-flag))
-         (output (blue--execute-serialize options ".elisp-serialize-configuration"))
+  (let* ((temp-dir (make-temp-file "blue-" t))
+         (options (when blueprint (list "--file" blueprint
+                                        "--store-directory" temp-dir)))
+         (output (unwind-protect
+                     (blue--execute-serialize options ".elisp-serialize-configuration")
+                   (delete-directory temp-dir t)))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
@@ -402,8 +409,13 @@ If DIR is non-nil return the configuration stored in DIR."
 
 (blue--define-memoized blue--autocomplete (input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
-  (let* ((command (concat blue-binary " .autocomplete \"blue " input "\""))
-         (output (shell-command-to-string command)))
+  (let* ((temp-dir (make-temp-file "blue-" t))
+         (command (concat blue-binary
+                          " --store-directory " temp-dir
+                          " .autocomplete \"blue " input "\""))
+         (output (unwind-protect
+                     (shell-command-to-string command)
+                   (delete-directory temp-dir t))))
     (string-split output)))
 
 (defun blue--completion-table (&rest _)
