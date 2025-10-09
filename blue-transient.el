@@ -459,6 +459,9 @@ to be specially handled."
 (defun blue-transient ()
   "Open transient menu for BLUE.
 
+Invoked with universal prefix argument '\\[universal-argument]', prompt
+for a directory to use when running 'blue'.
+
 The following steps are performed:
 
  - For each command, a unique key sequence is assigned.  See
@@ -475,47 +478,59 @@ keeps running in the compilation buffer."
   (interactive)
   (blue--ensure-cache)
   (let* ((blue--blueprint (blue--find-blueprint))
-         (commands (blue--get-commands blue--blueprint))
+         (prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
-         (indices (number-sequence 1 (length build-dirs)))
-         ;; Rebuild menu.
-         (transient `(transient-define-prefix blue-transient--menu ()
-                       :incompatible ',(list build-dirs)
-                       :value '(,(car build-dirs))
-                       ;; Heading.
-                       [:description
-                        blue-transient--menu-heading
-                        ("." "Blue options" "options="
-                         :reader
-                         (lambda (prompt initial-input history)
-                           (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
-                             (read-from-minibuffer prompt initial-input nil nil history))))
-                        ("," "Last command args"
-                         blue-transient--prompt-args
-                         :transient t)]
-                       ;; Build dirs.
-                       ["Previous build directory"
-                        ,@(seq-mapn (lambda (idx build-dir)
-                                      (list (number-to-string idx) "" build-dir
-                                            :format "%k %v"))
-                                    indices build-dirs)]
-                       ;; Commands.
-                       ["Commands"
-                        ,@(blue-transient--build-menu commands)
-                        ;; Controls.
-                        [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)
-                         ("DEL" "Del" blue-transient--del :transient t)
-                         ("C-l" "Clear" blue-transient--clear :transient t)
-                         ("^" "Comint flip" "flip")
-                         ("_" "Undo" blue-transient-undo :transient t)
-                         ("M-_" "Redo" blue-transient-redo :transient t)]])))
-    ;; Only evaluate menu if it has changed since the last invocation. This
-    ;; ensures that any saved state (eg.: `transient-set') is preserved.
-    (unless (equal transient blue-transient--menu-expresion)
-      (setq blue-transient--menu-expresion transient)
-      (eval transient))
-    ;; Open menu.
-    (blue-transient--menu)))
+         (last-build-dir (car build-dirs))
+         (prefix (car current-prefix-arg))
+         (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
+                           (and blue-require-build-directory
+                                (not last-build-dir))))
+         (build-dir (when prompt-dir-p
+                      (blue--prompt-dir t))))
+    (when build-dir
+      (blue--cache-add build-dir)
+      (setq build-dirs (cons build-dir build-dirs)
+            last-build-dir (car build-dirs)))
+    ;; Rebuild menu.
+    (let* ((commands (blue--get-commands blue--blueprint))
+           (indices (number-sequence 1 (length build-dirs)))
+           (transient `(transient-define-prefix blue-transient--menu ()
+                         :incompatible ',(list build-dirs)
+                         :value '(,last-build-dir)
+                         ;; Heading.
+                         [:description
+                          blue-transient--menu-heading
+                          ("." "Blue options" "options="
+                           :reader
+                           (lambda (prompt initial-input history)
+                             (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                               (read-from-minibuffer prompt initial-input nil nil history))))
+                          ("," "Last command args"
+                           blue-transient--prompt-args
+                           :transient t)]
+                         ;; Build dirs.
+                         ["Previous build directory"
+                          ,@(seq-mapn (lambda (idx build-dir)
+                                        (list (number-to-string idx) "" build-dir
+                                              :format "%k %v"))
+                                      indices build-dirs)]
+                         ;; Commands.
+                         ["Commands"
+                          ,@(blue-transient--build-menu commands)
+                          ;; Controls.
+                          [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)
+                           ("DEL" "Del" blue-transient--del :transient t)
+                           ("C-l" "Clear" blue-transient--clear :transient t)
+                           ("^" "Comint flip" "flip")
+                           ("_" "Undo" blue-transient-undo :transient t)
+                           ("M-_" "Redo" blue-transient-redo :transient t)]])))
+      ;; Only evaluate menu if it has changed since the last invocation. This
+      ;; ensures that any saved state (eg.: `transient-set') is preserved.
+      (unless (equal transient blue-transient--menu-expresion)
+        (setq blue-transient--menu-expresion transient)
+        (eval transient))
+      ;; Open menu.
+      (blue-transient--menu))))
 
 (provide 'blue-transient)
 ;;; blue-transient.el ends here.
