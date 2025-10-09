@@ -504,7 +504,8 @@ keeps running in the compilation buffer."
                                (read-from-minibuffer prompt initial-input nil nil history))))
                           ("," "Last command args"
                            blue-transient--prompt-args
-                           :transient t)]
+                           :transient t)
+                          ("^" "Comint flip" "flip")]
                          ;; Build dirs.
                          ["Build directory"
                           ,@(seq-mapn (lambda (idx build-dir)
@@ -518,8 +519,7 @@ keeps running in the compilation buffer."
                           [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)
                            ("DEL" "Del" blue-transient--del :transient t)
                            ("C-l" "Clear" blue-transient--clear :transient t)
-                           ("^" "Comint flip" "flip")
-                           ("_" "Undo" blue-transient-undo :transient t)
+                           ("_" "  Undo" blue-transient-undo :transient t)
                            ("M-_" "Redo" blue-transient-redo :transient t)]])))
       ;; Only evaluate menu if it has changed since the last invocation. This
       ;; ensures that any saved state (eg.: `transient-set') is preserved.
