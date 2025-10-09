@@ -418,9 +418,6 @@ to be specially handled."
 
 ;;; UI.
 
-;; TODO: Implement command arguments as a value transient option that always
-;; affects the last inputed command.
-
 (defun blue-transient--setup-minibuffer ()
   "Setup keybindings and completion for minibuffer prompt."
   (use-local-map (copy-keymap (current-local-map)))
