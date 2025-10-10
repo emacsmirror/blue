@@ -344,7 +344,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Serialization.
 
-(defun blue--execute-serialize (options command &optional raw)
+(defun blue--execute-serialize (options command &optional parse-json-p)
   "Execute BLUE serialization COMMAND with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
@@ -352,13 +352,19 @@ If RAW is non nil, the serialized string will not be evaluated."
          (args (append (or options '()) (list command)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
-         (output (with-output-to-string
-                   (setq exit-code
-                         (apply #'call-process blue-binary nil standard-output nil args)))))
-    (blue--log-output output command-string exit-code)
-    (cons (if raw
+         (raw-output (with-output-to-string
+                       (setq exit-code
+                             (apply #'call-process blue-binary nil standard-output nil args))))
+         (output (replace-regexp-in-string ";;;.*\n?" "" raw-output)))
+    (blue--log-output raw-output command-string exit-code)
+    (cons (if (or parse-json-p
+                  (not (zerop exit-code)))
               output
-            (read output))
+            (json-parse-string output
+                               :object-type 'alist
+                               :array-type 'list
+                               :null-object nil
+                               :false-object nil))
           exit-code)))
 
 (defun blue--get-commands (blueprint)
@@ -370,7 +376,7 @@ If RAW is non nil, the serialized string will not be evaluated."
                     (list "--file" blueprint
                           "--store-directory" temp-dir)))
          (output (unwind-protect
-                     (blue--execute-serialize options ".elisp-serialize-commands")
+                     (blue--execute-serialize options ".serialize-commands")
                    (delete-directory temp-dir t)))
          (data (car output))
          (exit-code (cdr output)))
@@ -389,7 +395,7 @@ If DIR is non-nil return the configuration stored in DIR."
          (options (when blueprint (list "--file" blueprint
                                         "--store-directory" temp-dir)))
          (output (unwind-protect
-                     (blue--execute-serialize options ".elisp-serialize-execution-environment")
+                     (blue--execute-serialize options ".serialize-execution-environment")
                    (delete-directory temp-dir t)))
          (data (car output))
          (exit-code (cdr output)))
@@ -624,7 +630,8 @@ A comand is considered interactive if it is a member of `blue-interactive-comman
                                  commands))
                 (synopsis (alist-get 'synopsis entry)))
       (concat (make-string (+ blue-annotation-padding
-                              (- width (string-width candidate))) ?\s)
+                              (- width (string-width candidate)))
+                           ?\s)
               (propertize synopsis 'face 'blue-documentation)))))
 
 (defun blue--create-group-fn (commands)
@@ -636,7 +643,7 @@ A comand is considered interactive if it is a member of `blue-interactive-comman
                                      (string= candidate (alist-get 'invoke cmd)))
                                    commands))
                   (category (alist-get 'category entry)))
-        (symbol-name category)))))
+        category))))
 
 (defun blue--create-completion-properties (commands invocations)
   "Create completion properties for COMMANDS and INVOCATIONS."

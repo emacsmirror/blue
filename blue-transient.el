@@ -355,7 +355,7 @@ to be specially handled."
   "Group commands by CATEGORIES and assign CATEGORY-KEYS."
   (mapcar
    (lambda (category)
-     (let* ((category-name (symbol-name (car category)))
+     (let* ((category-name (car category))
             (category-commands (cdr category))
             (category-command-names (mapcar (lambda (command)
                                               (alist-get 'invoke command))
@@ -391,21 +391,18 @@ to be specially handled."
   ;; TODO: we don't really need category names, `blue-transient--assign-keys'
   ;; should be refactored to take a symbols instead of strings and the target
   ;; label creation can be removed since it's not needed.
-  (let* ((categories (seq-uniq (mapcar (lambda (command)
-                                         (alist-get 'category command))
-                                       commands)))
-         (category-names (mapcar (lambda (category)
-                                   (symbol-name category))
-                                 categories))
+  (let* ((category-names (seq-uniq (mapcar (lambda (command)
+                                             (alist-get 'category command))
+                                           commands)))
          (category-keys (blue-transient--assign-keys category-names t))
          (sorted-commands-by-category
           (mapcar (lambda (category)
                     (cons category
                           (seq-filter (lambda (command)
-                                        (eq (alist-get 'category command)
-                                            category))
+                                        (string-equal (alist-get 'category command)
+                                                      category))
                                       commands)))
-                  categories))
+                  category-names))
          (grouped-commands
           (blue-transient--group-commands sorted-commands-by-category
                                           category-keys)))
