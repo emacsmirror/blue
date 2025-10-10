@@ -167,13 +167,13 @@ This is used when passing universal prefix argument `C-u' to
   "Check if `blue-binary' is in PATH."
   (let ((bin (executable-find blue-binary)))
     (unless bin
-      (let* ((prefix (concat "▶ " (propertize "[ERROR] " 'face 'error)))
+      (let* ((prefix (propertize "[ERROR] " 'face 'error))
              (msg (concat (propertize "`blue'" 'face 'font-lock-constant-face)
                           " command not found in "
                           (propertize "`exec-path'" 'face 'font-lock-type-face)))
              (msg* (concat prefix msg)))
-        (blue--log-output (concat msg* "\n"))
-        (message msg*)))
+        (blue--log-output (concat msg* "\n") "executable-find" 1)
+        (error msg*)))
     bin))
 
 ;; TODO: should we use 'blue' to locate the 'blueprint.scm'?
@@ -666,34 +666,32 @@ not exist."
 
 (defun blue--prompt-for-commands ()
   "Interactive prompt for BLUE commands."
-  (if (not (blue--check-blue-binary))
-      (list nil)
-    (blue--ensure-cache)
-
-    (let* ((prefix (car current-prefix-arg))
-           (build-dirs (blue--cache-get-build-dirs default-directory))
-           (last-build-dir (car build-dirs))
-           (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
-                             (and blue-require-build-directory
-                                  (not last-build-dir))))
-           (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
-      (setq blue--overiden-build-dir (when prompt-dir-p
-                                       (blue--prompt-dir t))
-            blue--build-dir (or blue--overiden-build-dir last-build-dir))
-      (if-let* ((blue--blueprint (blue--find-blueprint))
-                (commands (blue--get-commands blue--blueprint))
-                (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
-                (completion-extra-properties
-                 (blue--create-completion-properties commands invocations))
-                (crm-separator (propertize "[ \t]*--[ \t]+"
-                                           'separator "--"
-                                           'description "double-dash-separated list"))
-                (crm-prompt "[%d] [CMR%s] Command: "))
-          (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
-                  (completing-read-multiple "Command: " invocations))
-                commands
-                comint-flip)
-        (list nil)))))
+  (blue--check-blue-binary)
+  (blue--ensure-cache)
+  (let* ((prefix (car current-prefix-arg))
+         (build-dirs (blue--cache-get-build-dirs default-directory))
+         (last-build-dir (car build-dirs))
+         (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
+                           (and blue-require-build-directory
+                                (not last-build-dir))))
+         (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
+    (setq blue--overiden-build-dir (when prompt-dir-p
+                                     (blue--prompt-dir t))
+          blue--build-dir (or blue--overiden-build-dir last-build-dir))
+    (if-let* ((blue--blueprint (blue--find-blueprint))
+              (commands (blue--get-commands blue--blueprint))
+              (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
+              (completion-extra-properties
+               (blue--create-completion-properties commands invocations))
+              (crm-separator (propertize "[ \t]*--[ \t]+"
+                                         'separator "--"
+                                         'description "double-dash-separated list"))
+              (crm-prompt "[%d] [CMR%s] Command: "))
+        (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
+                (completing-read-multiple "Command: " invocations))
+              commands
+              comint-flip)
+      (list nil))))
 
 
 ;;; UI.

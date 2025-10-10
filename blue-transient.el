@@ -469,6 +469,7 @@ The following steps are performed:
 After that, `blue-transient' closes menu and returns, while the command
 keeps running in the compilation buffer."
   (interactive)
+  (blue--check-blue-binary)
   (blue--ensure-cache)
   (let* ((blue--blueprint (blue--find-blueprint))
          (prefix (car current-prefix-arg))

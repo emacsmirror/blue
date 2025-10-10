@@ -321,6 +321,7 @@ line:column information.")
   "Interactively display replay data from DIR."
   (interactive
    (progn
+     (blue--check-blue-binary)
      (blue--ensure-cache)
      (let* ((known (blue--cache-get-build-dirs default-directory))
             (cur-dir (directory-file-name (expand-file-name default-directory)))
