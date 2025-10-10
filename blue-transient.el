@@ -28,7 +28,6 @@
 
 (require 'blue)
 (require 'cus-edit) ; For `custom-button' face.
-(require 's)
 (require 'seq)
 (require 'transient)
 (require 'wid-edit) ; For `widget-field' face.
@@ -372,8 +371,8 @@ to be specially handled."
                                            t))
                   (command-key
                    (if (> (length category-commands) 1)
-                       (s-concat (caddr (assoc category-name category-keys))
-                                 (caddr (assoc command-invoke category-command-keys)))
+                       (concat (caddr (assoc category-name category-keys))
+                               (caddr (assoc command-invoke category-command-keys)))
                      (caddr (assoc command-invoke category-command-keys))))
                   (command-synopsis (alist-get 'synopsis command)))
              `(,command-key

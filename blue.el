@@ -4,7 +4,7 @@
 ;;
 ;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
 ;; Version: 0.0.9
-;; Package-Requires: ((emacs "30.1"))
+;; Package-Requires: ((emacs "30.1") (magit-section "4.3.8"))
 ;; Keywords: blue, tools
 ;; URL: https://codeberg.org/lapislazuli/blue.el
 
