@@ -245,9 +245,6 @@ The function ensures that the assigned key is not already present in KEY-MAP."
 GROUP-P is passed to `blue-transient-keychar-function' in case it needs
 to be specially handled."
   (let* ((key-map (make-hash-table :test 'equal))
-         (shared-prefix (seq-reduce 's-shared-start
-                                    words
-                                    (car words)))
          (sorted-words (seq-sort
                         'string< words))
          (max-len (seq-max (seq-map (lambda (w) (length w))
@@ -281,59 +278,51 @@ to be specially handled."
                       (seq-remove (lambda (w)
                                     (assoc w word-keys))
                                   sorted-words)))
-          (if (and (seq-contains-p sorted-words shared-prefix)
-                   (not (assoc shared-prefix word-keys)))
-              ;; Special case: word = shared prefix.
-              (setq word shared-prefix
-                    word-index 0
-                    word-key (elt word 0))
-            ;; Normal case.
-            (seq-find
-             (lambda (prefer-first)
-               (seq-find
-                (lambda (casefn)
-                  ;; If prefer-first is true:
-                  ;;  - Find word with minimal N so that its Nth character is not taken.
-                  ;; Else:
-                  ;;  - Find word with minimal N so that its Nth character is not taken
-                  ;;    AND is unique among Nth characters of all words.
-                  (seq-find
-                   (lambda (index)
-                     (when (setq word
-                                 (seq-find
-                                  (lambda (word)
-                                    (and (not (assoc word word-keys))
-                                         (> (length word) index)
-                                         (blue-transient--keychar-p (elt word index))
-                                         (not (gethash
-                                               (funcall casefn (elt word index)) key-map))
-                                         (or prefer-first
-                                             (not (seq-find
-                                                   (lambda (other-word)
-                                                     (and
-                                                      (not (string= other-word word))
-                                                      (> (length other-word) index)
-                                                      (eq (funcall casefn (elt other-word index))
-                                                          (funcall casefn (elt word index)))))
-                                                   sorted-words)))))
-                                  sorted-words))
-                       (setq word-index index
-                             word-key (funcall casefn (elt word index)))))
-                   (number-sequence (length shared-prefix)
-                                    max-len)))
-                ;; Repeat above search a few times: first try characters as-is, then try
-                ;; their upper-case and down-case variants.
-                (if blue-transient-keychar-unfold
-                    (list 'identity 'upcase 'downcase)
-                  (list 'identity))))
-             ;; If group-p is set, do above search once with prefer-first set to t.
-             ;; Otherwise, first try it with prefer-first set to nil, then with t.
-             ;; When prefer-first is nil, less matches are possible, but we have a
-             ;; nice effect when keychars are placed in the same column or close,
-             ;; so we try to maximize this effect.
-             (if group-p
-                 '(t)
-               '(nil t)))))
+          (seq-find
+           (lambda (prefer-first)
+             (seq-find
+              (lambda (casefn)
+                ;; If prefer-first is true:
+                ;;  - Find word with minimal N so that its Nth character is not taken.
+                ;; Else:
+                ;;  - Find word with minimal N so that its Nth character is not taken
+                ;;    AND is unique among Nth characters of all words.
+                (seq-find
+                 (lambda (index)
+                   (when (setq word
+                               (seq-find
+                                (lambda (word)
+                                  (and (not (assoc word word-keys))
+                                       (> (length word) index)
+                                       (blue-transient--keychar-p (elt word index))
+                                       (not (gethash
+                                             (funcall casefn (elt word index)) key-map))
+                                       (or prefer-first
+                                           (not (seq-find
+                                                 (lambda (other-word)
+                                                   (and
+                                                    (not (string= other-word word))
+                                                    (> (length other-word) index)
+                                                    (eq (funcall casefn (elt other-word index))
+                                                        (funcall casefn (elt word index)))))
+                                                 sorted-words)))))
+                                sorted-words))
+                     (setq word-index index
+                           word-key (funcall casefn (elt word index)))))
+                 (number-sequence 0 max-len)))
+              ;; Repeat above search a few times: first try characters as-is, then try
+              ;; their upper-case and down-case variants.
+              (if blue-transient-keychar-unfold
+                  (list 'identity 'upcase 'downcase)
+                (list 'identity))))
+           ;; If group-p is set, do above search once with prefer-first set to t.
+           ;; Otherwise, first try it with prefer-first set to nil, then with t.
+           ;; When prefer-first is nil, less matches are possible, but we have a
+           ;; nice effect when keychars are placed in the same column or close,
+           ;; so we try to maximize this effect.
+           (if group-p
+               '(t)
+             '(nil t))))
         ;; Can't choose key char from word's letters, fallback to random key.
         ;; Randomness is based on word hash, so that we return same key
         ;; for same word, when possible.
@@ -343,12 +332,10 @@ to be specially handled."
                                sorted-words)
                 word-key (blue-transient--random-key word key-map)
                 word-index (seq-position word word-key)))
-        (let ((word-label (substring word 0)))
-          (push (list word
-                      word-label
-                      (string word-key))
-                word-keys)
-          (puthash word-key t key-map))))
+        (push (list word
+                    (string word-key))
+              word-keys)
+        (puthash word-key t key-map)))
     word-keys))
 
 (defun blue-transient--group-commands (categories category-keys)
@@ -371,9 +358,9 @@ to be specially handled."
                                            t))
                   (command-key
                    (if (> (length category-commands) 1)
-                       (concat (caddr (assoc category-name category-keys))
-                               (caddr (assoc command-invoke category-command-keys)))
-                     (caddr (assoc command-invoke category-command-keys))))
+                       (concat (cadr (assoc category-name category-keys))
+                               (cadr (assoc command-invoke category-command-keys)))
+                     (cadr (assoc command-invoke category-command-keys))))
                   (command-synopsis (alist-get 'synopsis command)))
              `(,command-key
                ,(capitalize command-invoke)
