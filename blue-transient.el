@@ -448,6 +448,16 @@ to be specially handled."
                 (append front (list cmd/args))
               (list cmd/args))))))
 
+(defun blue-transient--free-type ()
+  "Helper for prompting for input to add to BLUE commands."
+  (interactive)
+  (let* ((input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                  (read-from-minibuffer "Input: " nil nil nil nil))))
+    (blue-transient--save-state)
+    (setq blue-transient--command
+          (append blue-transient--command
+                  (list (list input))))))
+
 ;;;###autoload
 (defun blue-transient ()
   "Open transient menu for BLUE.
@@ -502,6 +512,7 @@ keeps running in the compilation buffer."
                           ("," "Last command args"
                            blue-transient--prompt-args
                            :transient t)
+                          ("!" "Free-type" blue-transient--free-type :transient t)
                           ("^" "Comint flip" "flip")]
                          ;; Build dirs.
                          ["Build directory"
