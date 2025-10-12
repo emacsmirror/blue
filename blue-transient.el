@@ -160,10 +160,11 @@ If it has none left, remove the entire command."
   (transient-set)
   (let* ((args (transient-args (oref transient-current-prefix command)))
          (comint-flip (transient-arg-value "flip" args))
-         (transient-options (transient-arg-value "options=" args))
-         (options (or (when transient-options
-                        (list transient-options))
-                      (blue--normalize-options blue-default-options)))
+         (default-options (blue--normalize-options blue-default-options))
+         (options (append default-options
+                          (seq-filter (lambda (arg)
+                                        (string-prefix-p "--" arg))
+                                      args)))
          (is-interactive (blue--any-interactive-p blue-transient--command))
          (comint (xor is-interactive comint-flip))
          (known-build-dirs (blue--cache-get-build-dirs default-directory))
@@ -486,25 +487,66 @@ keeps running in the compilation buffer."
     (let* ((commands (blue--get-commands blue--blueprint))
            (indices (number-sequence 1 (length build-dirs)))
            (transient `(transient-define-prefix blue-transient--menu ()
-                         :incompatible ',(list build-dirs)
+                         :incompatible '(,(cons "--build-directory="
+                                                build-dirs))
                          :value '(,last-build-dir)
                          ;; Heading.
                          [:description
                           blue-transient--menu-heading
-                          ("." "Blue options" "options="
-                           :reader
-                           (lambda (prompt initial-input history)
-                             (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
-                               (read-from-minibuffer prompt initial-input nil nil history))))
-                          ("," "Last command args"
-                           blue-transient--prompt-args
-                           :transient t)
-                          ("!" "Free-type" blue-transient--free-type :transient t)
-                          ("^" "Comint flip" "flip")]
+                          ["Options"
+                           ("-a" "Always build" "--always-build")
+                           (5 "-c" "Color" "--color="
+                              :choices ("auto" "always" "never"))
+                           (5 "-C" "Compiled load path" "--compiled-load-path"
+                              :prompt "Compiled load path: "
+                              :reader transient-read-existing-directory)
+                           (5 "-F" "File" "--file="
+                              :prompt "Blueprint file: "
+                              :reader transient-read-existing-file)
+                           ("-f" "Fresh store" "--fresh-store")
+                           ("-j" "Jobs"
+                            "--jobs="
+                            ;; NOTE: here we could use
+                            ;; `transient-read-number-N+' but I prefer the
+                            ;; prompt to have a default value when hitting
+                            ;; 'RET', instead of an initial value which you have
+                            ;; to erase.
+                            :reader (lambda (&rest _)
+                                      (let* ((cpus (num-processors))
+                                             (input (read-number "Max parallel jobs: "
+                                                                 (num-processors))))
+                                        (if (not (zerop input))
+                                            (number-to-string input)
+                                          (message "Zero is not a valid value.")
+                                          nil))))
+                           (5 "-L" "Load path" "--load-path="
+                              :prompt "Load path: "
+                              :reader transient-read-existing-directory)
+                           ("-l" "Log level" "--log-level="
+                            :choices ("error" "warn" "info" "debug" "trace"))
+                           ("-p" "Profile" "--profile="
+                            :choices ("gc" "stat" "trace"))
+                           (5 "-s" "Source directory" "--source-directory="
+                              :prompt "Source directory: "
+                              :reader transient-read-existing-directory)
+                           (5 "-S" "Store directory" "--store-directory="
+                              :prompt "Store directory: "
+                              :reader transient-read-existing-directory)
+                           ("-t" "Trace" "--trace")]
+                          [("," "Last command args"
+                            blue-transient--prompt-args
+                            :transient t)
+                           ("!" "Free-type" blue-transient--free-type :transient t)
+                           ("^" "Comint flip" "flip")]]
                          ;; Build dirs.
                          ["Build directory"
+                          ;; NOTE: this switch won't add the directory to
+                          ;; `blue--cache-list' is this the desired behavior?
+                          ("-b" "Build directory" "--build-directory="
+                           :prompt "Build directory: "
+                           :reader transient-read-existing-directory)
                           ,@(seq-mapn (lambda (idx build-dir)
-                                        (list (number-to-string idx) "" build-dir
+                                        (list (concat " " (number-to-string idx)) "" build-dir
                                               :format "%k %v"))
                                       indices build-dirs)]
                          ;; Commands.
