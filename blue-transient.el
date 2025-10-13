@@ -376,9 +376,6 @@ to be specially handled."
 
 (defun blue-transient--build-menu (commands)
   "Build transient menu for BLUE COMMANDS."
-  ;; TODO: we don't really need category names, `blue-transient--assign-keys'
-  ;; should be refactored to take a symbols instead of strings and the target
-  ;; label creation can be removed since it's not needed.
   (let* ((category-names (seq-uniq (mapcar (lambda (command)
                                              (alist-get 'category command))
                                            commands)))
