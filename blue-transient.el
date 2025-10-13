@@ -407,6 +407,8 @@ to be specially handled."
     (list (seq-drop lst half)
           (seq-take lst half))))
 
+;; TODO: memoize this function introducing the current blueprint as argument to
+;; ensure that the results are cached per blueprint.
 (defun blue-transient--arguments-menu (command)
   "Build transient menu for BLUE COMMAND arguments."
   (when-let* ((suffixes (seq-filter (lambda (suffix)
@@ -561,7 +563,8 @@ keeps running in the compilation buffer."
                               :prompt "Store directory: "
                               :reader transient-read-existing-directory)
                            ("-t" "Trace" "--trace")]
-                          [("," "Last command args"
+                          ["" ; Empty description for alignment.
+                           ("," "Last command args"
                             blue-transient--prompt-args
                             :transient t)
                            ("!" "Free-type" blue-transient--free-type :transient t)
@@ -577,6 +580,11 @@ keeps running in the compilation buffer."
                                         (list (concat " " (number-to-string idx)) "" build-dir
                                               :format "%k %v"))
                                       indices build-dirs)]
+                         ;; TODO: add argument selector with `M-<arrows>'.
+                         ;; TODO: highlight selected argument in command prompt.
+                         ;; TODO: make all modifying command functions fetch the
+                         ;; argument list and update the contents of
+                         ;; `blue-transient--command'.
                          [:description
                           (lambda ()
                             (let ((last-cmd (caar (last blue-transient--command))))
