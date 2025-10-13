@@ -131,7 +131,10 @@ This is used when passing universal prefix argument `C-u' to
 (defvar blue--buffer-name-function #'blue--default-buffer-name
   "Function used by BLUE to name the compilation buffer.")
 
-(defvar blue--log-buffer " *blue log*"
+;; NOTE: this buffer cannot be hidden since `font-lock-mode' disables itself for
+;; hidden buffers. The fontifications is used to propertize ANSI color
+;; sequences.
+(defvar blue--log-buffer "*blue log*"
   "Buffer used to capture output from BLUE commands.")
 
 (defvar blue--hint-overlay nil
@@ -237,16 +240,16 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
 
 TIME is the timestamp of the header."
   (propertize (format "▶ %s  [%s]\n" command (current-time-string))
-              'face 'bold))
+              'font-lock-face 'bold))
 
 (defun blue--format-footer (exit-code)
   "Format status footer for output buffer.
 
 EXIT-CODE displays the status of the command."
-  (propertize (format "⏹ Status: %s\n\n" exit-code)
-              'face (if (= exit-code 0)
-                        'success
-                      'error)))
+  (propertize (format "⏹ Exit status: %s\n\n" exit-code)
+              'font-lock-face (if (= exit-code 0)
+                                  'success
+                                'error)))
 
 (defun blue--log-output (output &optional command exit-code)
   "Log OUTPUT string to `blue--log-buffer'.
@@ -349,18 +352,19 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 If RAW is non nil, the serialized string will not be evaluated."
   (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
-         (args (append (or options '()) (list command)))
+         (args (append (or options '()) (list "--color" "always" command)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
          (raw-output (with-output-to-string
                        (setq exit-code
                              (apply #'call-process blue-binary nil standard-output nil args))))
-         (output (replace-regexp-in-string ";;;.*\n?" "" raw-output)))
-    (blue--log-output raw-output command-string exit-code)
+         (propertized-output (ansi-color-apply raw-output))
+         (filtered-output (replace-regexp-in-string ";;;.*\n?" "" raw-output)))
+    (blue--log-output propertized-output command-string exit-code)
     (cons (if (or parse-json-p
                   (not (zerop exit-code)))
-              output
-            (json-parse-string output
+              filtered-output
+            (json-parse-string filtered-output
                                :object-type 'alist
                                :array-type 'list
                                :null-object nil
