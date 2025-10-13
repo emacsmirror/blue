@@ -117,14 +117,16 @@ possible saved state.")
   (interactive)
   (when blue-transient--undo-stack
     (push (copy-tree blue-transient--command) blue-transient--redo-stack)
-    (setq blue-transient--command (pop blue-transient--undo-stack))))
+    (setq blue-transient--command (pop blue-transient--undo-stack))
+    (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient-redo ()
   "Redo last undone change to `blue-transient--command'."
   (interactive)
   (when blue-transient--redo-stack
     (push (copy-tree blue-transient--command) blue-transient--undo-stack)
-    (setq blue-transient--command (pop blue-transient--redo-stack))))
+    (setq blue-transient--command (pop blue-transient--redo-stack))
+    (transient-setup 'blue-transient--menu)))
 
 
 ;;; Utilities.
@@ -145,14 +147,16 @@ If it has none left, remove the entire command."
                   (butlast last-cmd))
         ;; Remove entire command.
         (setq blue-transient--command
-              (butlast blue-transient--command))))))
+              (butlast blue-transient--command))))
+    (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--clear ()
   "Clean command prompt."
   (interactive)
   (when blue-transient--command
     (blue-transient--save-state)
-    (setq blue-transient--command nil)))
+    (setq blue-transient--command nil)
+    (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--run ()
   "Run BLUE commands."
@@ -369,8 +373,8 @@ to be specially handled."
                  (blue-transient--save-state)
                  (setq blue-transient--command
                        (append blue-transient--command
-                               (list (list ,command-invoke)))))
-               :transient t)))
+                               (list (list ,command-invoke))))
+                 (transient-setup 'blue-transient--menu)))))
          category-commands))))
    categories))
 
@@ -395,6 +399,33 @@ to be specially handled."
     (mapcar (lambda (item)
               (apply #'vector item))
             grouped-commands)))
+
+(defun blue-transient--split-list-in-two (lst)
+  "Split LST into two halves using seq functions."
+  (let* ((len (length lst))
+         (half (/ len 2)))
+    (list (seq-drop lst half)
+          (seq-take lst half))))
+
+(defun blue-transient--arguments-menu (command)
+  "Build transient menu for BLUE COMMAND arguments."
+  (when-let* ((suffixes (seq-filter (lambda (suffix)
+                                      (string-prefix-p "--" suffix))
+                                    (blue--autocomplete (concat command " --"))))
+              (suffixes-keys (blue-transient--assign-keys suffixes nil))
+              (menu-entries (mapcar (lambda (pair)
+                                      (let* ((suffix (car pair))
+                                             (key (cadr pair))
+                                             (msg (string-replace "-" " "
+                                                                  (string-trim-left suffix "--")))
+                                             (msg* (capitalize msg)))
+                                        (list (concat "--" key) msg* suffix)))
+                                    suffixes-keys))
+              (columns (blue-transient--split-list-in-two menu-entries)))
+    ;; Make each menu entry a vector. Each vector will be a column.
+    (mapcar (lambda (item)
+              (apply #'vector item))
+            columns)))
 
 
 ;;; UI.
@@ -546,6 +577,20 @@ keeps running in the compilation buffer."
                                         (list (concat " " (number-to-string idx)) "" build-dir
                                               :format "%k %v"))
                                       indices build-dirs)]
+                         [:description
+                          (lambda ()
+                            (let ((last-cmd (caar (last blue-transient--command))))
+                              (concat (propertize last-cmd
+                                                  'face '(:inherit font-lock-type-face :box t))
+                                      " arguments")))
+                          :class
+                          transient-columns
+                          :setup-children
+                          (lambda (_)
+                            (when-let* ((last-cmd (caar (last blue-transient--command))))
+                              (transient-parse-suffixes
+                               'transient--prefix
+                               (blue-transient--arguments-menu last-cmd))))]
                          ;; Commands.
                          ["Commands"
                           ,@(blue-transient--build-menu commands)
