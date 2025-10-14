@@ -99,7 +99,13 @@ This is used to prevent reevaluating the same transient, losing any
 possible saved state.")
 
 
-;;; Undo/Redo
+;;; History.
+
+(defvar blue-transient--history nil
+  "Command prompt history stack for `blue-transient--command'.")
+
+(defvar blue-transient--history-index 0
+  "Current history element from `blue-transient--history'.")
 
 (defvar blue-transient--undo-stack nil
   "Undo stack for `blue-transient--command'.")
@@ -126,6 +132,31 @@ possible saved state.")
   (when blue-transient--redo-stack
     (push (copy-tree blue-transient--command) blue-transient--undo-stack)
     (setq blue-transient--command (pop blue-transient--redo-stack))
+    (transient-setup 'blue-transient--menu)))
+
+(defun blue-transient-previous-history ()
+  "Set `blue-transient--command' to previous recorded command."
+  (interactive)
+  (let ((prev (1+ blue-transient--history-index))
+        (hist-length (length blue-transient--history)))
+    (when (> prev hist-length)
+      (message (propertize "End of history; no successing item"
+                           'face 'minibuffer-prompt))
+      (setq prev hist-length))
+    (setq blue-transient--history-index prev)
+    (setq blue-transient--command (nth blue-transient--history-index blue-transient--history))
+    (transient-setup 'blue-transient--menu)))
+
+(defun blue-transient-next-history ()
+  "Set `blue-transient--command' to next recorded command."
+  (interactive)
+  (let ((next (1- blue-transient--history-index)))
+    (when (< next 0)
+      (message (propertize "Beginning of history; no preceding item"
+                           'face 'minibuffer-prompt))
+      (setq next 0))
+    (setq blue-transient--history-index next)
+    (setq blue-transient--command (nth blue-transient--history-index blue-transient--history))
     (transient-setup 'blue-transient--menu)))
 
 
@@ -184,6 +215,10 @@ If it has none left, remove the entire command."
                             (append (when options options)
                                     (list input)))
                       " ")))
+    (let ((last-hist (car blue-transient--history)))
+      ;; Avoid not pushing consecutive duplicates.
+      (unless (equal blue-transient--command last-hist)
+        (push (copy-tree blue-transient--command) blue-transient--history)))
     (blue--compile full-input comint)))
 
 (defun blue-transient--menu-heading ()
@@ -499,6 +534,7 @@ keeps running in the compilation buffer."
   (interactive)
   (blue--check-blue-binary)
   (blue--ensure-cache)
+  (setq blue-transient--history-index 0)
   (let* ((blue--blueprint (blue--find-blueprint))
          (prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
@@ -520,10 +556,14 @@ keeps running in the compilation buffer."
                          :incompatible '(,(cons "--build-directory="
                                                 build-dirs))
                          :value '(,last-build-dir)
-                         ;; Heading.
                          [:description
                           blue-transient--menu-heading
-                          ["Options"
+                          :class
+                          transient-columns
+                          [("M-p" "Previous prompt" blue-transient-previous-history)]
+                          [("M-n" "Next prompt" blue-transient-next-history)]]
+                         ;; Heading.
+                         [["Options"
                            ("-a" "Always build" "--always-build")
                            (5 "-c" "Color" "--color="
                               :choices ("auto" "always" "never"))
