@@ -435,13 +435,6 @@ to be specially handled."
               (apply #'vector item))
             grouped-commands)))
 
-(defun blue-transient--split-list-in-two (lst)
-  "Split LST into two halves using seq functions."
-  (let* ((len (length lst))
-         (half (/ len 2)))
-    (list (seq-drop lst half)
-          (seq-take lst half))))
-
 ;; TODO: memoize this function introducing the current blueprint as argument to
 ;; ensure that the results are cached per blueprint.
 (defun blue-transient--arguments-menu (command)
@@ -458,7 +451,8 @@ to be specially handled."
                                              (msg* (capitalize msg)))
                                         (list (concat "--" key) msg* suffix)))
                                     suffixes-keys))
-              (columns (blue-transient--split-list-in-two menu-entries)))
+              (columns (seq-split menu-entries
+                                  (/ (length menu-entries) 2))))
     ;; Make each menu entry a vector. Each vector will be a column.
     (mapcar (lambda (item)
               (apply #'vector item))
