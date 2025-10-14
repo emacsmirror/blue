@@ -511,6 +511,17 @@ to be specially handled."
           (append blue-transient--command
                   (list (list input))))))
 
+(defun blue-transient--last-command-arguments (_)
+  "Helper function to group last command arguments."
+  (if-let* ((last-cmd (caar (last blue-transient--command)))
+            (argument-groups (blue-transient--arguments-menu last-cmd)))
+      (transient-parse-suffixes
+       'transient--prefix
+       argument-groups)
+    (transient-parse-suffixes
+     'transient--prefix
+     '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
+
 ;;;###autoload
 (defun blue-transient ()
   "Open transient menu for BLUE.
@@ -627,18 +638,18 @@ keeps running in the compilation buffer."
                          ;; `blue-transient--command'.
                          [:description
                           (lambda ()
-                            (let ((last-cmd (caar (last blue-transient--command))))
-                              (concat (propertize last-cmd
-                                                  'face '(:inherit font-lock-type-face :box t))
-                                      " arguments")))
+                            (if-let* ((last-cmd (caar (last blue-transient--command))))
+                                (concat (propertize
+                                         last-cmd
+                                         'face
+                                         '(:inherit font-lock-type-face :box t))
+                                        (propertize " arguments"
+                                                    'face 'bold))
+                              "Last command"))
                           :class
                           transient-columns
                           :setup-children
-                          (lambda (_)
-                            (when-let* ((last-cmd (caar (last blue-transient--command))))
-                              (transient-parse-suffixes
-                               'transient--prefix
-                               (blue-transient--arguments-menu last-cmd))))]
+                          blue-transient--last-command-arguments]
                          ;; Commands.
                          ["Commands"
                           ,@(blue-transient--build-menu commands)
