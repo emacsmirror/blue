@@ -86,6 +86,9 @@ can become key characters."
 (defvar blue-transient--command nil
   "List of BLUE command strings.")
 
+(defvar blue-transient--command-index 0
+  "Current element from `blue-transient--command'.")
+
 (defconst blue-transient--keychar-table
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   "Valid characters used to form the keys to dispatch commands.
@@ -162,6 +165,22 @@ possible saved state.")
 
 ;;; Utilities.
 
+(defun blue-transient--select-previous ()
+  "Select previous command for argument operation from `blue-transient--command'."
+  (interactive)
+  (when blue-transient--command
+    (setq blue-transient--command-index (max (1- blue-transient--command-index)
+                                             0))
+    (transient-setup 'blue-transient--menu)))
+
+(defun blue-transient--select-next ()
+  "Select next command for argument operation from `blue-transient--command'."
+  (interactive)
+  (when blue-transient--command
+    (setq blue-transient--command-index (min (1+ blue-transient--command-index)
+                                             (1- (length blue-transient--command))))
+    (transient-setup 'blue-transient--menu)))
+
 (defun blue-transient--del ()
   "Delete the last argument or command in `blue-transient--command'.
 
@@ -224,14 +243,27 @@ If it has none left, remove the entire command."
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
   (let* ((header (propertize "Commands: " 'face 'bold))
-         (commands (mapcar (lambda (token)
-                             (string-join token " "))
-                           blue-transient--command))
-         (input (string-join commands " -- "))
-         (padding (- (frame-width) (length header)))
-         (formated-command (propertize (string-pad input padding)
-                                       'face 'widget-field)))
-    (concat header formated-command "\n")))
+         (selected-command (nth blue-transient--command-index blue-transient--command))
+         (head (seq-take blue-transient--command blue-transient--command-index))
+         (tail (seq-drop blue-transient--command (1+ blue-transient--command-index)))
+         (propertized-head (mapcar (lambda (tokens)
+                                     (propertize (string-join tokens " ")
+                                                 'face 'widget-field))
+                                   head))
+         (propertized-selection (when selected-command
+                                  (propertize (string-join selected-command " ")
+                                              'face 'blue-hint-highlight)))
+         (propertized-tail (mapcar (lambda (tokens)
+                                     (propertize (string-join tokens " ")
+                                                 'face 'widget-field))
+                                   tail))
+         (commands (append propertized-head
+                           (list propertized-selection)
+                           propertized-tail))
+         (input (string-join commands (propertize " -- "
+                                                  'face 'widget-field))))
+    (concat header input
+            (propertize "\n" 'face '(:inherit widget-field :extend t)))))
 
 (defun blue-transient--menu-columns (items)
   "Return bounded menu column count from ITEMS.
@@ -505,10 +537,11 @@ to be specially handled."
           (append blue-transient--command
                   (list (list input))))))
 
-(defun blue-transient--last-command-arguments (_)
+(defun blue-transient--selected-command-command-arguments (_)
   "Helper function to group last command arguments."
-  (if-let* ((last-cmd (caar (last blue-transient--command)))
-            (argument-groups (blue-transient--arguments-menu last-cmd)))
+  (if-let* ((selected-command (car (nth blue-transient--command-index
+                                        blue-transient--command)))
+            (argument-groups (blue-transient--arguments-menu selected-command)))
       (transient-parse-suffixes
        'transient--prefix
        argument-groups)
@@ -625,25 +658,26 @@ keeps running in the compilation buffer."
                                         (list (concat " " (number-to-string idx)) "" build-dir
                                               :format "%k %v"))
                                       indices build-dirs)]
-                         ;; TODO: add argument selector with `M-<arrows>'.
-                         ;; TODO: highlight selected argument in command prompt.
-                         ;; TODO: make all modifying command functions fetch the
-                         ;; argument list and update the contents of
-                         ;; `blue-transient--command'.
+                         ;; TODO: make all dynamic command suffixes update the
+                         ;; contents of `blue-transient--command'.
                          [:description
                           (lambda ()
-                            (if-let* ((last-cmd (caar (last blue-transient--command))))
+                            (if-let* ((selected-command (car (nth blue-transient--command-index
+                                                                  blue-transient--command))))
                                 (concat (propertize
-                                         last-cmd
+                                         selected-command
                                          'face
-                                         '(:inherit font-lock-type-face :box t))
+                                         '(:inherit blue-hint-highlight :box t))
                                         (propertize " arguments"
                                                     'face 'bold))
                               "Last command"))
                           :class
                           transient-columns
                           :setup-children
-                          blue-transient--last-command-arguments]
+                          blue-transient--selected-command-command-arguments]
+                         ;; Command selector.
+                         [[("<left>" "<-" blue-transient--select-previous :transient t)]
+                          [("<right>" "->" blue-transient--select-next :transient t)]]
                          ;; Commands.
                          ["Commands"
                           ,@(blue-transient--build-menu commands)
