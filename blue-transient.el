@@ -86,7 +86,7 @@ can become key characters."
 (defvar blue-transient--command nil
   "List of BLUE command strings.")
 
-(defvar blue-transient--command-index 0
+(defvar blue-transient--command-index -1
   "Current element from `blue-transient--command'.")
 
 (defconst blue-transient--keychar-table
@@ -165,20 +165,30 @@ possible saved state.")
 
 ;;; Utilities.
 
+(defun blue-transient--command-index-1 ()
+  "Utility to remove 1 from  `blue-transient--command-index' respecting bounds."
+  (setq blue-transient--command-index (max (1- blue-transient--command-index)
+                                           (if blue-transient--command
+                                               0
+                                             -1))))
+
+(defun blue-transient--command-index+1 ()
+  "Utility to add 1 from `blue-transient--command-index' respecting bounds."
+  (setq blue-transient--command-index (min (1+ blue-transient--command-index)
+                                           (1- (length blue-transient--command)))))
+
 (defun blue-transient--select-previous ()
   "Select previous command for argument operation from `blue-transient--command'."
   (interactive)
   (when blue-transient--command
-    (setq blue-transient--command-index (max (1- blue-transient--command-index)
-                                             0))
+    (blue-transient--command-index-1)
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--select-next ()
   "Select next command for argument operation from `blue-transient--command'."
   (interactive)
   (when blue-transient--command
-    (setq blue-transient--command-index (min (1+ blue-transient--command-index)
-                                             (1- (length blue-transient--command))))
+    (blue-transient--command-index+1)
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--del ()
@@ -190,6 +200,7 @@ If it has none left, remove the entire command."
   (when blue-transient--command
     (blue-transient--save-state)
     (let* ((last-cmd (car (last blue-transient--command)))
+           (selected-command (nth blue-transient--command-index blue-transient--command))
            (args (cdr last-cmd)))
       (if args
           ;; Remove last argument.
@@ -197,7 +208,10 @@ If it has none left, remove the entire command."
                   (butlast last-cmd))
         ;; Remove entire command.
         (setq blue-transient--command
-              (butlast blue-transient--command))))
+              (butlast blue-transient--command))
+        ;; Adjust command selection.
+        (when (equal selected-command last-cmd)
+          (blue-transient--command-index-1))))
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--clear ()
@@ -205,7 +219,8 @@ If it has none left, remove the entire command."
   (interactive)
   (when blue-transient--command
     (blue-transient--save-state)
-    (setq blue-transient--command nil)
+    (setq blue-transient--command nil
+          blue-transient--command-index -1)
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--run ()
@@ -437,11 +452,15 @@ to be specially handled."
              `(,command-key
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
-                 (blue-transient--save-state)
-                 (setq blue-transient--command
-                       (append blue-transient--command
-                               (list (list ,command-invoke))))
-                 (transient-setup 'blue-transient--menu)))))
+                 (let ((last-cmd (car (last blue-transient--command)))
+                       (selected-command (nth blue-transient--command-index blue-transient--command)))
+                   (blue-transient--save-state)
+                   (setq blue-transient--command
+                         (append blue-transient--command
+                                 (list (list ,command-invoke))))
+                   (when (equal selected-command last-cmd)
+                     (blue-transient--command-index+1))
+                   (transient-setup 'blue-transient--menu))))))
          category-commands))))
    categories))
 
