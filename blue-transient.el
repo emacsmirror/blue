@@ -191,6 +191,14 @@ possible saved state.")
     (blue-transient--command-index+1)
     (transient-setup 'blue-transient--menu)))
 
+(defun blue-transient--selected-command ()
+  "Get the selected command from the `blue-transient' menu prompt."
+  (nth blue-transient--command-index blue-transient--command))
+
+(defun blue-transient--last-comamnd/args ()
+  "Get the last command introduced in the `blue-transient' menu prompt."
+  (car (last blue-transient--command)))
+
 (defun blue-transient--del ()
   "Delete the last argument or command in `blue-transient--command'.
 
@@ -199,18 +207,18 @@ If it has none left, remove the entire command."
   (interactive)
   (when blue-transient--command
     (blue-transient--save-state)
-    (let* ((last-cmd (car (last blue-transient--command)))
-           (selected-command (nth blue-transient--command-index blue-transient--command))
-           (args (cdr last-cmd)))
+    (let* ((last-cmd/args (blue-transient--last-comamnd/args))
+           (selected-command (blue-transient--selected-command))
+           (args (cdr last-cmd/args)))
       (if args
           ;; Remove last argument.
           (setcar (last blue-transient--command)
-                  (butlast last-cmd))
+                  (butlast last-cmd/args))
         ;; Remove entire command.
         (setq blue-transient--command
               (butlast blue-transient--command))
         ;; Adjust command selection.
-        (when (equal selected-command last-cmd)
+        (when (equal selected-command last-cmd/args)
           (blue-transient--command-index-1))))
     (transient-setup 'blue-transient--menu)))
 
@@ -258,7 +266,7 @@ If it has none left, remove the entire command."
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
   (let* ((header (propertize "Commands: " 'face 'bold))
-         (selected-command (nth blue-transient--command-index blue-transient--command))
+         (selected-command (blue-transient--selected-command))
          (head (seq-take blue-transient--command blue-transient--command-index))
          (tail (seq-drop blue-transient--command (1+ blue-transient--command-index)))
          (propertized-head (mapcar (lambda (tokens)
@@ -452,13 +460,13 @@ to be specially handled."
              `(,command-key
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
-                 (let ((last-cmd (car (last blue-transient--command)))
-                       (selected-command (nth blue-transient--command-index blue-transient--command)))
+                 (let ((last-cmd/args (blue-transient--last-comamnd/args))
+                       (selected-command (blue-transient--selected-command)))
                    (blue-transient--save-state)
                    (setq blue-transient--command
                          (append blue-transient--command
                                  (list (list ,command-invoke))))
-                   (when (equal selected-command last-cmd)
+                   (when (equal selected-command last-cmd/args)
                      (blue-transient--command-index+1))
                    (transient-setup 'blue-transient--menu))))))
          category-commands))))
@@ -527,9 +535,10 @@ to be specially handled."
   (interactive)
   (when blue-transient--command
     (let* ((front (butlast blue-transient--command))
-           (last-cmd (caar (last blue-transient--command)))
-           (last-cmd-prompt (concat last-cmd " "))
-           (initial-contents (when last-cmd
+           (last-cmd/args (blue-transient--last-comamnd/args))
+           (last-cmd-string (string-join last-cmd/args " "))
+           (last-cmd-prompt (concat last-cmd-string " "))
+           (initial-contents (when last-cmd-string
                                (propertize last-cmd-prompt
                                            'face 'shadow
                                            'read-only t
@@ -539,7 +548,7 @@ to be specially handled."
            (input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
                     (read-from-minibuffer "args=" initial-contents nil nil nil)))
            (args (string-trim-left input last-cmd-prompt))
-           (cmd/args (cons last-cmd (list args))))
+           (cmd/args (append last-cmd/args (list args))))
       (blue-transient--save-state)
       (setq blue-transient--command
             (if front
