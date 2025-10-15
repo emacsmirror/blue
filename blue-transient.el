@@ -127,6 +127,9 @@ possible saved state.")
   (when blue-transient--undo-stack
     (push (copy-tree blue-transient--command) blue-transient--redo-stack)
     (setq blue-transient--command (pop blue-transient--undo-stack))
+    (if (> blue-transient--command-index
+           (1- (length blue-transient--command)))
+        (blue-transient--command-index-1))
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient-redo ()
