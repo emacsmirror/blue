@@ -212,10 +212,6 @@ possible saved state.")
   "Get the selected command from the `blue-transient' menu prompt."
   (nth blue-transient--selected-index blue-transient--command-chain))
 
-(defun blue-transient--last-comamnd/args ()
-  "Get the last command introduced in the `blue-transient' menu prompt."
-  (car (last blue-transient--command-chain)))
-
 (defun blue-transient--insert-nth (n elem lst)
   "Return a new LST with ELEM inserted at position N (0-based).
 If N is 0, insert at the front.  If N >= length of LIST, append ELEM at
@@ -511,9 +507,7 @@ to be specially handled."
              `(,command-key
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
-                 (let ((last-cmd/args (blue-transient--last-comamnd/args))
-                       (selected-command (blue-transient--selected-command))
-                       (command-chain (if blue-transient--command-chain
+                 (let ((command-chain (if blue-transient--command-chain
                                           (blue-transient--insert-nth
                                            (1+ blue-transient--selected-index)
                                            '(,command-invoke)
@@ -588,12 +582,13 @@ to be specially handled."
   "Helper for prompting BLUE command arguments."
   (interactive)
   (when blue-transient--command-chain
-    (let* ((front (butlast blue-transient--command-chain))
-           (last-cmd/args (blue-transient--last-comamnd/args))
-           (last-cmd-string (string-join last-cmd/args " "))
-           (last-cmd-prompt (concat last-cmd-string " "))
-           (initial-contents (when last-cmd-string
-                               (propertize last-cmd-prompt
+    (let* ((selected-command (blue-transient--selected-command))
+           (head (seq-take blue-transient--command-chain blue-transient--selected-index))
+           (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
+           (selected-command-string (string-join selected-command " "))
+           (selected-command-prompt (concat selected-command-string " "))
+           (initial-contents (when selected-command-string
+                               (propertize selected-command-prompt
                                            'face 'shadow
                                            'read-only t
                                            'rear-nonsticky t)))
@@ -601,13 +596,11 @@ to be specially handled."
            ;; from user input, this is why here we use `initial-contents'
            (input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
                     (read-from-minibuffer "args=" initial-contents nil nil nil)))
-           (args (string-trim-left input last-cmd-prompt))
-           (cmd/args (append last-cmd/args (list args))))
+           (args (string-trim-left input selected-command-prompt))
+           (selected-command* (append selected-command (list args))))
       (blue-transient--save-state)
       (setq blue-transient--command-chain
-            (if front
-                (append front (list cmd/args))
-              (list cmd/args))))))
+            (append head (list selected-command*) tail)))))
 
 (defun blue-transient--free-type ()
   "Helper for prompting for input to add to BLUE commands."
