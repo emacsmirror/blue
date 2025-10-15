@@ -180,6 +180,13 @@ possible saved state.")
   (setq blue-transient--command-index (min (1+ blue-transient--command-index)
                                            (1- (length blue-transient--command)))))
 
+(defun blue-transient--select-first ()
+  "Select first command for argument operation from `blue-transient--command'."
+  (interactive)
+  (when blue-transient--command
+    (setq blue-transient--command-index 0)
+    (transient-setup 'blue-transient--menu)))
+
 (defun blue-transient--select-previous ()
   "Select previous command for argument operation from `blue-transient--command'."
   (interactive)
@@ -192,6 +199,13 @@ possible saved state.")
   (interactive)
   (when blue-transient--command
     (blue-transient--command-index+1)
+    (transient-setup 'blue-transient--menu)))
+
+(defun blue-transient--select-last ()
+  "Select first command for argument operation from `blue-transient--command'."
+  (interactive)
+  (when blue-transient--command
+    (setq blue-transient--command-index (1- (length blue-transient--command)))
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--selected-command ()
@@ -732,8 +746,14 @@ keeps running in the compilation buffer."
                           :setup-children
                           blue-transient--selected-command-command-arguments]
                          ;; Command selector.
-                         [[("<left>" "<-" blue-transient--select-previous :transient t)]
-                          [("<right>" "->" blue-transient--select-next :transient t)]]
+                         [[("C-a" "        " blue-transient--select-first :transient t)
+                           ("<home>" "First" blue-transient--select-first :transient t)]
+                          [("C-b" "     " blue-transient--select-previous :transient t)
+                           ("<left>" "<-" blue-transient--select-previous :transient t)]
+                          [("C-f" "      " blue-transient--select-next :transient t)
+                           ("<right>" "->" blue-transient--select-next :transient t)]
+                          [("C-e" "" blue-transient--select-last :transient t)
+                           ("<end>" "Last" blue-transient--select-last :transient t)]]
                          ;; Commands.
                          ["Commands"
                           ,@(blue-transient--build-menu commands)
