@@ -86,7 +86,7 @@ can become key characters."
 (defvar blue-transient--command-chain nil
   "List of BLUE command strings.")
 
-(defvar blue-transient--command-index 0
+(defvar blue-transient--selected-index 0
   "Current element from `blue-transient--command-chain'.")
 
 (defconst blue-transient--keychar-table
@@ -128,8 +128,8 @@ possible saved state.")
     (push (copy-tree blue-transient--command-chain) blue-transient--redo-stack)
     (setq blue-transient--command-chain (pop blue-transient--undo-stack))
     ;; Adjust command selection.
-    (setq blue-transient--command-index (min blue-transient--command-index
-                                             (length blue-transient--command-chain)))
+    (setq blue-transient--selected-index (min blue-transient--selected-index
+                                              (length blue-transient--command-chain)))
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient-redo ()
@@ -171,20 +171,20 @@ possible saved state.")
 ;;; Utilities.
 
 (defun blue-transient--command-index-1 ()
-  "Utility to remove 1 from  `blue-transient--command-index' respecting bounds."
-  (setq blue-transient--command-index (max (1- blue-transient--command-index)
-                                           0)))
+  "Utility to remove 1 from  `blue-transient--selected-index' respecting bounds."
+  (setq blue-transient--selected-index (max (1- blue-transient--selected-index)
+                                            0)))
 
 (defun blue-transient--command-index+1 ()
-  "Utility to add 1 from `blue-transient--command-index' respecting bounds."
-  (setq blue-transient--command-index (min (1+ blue-transient--command-index)
-                                           (1- (length blue-transient--command-chain)))))
+  "Utility to add 1 from `blue-transient--selected-index' respecting bounds."
+  (setq blue-transient--selected-index (min (1+ blue-transient--selected-index)
+                                            (1- (length blue-transient--command-chain)))))
 
 (defun blue-transient--select-first ()
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (setq blue-transient--command-index 0)
+    (setq blue-transient--selected-index 0)
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--select-previous ()
@@ -205,12 +205,12 @@ possible saved state.")
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (setq blue-transient--command-index (1- (length blue-transient--command-chain)))
+    (setq blue-transient--selected-index (1- (length blue-transient--command-chain)))
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--selected-command ()
   "Get the selected command from the `blue-transient' menu prompt."
-  (nth blue-transient--command-index blue-transient--command-chain))
+  (nth blue-transient--selected-index blue-transient--command-chain))
 
 (defun blue-transient--last-comamnd/args ()
   "Get the last command introduced in the `blue-transient' menu prompt."
@@ -255,7 +255,7 @@ If it has none left, remove the entire command."
                   (cdr (butlast selected-command)))
         ;; Remove entire command.
         (setq blue-transient--command-chain
-              (blue-transient--remove-nth blue-transient--command-index
+              (blue-transient--remove-nth blue-transient--selected-index
                                           blue-transient--command-chain))
         ;; Adjust command selection.
         (blue-transient--command-index-1)))
@@ -267,7 +267,7 @@ If it has none left, remove the entire command."
   (when blue-transient--command-chain
     (blue-transient--save-state)
     (setq blue-transient--command-chain
-          (seq-take blue-transient--command-chain blue-transient--command-index))
+          (seq-take blue-transient--command-chain blue-transient--selected-index))
     ;; Adjust command selection.
     (blue-transient--command-index-1)
     (transient-setup 'blue-transient--menu)))
@@ -278,7 +278,7 @@ If it has none left, remove the entire command."
   (when blue-transient--command-chain
     (blue-transient--save-state)
     (setq blue-transient--command-chain nil
-          blue-transient--command-index -1)
+          blue-transient--selected-index -1)
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--run ()
@@ -317,8 +317,8 @@ If it has none left, remove the entire command."
   "Dynamic header for BLUE transient."
   (let* ((header (propertize "Commands: " 'face 'bold))
          (selected-command (blue-transient--selected-command))
-         (head (seq-take blue-transient--command-chain blue-transient--command-index))
-         (tail (seq-drop blue-transient--command-chain (1+ blue-transient--command-index)))
+         (head (seq-take blue-transient--command-chain blue-transient--selected-index))
+         (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
          (propertized-head (mapcar (lambda (tokens)
                                      (propertize (string-join tokens " ")
                                                  'face 'widget-field))
@@ -515,7 +515,7 @@ to be specially handled."
                        (selected-command (blue-transient--selected-command))
                        (command-chain (if blue-transient--command-chain
                                           (blue-transient--insert-nth
-                                           (1+ blue-transient--command-index)
+                                           (1+ blue-transient--selected-index)
                                            '(,command-invoke)
                                            blue-transient--command-chain)
                                         '((,command-invoke)))))
@@ -621,7 +621,7 @@ to be specially handled."
 
 (defun blue-transient--selected-command-command-arguments (_)
   "Helper function to group last command arguments."
-  (if-let* ((selected-command (car (nth blue-transient--command-index
+  (if-let* ((selected-command (car (nth blue-transient--selected-index
                                         blue-transient--command-chain)))
             (argument-groups (blue-transient--arguments-menu selected-command)))
       (transient-parse-suffixes
@@ -744,7 +744,7 @@ keeps running in the compilation buffer."
                          ;; contents of `blue-transient--command-chain'.
                          [:description
                           (lambda ()
-                            (if-let* ((selected-command (car (nth blue-transient--command-index
+                            (if-let* ((selected-command (car (nth blue-transient--selected-index
                                                                   blue-transient--command-chain))))
                                 (concat (propertize
                                          selected-command
