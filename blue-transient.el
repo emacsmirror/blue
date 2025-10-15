@@ -199,6 +199,20 @@ possible saved state.")
   "Get the last command introduced in the `blue-transient' menu prompt."
   (car (last blue-transient--command)))
 
+(defun blue-transient--insert-nth (n elem lst)
+  "Return a new LST with ELEM inserted at position N (0-based).
+If N is 0, insert at the front.  If N >= length of LIST, append ELEM at
+the end."
+  (cond
+   ((null lst)
+    (list elem))
+   ((= n 0)
+    (cons elem lst))
+   (t
+    (cons (car lst)
+          (blue-transient--insert-nth (1- n) elem (cdr lst))))))
+
+
 (defun blue-transient--remove-nth (n lst)
   "Return a new LST with the Nth element removed (0-based).
 If N is out of range, return LIST unchanged."
@@ -469,13 +483,16 @@ to be specially handled."
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
                  (let ((last-cmd/args (blue-transient--last-comamnd/args))
-                       (selected-command (blue-transient--selected-command)))
+                       (selected-command (blue-transient--selected-command))
+                       (command-chain (if blue-transient--command
+                                          (blue-transient--insert-nth
+                                           (1+ blue-transient--command-index)
+                                           '(,command-invoke)
+                                           blue-transient--command)
+                                        '((,command-invoke)))))
                    (blue-transient--save-state)
-                   (setq blue-transient--command
-                         (append blue-transient--command
-                                 (list (list ,command-invoke))))
-                   (when (equal selected-command last-cmd/args)
-                     (blue-transient--command-index+1))
+                   (setq blue-transient--command command-chain)
+                   (blue-transient--command-index+1)
                    (transient-setup 'blue-transient--menu))))))
          category-commands))))
    categories))
