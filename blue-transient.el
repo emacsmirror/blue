@@ -199,6 +199,16 @@ possible saved state.")
   "Get the last command introduced in the `blue-transient' menu prompt."
   (car (last blue-transient--command)))
 
+(defun blue-transient--remove-nth (n lst)
+  "Return a new LST with the Nth element removed (0-based).
+If N is out of range, return LIST unchanged."
+  (cond
+   ((null lst) nil)                 ; end of list
+   ((= n 0) (cdr lst))              ; drop the first element
+   (t
+    (cons (car lst)
+          (blue-transient--remove-nth (1- n) (cdr lst))))))
+
 (defun blue-transient--del ()
   "Delete the last argument or command in `blue-transient--command'.
 
@@ -207,19 +217,17 @@ If it has none left, remove the entire command."
   (interactive)
   (when blue-transient--command
     (blue-transient--save-state)
-    (let* ((last-cmd/args (blue-transient--last-comamnd/args))
-           (selected-command (blue-transient--selected-command))
-           (args (cdr last-cmd/args)))
-      (if args
+    (let* ((selected-command (blue-transient--selected-command)))
+      (if (> (length selected-command) 1)
           ;; Remove last argument.
-          (setcar (last blue-transient--command)
-                  (butlast last-cmd/args))
+          (setcdr selected-command
+                  (cdr (butlast selected-command)))
         ;; Remove entire command.
         (setq blue-transient--command
-              (butlast blue-transient--command))
+              (blue-transient--remove-nth blue-transient--command-index
+                                          blue-transient--command))
         ;; Adjust command selection.
-        (when (equal selected-command last-cmd/args)
-          (blue-transient--command-index-1))))
+        (blue-transient--command-index-1)))
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient--clear ()
