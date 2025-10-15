@@ -86,7 +86,7 @@ can become key characters."
 (defvar blue-transient--command-chain nil
   "List of BLUE command strings.")
 
-(defvar blue-transient--command-index -1
+(defvar blue-transient--command-index 0
   "Current element from `blue-transient--command-chain'.")
 
 (defconst blue-transient--keychar-table
@@ -127,9 +127,9 @@ possible saved state.")
   (when blue-transient--undo-stack
     (push (copy-tree blue-transient--command-chain) blue-transient--redo-stack)
     (setq blue-transient--command-chain (pop blue-transient--undo-stack))
-    (if (> blue-transient--command-index
-           (1- (length blue-transient--command-chain)))
-        (blue-transient--command-index-1))
+    ;; Adjust command selection.
+    (setq blue-transient--command-index (min blue-transient--command-index
+                                             (length blue-transient--command-chain)))
     (transient-setup 'blue-transient--menu)))
 
 (defun blue-transient-redo ()
@@ -173,9 +173,7 @@ possible saved state.")
 (defun blue-transient--command-index-1 ()
   "Utility to remove 1 from  `blue-transient--command-index' respecting bounds."
   (setq blue-transient--command-index (max (1- blue-transient--command-index)
-                                           (if blue-transient--command-chain
-                                               0
-                                             -1))))
+                                           0)))
 
 (defun blue-transient--command-index+1 ()
   "Utility to add 1 from `blue-transient--command-index' respecting bounds."
