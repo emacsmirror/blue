@@ -261,6 +261,17 @@ If it has none left, remove the entire command."
         (blue-transient--command-index-1)))
     (transient-setup 'blue-transient--menu)))
 
+(defun blue-transient--kill ()
+  "Delete `blue-transient--command' chain starting from selection."
+  (interactive)
+  (when blue-transient--command
+    (blue-transient--save-state)
+    (setq blue-transient--command
+          (seq-take blue-transient--command blue-transient--command-index))
+    ;; Adjust command selection.
+    (blue-transient--command-index-1)
+    (transient-setup 'blue-transient--menu)))
+
 (defun blue-transient--clear ()
   "Clean command prompt."
   (interactive)
@@ -758,11 +769,12 @@ keeps running in the compilation buffer."
                          ["Commands"
                           ,@(blue-transient--build-menu commands)
                           ;; Controls.
-                          [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)
-                           ("DEL" "Del" blue-transient--del :transient t)
+                          [("DEL" "Del" blue-transient--del :transient t)
+                           ("C-k" "Kill" blue-transient--kill :transient t)
                            ("C-l" "Clear" blue-transient--clear :transient t)
                            ("_" "  Undo" blue-transient-undo :transient t)
-                           ("M-_" "Redo" blue-transient-redo :transient t)]])))
+                           ("M-_" "Redo" blue-transient-redo :transient t)]
+                          [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)]])))
       ;; Only evaluate menu if it has changed since the last invocation. This
       ;; ensures that any saved state (eg.: `transient-set') is preserved.
       (unless (equal transient blue-transient--menu-expresion)
