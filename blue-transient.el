@@ -86,7 +86,8 @@ can become key characters."
 (defvar blue-transient--command-chain nil
   "List of BLUE command strings.")
 
-(defvar blue-transient--selected-index 0
+;; NOTE: -1 means no selection.
+(defvar blue-transient--selected-index -1
   "Current element from `blue-transient--command-chain'.")
 
 (defconst blue-transient--keychar-table
@@ -173,7 +174,7 @@ possible saved state.")
 (defun blue-transient--command-index-1 ()
   "Utility to remove 1 from  `blue-transient--selected-index' respecting bounds."
   (setq blue-transient--selected-index (max (1- blue-transient--selected-index)
-                                            0)))
+                                            -1)))
 
 (defun blue-transient--command-index+1 ()
   "Utility to add 1 from `blue-transient--selected-index' respecting bounds."
@@ -210,7 +211,8 @@ possible saved state.")
 
 (defun blue-transient--selected-command ()
   "Get the selected command from the `blue-transient' menu prompt."
-  (nth blue-transient--selected-index blue-transient--command-chain))
+  (unless (< blue-transient--selected-index 0)
+    (nth blue-transient--selected-index blue-transient--command-chain)))
 
 (defun blue-transient--insert-nth (n elem lst)
   "Return a new LST with ELEM inserted at position N (0-based).
@@ -334,9 +336,10 @@ If it has none left, remove the entire command."
                                      (propertize (string-join tokens " ")
                                                  'face 'widget-field))
                                    tail))
-         (commands (append propertized-head
-                           (list propertized-selection)
-                           propertized-tail))
+         (commands (seq-remove #'null
+                               (append propertized-head
+                                       (list propertized-selection)
+                                       propertized-tail)))
          (input (string-join commands (propertize " -- "
                                                   'face 'widget-field))))
     (concat header input
@@ -622,8 +625,7 @@ to be specially handled."
 
 (defun blue-transient--selected-command-command-arguments (_)
   "Helper function to group last command arguments."
-  (if-let* ((selected-command (car (nth blue-transient--selected-index
-                                        blue-transient--command-chain)))
+  (if-let* ((selected-command (car (blue-transient--selected-command)))
             (argument-groups (blue-transient--arguments-menu selected-command)))
       (transient-parse-suffixes
        'transient--prefix
@@ -745,8 +747,7 @@ keeps running in the compilation buffer."
                          ;; contents of `blue-transient--command-chain'.
                          [:description
                           (lambda ()
-                            (if-let* ((selected-command (car (nth blue-transient--selected-index
-                                                                  blue-transient--command-chain))))
+                            (if-let* ((selected-command (car (blue-transient--selected-command))))
                                 (concat (propertize
                                          selected-command
                                          'face
