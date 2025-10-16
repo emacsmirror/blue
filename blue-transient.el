@@ -313,7 +313,7 @@ If it has none left, remove the entire command."
 
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
-  (let* ((header (propertize "Commands: " 'face 'bold))
+  (let* ((header (propertize "Commands:" 'face 'bold))
          (selected-command (blue-transient--selected-command))
          (head (seq-take blue-transient--command-chain blue-transient--selected-index))
          (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
@@ -341,8 +341,12 @@ If it has none left, remove the entire command."
                                        (list propertized-selection)
                                        propertized-tail)))
          (input (string-join commands (propertize " -- "
-                                                  'face 'widget-field))))
-    (concat header input
+                                                  'face 'widget-field)))
+         (header* (if propertized-selection
+                      (concat header "  ")
+                    (concat header
+                            (propertize " >" 'face 'blue-hint-highlight)))))
+    (concat header* input
             (propertize "\n" 'face '(:inherit widget-field :extend t)))))
 
 (defun blue-transient--menu-columns (items)
