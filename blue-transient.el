@@ -235,7 +235,8 @@ the end."
 If the last command still has arguments, remove its last argument.
 If it has none left, remove the entire command."
   (interactive)
-  (when blue-transient--command-chain
+  (unless (or (not blue-transient--command-chain)
+              (< blue-transient--selected-index 0))
     (blue-transient--save-state)
     (let* ((selected-command (blue-transient--selected-command)))
       (if (> (length selected-command) 1)
