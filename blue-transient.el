@@ -26,6 +26,8 @@
 
 ;;; Code:
 
+;; TODO: define faces for transient menu.
+
 (require 'blue)
 (require 'cus-edit) ; For `custom-button' face.
 (require 'seq)
@@ -722,7 +724,7 @@ keeps running in the compilation buffer."
                               :reader transient-read-existing-directory)
                            ("-t" "Trace" "--trace")]
                           ["" ; Empty description for alignment.
-                           ("," "Last command args"
+                           ("," "Selected command args"
                             blue-transient--prompt-args
                             :transient t)
                            ("!" "Free-type" blue-transient--free-type :transient t)
@@ -749,7 +751,7 @@ keeps running in the compilation buffer."
                                          '(:inherit blue-hint-highlight :box t))
                                         (propertize " arguments"
                                                     'face 'bold))
-                              "Last command"))
+                              "No selected command"))
                           :class
                           transient-columns
                           :setup-children
