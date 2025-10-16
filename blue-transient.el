@@ -563,13 +563,8 @@ to be specially handled."
                                                                   (string-trim-left suffix "--")))
                                              (msg* (capitalize msg)))
                                         (list (concat "--" key) msg* suffix)))
-                                    suffixes-keys))
-              (columns (seq-split menu-entries
-                                  (/ (length menu-entries) 2))))
-    ;; Make each menu entry a vector. Each vector will be a column.
-    (mapcar (lambda (item)
-              (apply #'vector item))
-            columns)))
+                                    suffixes-keys)))
+    menu-entries))
 
 
 ;;; UI.
@@ -623,10 +618,16 @@ to be specially handled."
 (defun blue-transient--selected-command-command-arguments (_)
   "Helper function to group last command arguments."
   (if-let* ((selected-command (car (blue-transient--selected-command)))
-            (argument-groups (blue-transient--arguments-menu selected-command)))
+            (suffixes (blue-transient--arguments-menu selected-command))
+            (columns (seq-split suffixes
+                                (/ (length suffixes) 2)))
+            ;; Make each menu entry a vector. Each vector will be a column.
+            (vector-columns (mapcar (lambda (item)
+                                      (apply #'vector item))
+                                    columns)))
       (transient-parse-suffixes
        'transient--prefix
-       argument-groups)
+       vector-columns)
     (transient-parse-suffixes
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
