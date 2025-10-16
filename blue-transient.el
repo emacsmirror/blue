@@ -227,17 +227,6 @@ the end."
     (cons (car lst)
           (blue-transient--insert-nth (1- n) elem (cdr lst))))))
 
-
-(defun blue-transient--remove-nth (n lst)
-  "Return a new LST with the Nth element removed (0-based).
-If N is out of range, return LIST unchanged."
-  (cond
-   ((null lst) nil)                 ; end of list
-   ((= n 0) (cdr lst))              ; drop the first element
-   (t
-    (cons (car lst)
-          (blue-transient--remove-nth (1- n) (cdr lst))))))
-
 (defun blue-transient--del ()
   "Delete the last argument or command in `blue-transient--command-chain'.
 
@@ -253,8 +242,8 @@ If it has none left, remove the entire command."
                   (cdr (butlast selected-command)))
         ;; Remove entire command.
         (setq blue-transient--command-chain
-              (blue-transient--remove-nth blue-transient--selected-index
-                                          blue-transient--command-chain))
+              (seq-remove-at-position blue-transient--command-chain
+                                      blue-transient--selected-index))
         ;; Adjust command selection.
         (blue-transient--command-index-1)))
     (transient-setup 'blue-transient--menu)))
