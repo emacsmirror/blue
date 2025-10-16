@@ -319,9 +319,17 @@ If it has none left, remove the entire command."
                                      (propertize (string-join tokens " ")
                                                  'face 'widget-field))
                                    head))
-         (propertized-selection (when selected-command
-                                  (propertize (string-join selected-command " ")
-                                              'face 'blue-hint-highlight)))
+         (propertized-selection
+          (when selected-command
+            (let* ((front (butlast selected-command))
+                   (propertized-front
+                    (mapcar (lambda (token)
+                              (propertize token 'face '(:inherit blue-hint-highlight :weight regular)))
+                            front))
+                   (last-arg (car (last selected-command)))
+                   (propertized-last-arg
+                    (propertize last-arg 'face 'blue-hint-highlight)))
+              (string-join (append propertized-front (list propertized-last-arg)) " "))))
          (propertized-tail (mapcar (lambda (tokens)
                                      (propertize (string-join tokens " ")
                                                  'face 'widget-field))
