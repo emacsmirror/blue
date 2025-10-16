@@ -592,7 +592,9 @@ to be specially handled."
 (defun blue-transient--prompt-args ()
   "Helper for prompting BLUE command arguments."
   (interactive)
-  (when blue-transient--command-chain
+  (if (< blue-transient--selected-index 0)
+      (message (propertize "No command selected"
+                           'face 'minibuffer-prompt))
     (let* ((selected-command (blue-transient--selected-command))
            (head (seq-take blue-transient--command-chain blue-transient--selected-index))
            (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
