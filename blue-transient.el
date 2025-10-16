@@ -304,8 +304,15 @@ If it has none left, remove the entire command."
 
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
-  (let* ((header (propertize "Commands:" 'face 'bold))
+  (let* ((args (transient-get-value))
          (selected-command (blue-transient--selected-command))
+         (selected-command-suffixes (mapcan #'last (blue-transient--arguments-menu
+                                                    (car selected-command))))
+         ;; NOTE: depending on wether '=' syntax is used we may need to make a
+         ;; cell of '(key . value)'.
+         (selected-command-arguments (seq-filter #'(lambda (arg)
+                                                     (member arg selected-command-suffixes))
+                                                 args))
          (head (seq-take blue-transient--command-chain blue-transient--selected-index))
          (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
          (propertized-head (mapcar (lambda (tokens)
@@ -321,8 +328,15 @@ If it has none left, remove the entire command."
                             front))
                    (last-arg (car (last selected-command)))
                    (propertized-last-arg
-                    (propertize last-arg 'face 'blue-hint-highlight)))
-              (string-join (append propertized-front (list propertized-last-arg)) " "))))
+                    (propertize last-arg 'face 'blue-hint-highlight))
+                   (propertized-selected-command-arguments
+                    (mapcar (lambda (arg)
+                              (propertize arg 'face 'transient-argument))
+                            selected-command-arguments)))
+              (string-join (append propertized-front
+                                   (list propertized-last-arg)
+                                   propertized-selected-command-arguments)
+                           (propertize " " 'face 'widget-field)))))
          (propertized-tail (mapcar (lambda (tokens)
                                      (propertize (string-join tokens " ")
                                                  'face 'widget-field))
@@ -333,6 +347,7 @@ If it has none left, remove the entire command."
                                        propertized-tail)))
          (input (string-join commands (propertize " -- "
                                                   'face 'widget-field)))
+         (header (propertize "Commands:" 'face 'bold))
          (header* (if propertized-selection
                       (concat header "  ")
                     (concat header
@@ -631,6 +646,11 @@ to be specially handled."
     (transient-parse-suffixes
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
+
+;; TODO: Make all menu altering suffixes store the selected arguments in the
+;; command chain.
+
+;; FIXME: altering the menu resets the flags.
 
 ;;;###autoload
 (defun blue-transient ()
