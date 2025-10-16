@@ -745,10 +745,22 @@ keeps running in the compilation buffer."
                          [:description
                           (lambda ()
                             (if-let* ((selected-command (car (blue-transient--selected-command))))
+                                ;; TODO: in terminal use background color
+                                ;; instead of boxes, like it's done in Magit.
                                 (concat (propertize
-                                         selected-command
+                                         ;; HACK: This is done because we are
+                                         ;; using the ':box' face attribute with
+                                         ;; a negative value to prevent the
+                                         ;; height of the line to jump when
+                                         ;; switching from no selection (which
+                                         ;; does not have a box) to selection.
+                                         ;; To the commands we are concatenating
+                                         ;; invisible separators to prevent the
+                                         ;; box from being too close to the
+                                         ;; text.
+                                         (concat "⁣⁣" selected-command "⁣⁣")
                                          'face
-                                         '(:inherit blue-hint-highlight :box t))
+                                         '(:inherit blue-hint-highlight :box (-1 . -1)))
                                         (propertize " arguments"
                                                     'face 'bold))
                               "No selected command"))
