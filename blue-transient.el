@@ -124,6 +124,13 @@ possible saved state.")
   (push (copy-tree blue-transient--command-chain) blue-transient--undo-stack)
   (setq blue-transient--redo-stack nil)) ; Clear redo when new change happens.
 
+(defun blue-transient--set-and-setup ()
+  "Set and setup 'blue-transient--menu'.
+This save the current transient state for future invocations
+`transient-set'.  And refreshes the menu `transient-setup'."
+  (transient-set)
+  (transient-setup 'blue-transient--menu))
+
 (defun blue-transient-undo ()
   "Undo last change to `blue-transient--command-chain'."
   (interactive)
@@ -133,7 +140,7 @@ possible saved state.")
     ;; Adjust command selection.
     (setq blue-transient--selected-index (min blue-transient--selected-index
                                               (length blue-transient--command-chain)))
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient-redo ()
   "Redo last undone change to `blue-transient--command-chain'."
@@ -141,7 +148,7 @@ possible saved state.")
   (when blue-transient--redo-stack
     (push (copy-tree blue-transient--command-chain) blue-transient--undo-stack)
     (setq blue-transient--command-chain (pop blue-transient--redo-stack))
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient-previous-history ()
   "Set `blue-transient--command-chain' to previous recorded command."
@@ -155,7 +162,7 @@ possible saved state.")
     (setq blue-transient--history-index prev)
     (setq blue-transient--command-chain (nth blue-transient--history-index
                                              blue-transient--history))
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient-next-history ()
   "Set `blue-transient--command-chain' to next recorded command."
@@ -168,7 +175,7 @@ possible saved state.")
     (setq blue-transient--history-index next)
     (setq blue-transient--command-chain (nth blue-transient--history-index
                                              blue-transient--history))
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 
 ;;; Utilities.
@@ -189,7 +196,7 @@ possible saved state.")
   (when blue-transient--command-chain
     (blue-transient--insert-suffix-argument-to-selection)
     (setq blue-transient--selected-index 0)
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient--select-previous ()
   "Select previous command for argument operation from `blue-transient--command-chain'."
@@ -197,7 +204,7 @@ possible saved state.")
   (when blue-transient--command-chain
     (blue-transient--insert-suffix-argument-to-selection)
     (blue-transient--command-index-1)
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient--select-next ()
   "Select next command for argument operation from `blue-transient--command-chain'."
@@ -205,7 +212,7 @@ possible saved state.")
   (when blue-transient--command-chain
     (blue-transient--insert-suffix-argument-to-selection)
     (blue-transient--command-index+1)
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient--select-last ()
   "Select first command for argument operation from `blue-transient--command-chain'."
@@ -213,7 +220,7 @@ possible saved state.")
   (when blue-transient--command-chain
     (blue-transient--insert-suffix-argument-to-selection)
     (setq blue-transient--selected-index (1- (length blue-transient--command-chain)))
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient--selected-command ()
   "Get the selected command from the `blue-transient' menu prompt."
@@ -278,7 +285,7 @@ If it has none left, remove the entire command."
                                       blue-transient--selected-index))
         ;; Adjust command selection.
         (blue-transient--command-index-1)))
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient--kill ()
   "Delete `blue-transient--command-chain' chain starting from selection."
@@ -289,7 +296,7 @@ If it has none left, remove the entire command."
           (seq-take blue-transient--command-chain blue-transient--selected-index))
     ;; Adjust command selection.
     (blue-transient--command-index-1)
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient--clear ()
   "Clean command prompt."
@@ -298,12 +305,12 @@ If it has none left, remove the entire command."
     (blue-transient--save-state)
     (setq blue-transient--command-chain nil
           blue-transient--selected-index -1)
-    (transient-setup 'blue-transient--menu)))
+    (blue-transient--set-and-setup)))
 
 (defun blue-transient--run ()
   "Run BLUE commands."
   (interactive)
-  (transient-set)
+  (transient-set) ; Save the current transient state for future invocations.
   (let* ((args (transient-args (oref transient-current-prefix command)))
          (comint-flip (transient-arg-value "flip" args))
          (default-options (blue--normalize-options blue-default-options))
@@ -563,7 +570,7 @@ to be specially handled."
                                         '((,command-invoke)))))
                    (setq blue-transient--command-chain command-chain)
                    (blue-transient--command-index+1)
-                   (transient-setup 'blue-transient--menu))))))
+                   (blue-transient--set-and-setup))))))
          category-commands))))
    categories))
 
@@ -673,8 +680,6 @@ to be specially handled."
     (transient-parse-suffixes
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
-
-;; FIXME: altering the menu resets the flags.
 
 ;;;###autoload
 (defun blue-transient ()
