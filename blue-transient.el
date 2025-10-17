@@ -216,6 +216,19 @@ possible saved state.")
   (unless (< blue-transient--selected-index 0)
     (nth blue-transient--selected-index blue-transient--command-chain)))
 
+(defun blue-transient--selected-command-args ()
+  "Get the selected command arguments from the `blue-transient' menu prompt."
+  (let* ((args (transient-get-value))
+         (selected-command (blue-transient--selected-command))
+         (selected-command-suffixes (mapcan #'last
+                                            (blue-transient--arguments-menu
+                                             (car selected-command)))))
+    ;; NOTE: depending on wether '=' syntax is used we may need to make a
+    ;; cell of '(key . value)'.
+    (seq-filter #'(lambda (arg)
+                    (member arg selected-command-suffixes))
+                args)))
+
 (defun blue-transient--insert-nth (n elem lst)
   "Return a new LST with ELEM inserted at position N (0-based).
 If N is 0, insert at the front.  If N >= length of LIST, append ELEM at
@@ -305,15 +318,10 @@ If it has none left, remove the entire command."
 
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
-  (let* ((args (transient-get-value))
-         (selected-command (blue-transient--selected-command))
-         (selected-command-suffixes (mapcan #'last (blue-transient--arguments-menu
-                                                    (car selected-command))))
+  (let* ((selected-command (blue-transient--selected-command))
          ;; NOTE: depending on wether '=' syntax is used we may need to make a
          ;; cell of '(key . value)'.
-         (selected-command-arguments (seq-filter #'(lambda (arg)
-                                                     (member arg selected-command-suffixes))
-                                                 args))
+         (selected-command-arguments (blue-transient--selected-command-args))
          (head (seq-take blue-transient--command-chain blue-transient--selected-index))
          (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
          (propertized-head (mapcar (lambda (tokens)
