@@ -187,6 +187,7 @@ possible saved state.")
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
+    (blue-transient--insert-suffix-argument-to-selection)
     (setq blue-transient--selected-index 0)
     (transient-setup 'blue-transient--menu)))
 
@@ -194,6 +195,7 @@ possible saved state.")
   "Select previous command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
+    (blue-transient--insert-suffix-argument-to-selection)
     (blue-transient--command-index-1)
     (transient-setup 'blue-transient--menu)))
 
@@ -201,6 +203,7 @@ possible saved state.")
   "Select next command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
+    (blue-transient--insert-suffix-argument-to-selection)
     (blue-transient--command-index+1)
     (transient-setup 'blue-transient--menu)))
 
@@ -208,6 +211,7 @@ possible saved state.")
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
+    (blue-transient--insert-suffix-argument-to-selection)
     (setq blue-transient--selected-index (1- (length blue-transient--command-chain)))
     (transient-setup 'blue-transient--menu)))
 
@@ -241,6 +245,18 @@ the end."
    (t
     (cons (car lst)
           (blue-transient--insert-nth (1- n) elem (cdr lst))))))
+
+(defun blue-transient--insert-suffix-argument-to-selection ()
+  "Append ARG to `blue-transient--command-chain' selected command."
+  (when-let* ((args (blue-transient--selected-command-args))
+              (selected-command (blue-transient--selected-command))
+              (selected-command* (append selected-command args))
+              (cleaned-chain (seq-remove-at-position blue-transient--command-chain
+                                                     blue-transient--selected-index)))
+    (setq blue-transient--command-chain
+          (blue-transient--insert-nth blue-transient--selected-index
+                                      selected-command*
+                                      cleaned-chain))))
 
 (defun blue-transient--del ()
   "Delete the last argument or command in `blue-transient--command-chain'.
@@ -537,13 +553,14 @@ to be specially handled."
              `(,command-key
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
+                 (blue-transient--insert-suffix-argument-to-selection)
+                 (blue-transient--save-state)
                  (let ((command-chain (if blue-transient--command-chain
                                           (blue-transient--insert-nth
                                            (1+ blue-transient--selected-index)
                                            '(,command-invoke)
                                            blue-transient--command-chain)
                                         '((,command-invoke)))))
-                   (blue-transient--save-state)
                    (setq blue-transient--command-chain command-chain)
                    (blue-transient--command-index+1)
                    (transient-setup 'blue-transient--menu))))))
@@ -639,6 +656,7 @@ to be specially handled."
           (append blue-transient--command-chain
                   (list (list input))))))
 
+;; TODO: Enable suffixes which are already present in the selected command.
 (defun blue-transient--selected-command-suffix-arguments (_)
   "Helper function to group last command arguments in transient suffixes."
   (if-let* ((selected-command (car (blue-transient--selected-command)))
@@ -655,9 +673,6 @@ to be specially handled."
     (transient-parse-suffixes
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
-
-;; TODO: Make all menu altering suffixes store the selected arguments in the
-;; command chain.
 
 ;; FIXME: altering the menu resets the flags.
 
@@ -770,8 +785,6 @@ keeps running in the compilation buffer."
                                         (list (concat " " (number-to-string idx)) "" build-dir
                                               :format "%k %v"))
                                       indices build-dirs)]
-                         ;; TODO: make all dynamic command suffixes update the
-                         ;; contents of `blue-transient--command-chain'.
                          [:description
                           (lambda ()
                             (if-let* ((selected-command (car (blue-transient--selected-command))))
