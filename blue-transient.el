@@ -227,8 +227,8 @@ This save the current transient state for future invocations
   (unless (< blue-transient--selected-index 0)
     (nth blue-transient--selected-index blue-transient--command-chain)))
 
-(defun blue-transient--selected-command-args ()
-  "Get the selected command arguments from the `blue-transient' menu prompt."
+(defun blue-transient--selected-command-suffixes-values ()
+  "Get the selected command arguments suffixes values from the menu prompt."
   (let* ((args (transient-get-value))
          (selected-command (blue-transient--selected-command))
          (selected-command-suffixes (mapcan #'last
@@ -255,7 +255,7 @@ the end."
 
 (defun blue-transient--insert-suffix-argument-to-selection ()
   "Append ARG to `blue-transient--command-chain' selected command."
-  (when-let* ((args (blue-transient--selected-command-args))
+  (when-let* ((args (blue-transient--selected-command-suffixes-values))
               (selected-command (blue-transient--selected-command))
               (selected-command* (append selected-command args))
               (cleaned-chain (seq-remove-at-position blue-transient--command-chain
@@ -344,7 +344,7 @@ If it has none left, remove the entire command."
   (let* ((selected-command (blue-transient--selected-command))
          ;; NOTE: depending on wether '=' syntax is used we may need to make a
          ;; cell of '(key . value)'.
-         (selected-command-arguments (blue-transient--selected-command-args))
+         (selected-command-arguments (blue-transient--selected-command-suffixes-values))
          (head (seq-take blue-transient--command-chain blue-transient--selected-index))
          (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
          (propertized-head (mapcar (lambda (tokens)
