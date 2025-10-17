@@ -227,6 +227,19 @@ This save the current transient state for future invocations
   (unless (< blue-transient--selected-index 0)
     (nth blue-transient--selected-index blue-transient--command-chain)))
 
+(defun blue-transient--selected-command-args-initial-values ()
+  "Get the selected command arguments initial values."
+  (let* ((selected-command (blue-transient--selected-command))
+         (selected-command-args (cdr (blue-transient--selected-command)))
+         (selected-command-suffixes (mapcan #'last
+                                            (blue-transient--arguments-menu
+                                             (car selected-command)))))
+    ;; NOTE: depending on wether '=' syntax is used we may need to make a
+    ;; cell of '(key . value)'.
+    (seq-filter (lambda (suffix)
+                  (member suffix selected-command-args))
+                selected-command-suffixes)))
+
 (defun blue-transient--selected-command-suffixes-values ()
   "Get the selected command arguments suffixes values from the menu prompt."
   (let* ((args (transient-get-value))
@@ -236,8 +249,8 @@ This save the current transient state for future invocations
                                              (car selected-command)))))
     ;; NOTE: depending on wether '=' syntax is used we may need to make a
     ;; cell of '(key . value)'.
-    (seq-filter #'(lambda (arg)
-                    (member arg selected-command-suffixes))
+    (seq-filter (lambda (arg)
+                  (member arg selected-command-suffixes))
                 args)))
 
 (defun blue-transient--insert-nth (n elem lst)
@@ -255,15 +268,18 @@ the end."
 
 (defun blue-transient--insert-suffix-argument-to-selection ()
   "Append ARG to `blue-transient--command-chain' selected command."
-  (when-let* ((args (blue-transient--selected-command-suffixes-values))
-              (selected-command (blue-transient--selected-command))
-              (selected-command* (append selected-command args))
-              (cleaned-chain (seq-remove-at-position blue-transient--command-chain
-                                                     blue-transient--selected-index)))
-    (setq blue-transient--command-chain
-          (blue-transient--insert-nth blue-transient--selected-index
-                                      selected-command*
-                                      cleaned-chain))))
+  (unless (< blue-transient--selected-index 0)
+    (let* ((args (blue-transient--selected-command-suffixes-values))
+           (selected-command (blue-transient--selected-command))
+           (selected-command-args (cdr selected-command))
+           (merged-args (seq-uniq (append args selected-command-args)))
+           (selected-command* (cons (car selected-command) merged-args))
+           (cleaned-chain (seq-remove-at-position blue-transient--command-chain
+                                                  blue-transient--selected-index)))
+      (setq blue-transient--command-chain
+            (blue-transient--insert-nth blue-transient--selected-index
+                                        selected-command*
+                                        cleaned-chain)))))
 
 (defun blue-transient--del ()
   "Delete the last argument or command in `blue-transient--command-chain'.
@@ -344,7 +360,7 @@ If it has none left, remove the entire command."
   (let* ((selected-command (blue-transient--selected-command))
          ;; NOTE: depending on wether '=' syntax is used we may need to make a
          ;; cell of '(key . value)'.
-         (selected-command-arguments (blue-transient--selected-command-suffixes-values))
+         (selected-command-suffixes (blue-transient--selected-command-suffixes-values))
          (head (seq-take blue-transient--command-chain blue-transient--selected-index))
          (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
          (propertized-head (mapcar (lambda (tokens)
@@ -353,21 +369,38 @@ If it has none left, remove the entire command."
                                    head))
          (propertized-selection
           (when selected-command
-            (let* ((front (butlast selected-command))
+            (let* ((last-arg (when (length> selected-command 1)
+                               (car (last selected-command))))
+                   (front (or (butlast selected-command)
+                              (list (car selected-command))))
+                   (front* (seq-difference front selected-command-suffixes))
+                   ;; `last-arg' will be propertized independently.
+                   (selected-command-suffixes*
+                    (remove last-arg selected-command-suffixes))
                    (propertized-front
-                    (mapcar (lambda (token)
-                              (propertize token 'face '(:inherit blue-hint-highlight :weight regular)))
-                            front))
-                   (last-arg (car (last selected-command)))
+                    (let ((front-face
+                           (if (or (length> front* 1) last-arg)
+                               '(:inherit blue-hint-highlight :weight regular)
+                             'blue-hint-highlight)))
+                      (mapcar (lambda (arg)
+                                (propertize arg 'face front-face))
+                              front*)))
+                   (propertized-selected-command-suffixes
+                    (mapcar
+                     (lambda (arg)
+                       (propertize arg 'face '(:inherit transient-argument :weight regular)))
+                     selected-command-suffixes*))
                    (propertized-last-arg
-                    (propertize last-arg 'face 'blue-hint-highlight))
-                   (propertized-selected-command-arguments
-                    (mapcar (lambda (arg)
-                              (propertize arg 'face 'transient-argument))
-                            selected-command-arguments)))
+                    (when last-arg
+                      (let ((last-arg-face
+                             (if (member last-arg selected-command-suffixes)
+                                 ;; Member of original suffixes.
+                                 'transient-argument
+                               'blue-hint-highlight)))
+                        (propertize last-arg 'face last-arg-face)))))
               (string-join (append propertized-front
-                                   (list propertized-last-arg)
-                                   propertized-selected-command-arguments)
+                                   propertized-selected-command-suffixes
+                                   (list propertized-last-arg))
                            (propertize " " 'face 'widget-field)))))
          (propertized-tail (mapcar (lambda (tokens)
                                      (propertize (string-join tokens " ")
@@ -377,8 +410,7 @@ If it has none left, remove the entire command."
                                (append propertized-head
                                        (list propertized-selection)
                                        propertized-tail)))
-         (input (string-join commands (propertize " -- "
-                                                  'face 'widget-field)))
+         (input (string-join commands (propertize " -- " 'face 'widget-field)))
          (header (propertize "Commands:" 'face 'bold))
          (header* (if propertized-selection
                       (concat header "  ")
@@ -663,7 +695,6 @@ to be specially handled."
           (append blue-transient--command-chain
                   (list (list input))))))
 
-;; TODO: Enable suffixes which are already present in the selected command.
 (defun blue-transient--selected-command-suffix-arguments (_)
   "Helper function to group last command arguments in transient suffixes."
   (if-let* ((selected-command (car (blue-transient--selected-command)))
@@ -725,7 +756,11 @@ keeps running in the compilation buffer."
            (transient `(transient-define-prefix blue-transient--menu ()
                          :incompatible '(,(cons "--build-directory="
                                                 build-dirs))
-                         :value '(,last-build-dir)
+                         :init-value
+                         (lambda (obj)
+                           (oset obj value
+                                 (cons ,last-build-dir
+                                       (blue-transient--selected-command-args-initial-values))))
                          [:description
                           blue-transient--menu-heading
                           :class
