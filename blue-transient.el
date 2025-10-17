@@ -639,8 +639,8 @@ to be specially handled."
           (append blue-transient--command-chain
                   (list (list input))))))
 
-(defun blue-transient--selected-command-command-arguments (_)
-  "Helper function to group last command arguments."
+(defun blue-transient--selected-command-suffix-arguments (_)
+  "Helper function to group last command arguments in transient suffixes."
   (if-let* ((selected-command (car (blue-transient--selected-command)))
             (suffixes (blue-transient--arguments-menu selected-command))
             (columns (seq-split suffixes
@@ -797,7 +797,7 @@ keeps running in the compilation buffer."
                           :class
                           transient-columns
                           :setup-children
-                          blue-transient--selected-command-command-arguments]
+                          blue-transient--selected-command-suffix-arguments]
                          ;; Command selector.
                          [[("C-a" "        " blue-transient--select-first :transient t)
                            ("<home>" "First" blue-transient--select-first :transient t)]
