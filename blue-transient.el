@@ -414,13 +414,13 @@ If WEIGHT is passed as the ':weight' face property."
                             selected-command-suffixes*))
                    (propertized-last-arg
                     (when last-arg
-                      (if (member last-arg selected-command-suffixes)
-                          ;; Member of original suffixes.
-                          (blue-transient--propertize-value-arg last-arg)
-                        (propertize last-arg 'face 'blue-hint-highlight)))))
+                      (list (if (member last-arg selected-command-suffixes)
+                                ;; Member of original suffixes.
+                                (blue-transient--propertize-value-arg last-arg)
+                              (propertize last-arg 'face 'blue-hint-highlight))))))
               (string-join (append propertized-front
                                    propertized-selected-command-suffixes
-                                   (list propertized-last-arg))
+                                   propertized-last-arg)
                            (propertize " " 'face 'widget-field)))))
          (propertized-tail (mapcar (lambda (tokens)
                                      (propertize (string-join tokens " ")
