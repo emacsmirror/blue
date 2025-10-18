@@ -780,9 +780,16 @@ keeps running in the compilation buffer."
                                                 build-dirs))
                          :init-value
                          (lambda (obj)
-                           (oset obj value
-                                 (cons ,last-build-dir
-                                       (blue-transient--selected-command-args-initial-values))))
+                           (let ((transient-state
+                                  (if-let ((saved (assq (oref obj command)
+                                                        transient-values)))
+                                      (cdr saved) ; Set state for the session.
+                                    (transient-default-value obj)))) ; Default.
+                             (oset obj value
+                                   (append
+                                    (cons ,last-build-dir
+                                          (blue-transient--selected-command-args-initial-values))
+                                    transient-state))))
                          [:description
                           blue-transient--menu-heading
                           :class
@@ -900,6 +907,8 @@ keeps running in the compilation buffer."
                           [("RET" ,(propertize "Run" 'face 'custom-button) blue-transient--run)]])))
       ;; Only evaluate menu if it has changed since the last invocation. This
       ;; ensures that any saved state (eg.: `transient-set') is preserved.
+      ;; Reevaluating means creating a new object which will not have the stored
+      ;; state.
       (unless (equal transient blue-transient--menu-expresion)
         (setq blue-transient--menu-expresion transient)
         (eval transient))
