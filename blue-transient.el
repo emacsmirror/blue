@@ -369,8 +369,11 @@ If it has none left, remove the entire command."
                                    head))
          (propertized-selection
           (when selected-command
-            (let* ((last-arg (when (length> selected-command 1)
-                               (car (last selected-command))))
+            (let* ((last-arg (cond
+                              ((length> selected-command 1)
+                               (car (last selected-command)))
+                              (selected-command-suffixes
+                               (car (last selected-command-suffixes)))))
                    (front (or (butlast selected-command)
                               (list (car selected-command))))
                    (front* (seq-difference front selected-command-suffixes))
