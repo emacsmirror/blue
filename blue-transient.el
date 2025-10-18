@@ -230,15 +230,8 @@ This save the current transient state for future invocations
 (defun blue-transient--selected-command-args-initial-values ()
   "Get the selected command arguments initial values."
   (let* ((selected-command (blue-transient--selected-command))
-         (selected-command-args (cdr (blue-transient--selected-command)))
-         (selected-command-suffixes (mapcan #'last
-                                            (blue-transient--arguments-menu
-                                             (car selected-command)))))
-    ;; NOTE: depending on wether '=' syntax is used we may need to make a
-    ;; cell of '(key . value)'.
-    (seq-filter (lambda (suffix)
-                  (member suffix selected-command-args))
-                selected-command-suffixes)))
+         (selected-command-args (cdr selected-command)))
+    selected-command-args))
 
 (defun blue-transient--selected-command-suffixes-values ()
   "Get the selected command arguments suffixes values from the menu prompt."
@@ -247,10 +240,9 @@ This save the current transient state for future invocations
          (selected-command-suffixes (mapcan #'last
                                             (blue-transient--arguments-menu
                                              (car selected-command)))))
-    ;; NOTE: depending on wether '=' syntax is used we may need to make a
-    ;; cell of '(key . value)'.
     (seq-filter (lambda (arg)
-                  (member arg selected-command-suffixes))
+                  (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
+                    (member arg-prefix selected-command-suffixes)))
                 args)))
 
 (defun blue-transient--insert-nth (n elem lst)
@@ -355,11 +347,20 @@ If it has none left, remove the entire command."
         (push (copy-tree blue-transient--command-chain) blue-transient--history)))
     (blue--compile full-input comint)))
 
+(defun blue-transient--propertize-value-arg (arg &optional weight)
+  "Helper to propertize a transient ARG of the form 'arg=val'.
+
+If WEIGHT is passed as the ':weight' face property."
+  (let* ((split (string-split arg "="))
+         (arg (concat (car split) "="))
+         (val (string-join (cdr split)
+                           "=")))
+    (concat (propertize arg 'face `(:inherit transient-argument :weight ,weight))
+            (propertize val 'face `(:inherit transient-value :weight ,weight)))))
+
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
   (let* ((selected-command (blue-transient--selected-command))
-         ;; NOTE: depending on wether '=' syntax is used we may need to make a
-         ;; cell of '(key . value)'.
          (selected-command-suffixes (blue-transient--selected-command-suffixes-values))
          (head (seq-take blue-transient--command-chain blue-transient--selected-index))
          (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
@@ -389,18 +390,15 @@ If it has none left, remove the entire command."
                                 (propertize arg 'face front-face))
                               front*)))
                    (propertized-selected-command-suffixes
-                    (mapcar
-                     (lambda (arg)
-                       (propertize arg 'face '(:inherit transient-argument :weight regular)))
-                     selected-command-suffixes*))
+                    (mapcar (lambda (suffix)
+                              (blue-transient--propertize-value-arg suffix 'regular))
+                            selected-command-suffixes*))
                    (propertized-last-arg
                     (when last-arg
-                      (let ((last-arg-face
-                             (if (member last-arg selected-command-suffixes)
-                                 ;; Member of original suffixes.
-                                 'transient-argument
-                               'blue-hint-highlight)))
-                        (propertize last-arg 'face last-arg-face)))))
+                      (if (member last-arg selected-command-suffixes)
+                          ;; Member of original suffixes.
+                          (blue-transient--propertize-value-arg last-arg)
+                        (propertize last-arg 'face 'blue-hint-highlight)))))
               (string-join (append propertized-front
                                    propertized-selected-command-suffixes
                                    (list propertized-last-arg))
@@ -642,10 +640,12 @@ to be specially handled."
               (menu-entries (mapcar (lambda (pair)
                                       (let* ((suffix (car pair))
                                              (key (cadr pair))
-                                             (msg (string-replace "-" " "
-                                                                  (string-trim-left suffix "--")))
+                                             (msg (string-replace
+                                                   "-" " " (string-trim-left suffix "--")))
                                              (msg* (capitalize msg)))
-                                        (list (concat "--" key) msg* suffix)))
+                                        (list (concat "--" key)
+                                              msg*
+                                              (concat suffix "="))))
                                     suffixes-keys)))
     menu-entries))
 
