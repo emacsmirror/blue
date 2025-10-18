@@ -315,6 +315,20 @@ If it has none left, remove the entire command."
           blue-transient--selected-index -1)
     (blue-transient--set-and-setup)))
 
+(defun blue-transient--get-option-arguments ()
+  "Retrieve values of options for the current transient prefix."
+  (let ((prefix (oref transient-current-prefix command))
+        (i 0)
+        results)
+    (condition-case nil
+        (while t
+          (let* ((suffix (transient-get-suffix prefix `(1 0 ,i)))
+                 (argument (plist-get (cdr suffix) :argument)))
+            (push argument results))
+          (setq i (1+ i)))
+      (error)) ; Do nothing, just break the loop if there are no more keys.
+    results))
+
 (defun blue-transient--run ()
   "Run BLUE commands."
   (interactive)
@@ -322,9 +336,14 @@ If it has none left, remove the entire command."
   (let* ((args (transient-args (oref transient-current-prefix command)))
          (comint-flip (transient-arg-value "flip" args))
          (default-options (blue--normalize-options blue-default-options))
+         (option-args (blue-transient--get-option-arguments))
+         ;; Remove command arguments from `args'.
          (options (append default-options
                           (seq-filter (lambda (arg)
-                                        (string-prefix-p "--" arg))
+                                        (seq-some (lambda (option)
+                                                    (string-prefix-p option
+                                                                     arg))
+                                                  option-args))
                                       args)))
          (is-interactive (blue--any-interactive-p blue-transient--command-chain))
          (comint (xor is-interactive comint-flip))
