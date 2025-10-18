@@ -264,7 +264,18 @@ the end."
     (let* ((args (blue-transient--selected-command-suffixes-values))
            (selected-command (blue-transient--selected-command))
            (selected-command-args (cdr selected-command))
-           (merged-args (seq-uniq (append args selected-command-args)))
+           (suffixes (blue-transient--arguments-menu (car selected-command)))
+           ;; Remove the ones controled by suffixes.
+           (selected-command-args* (print (seq-remove
+                                    (lambda (arg)
+                                      (seq-some (lambda (suffix)
+                                                  (let ((suffix-argument
+                                                         (car (last suffix))))
+                                                    (string-prefix-p suffix-argument
+                                                                     arg)))
+                                                suffixes))
+                                               args)))
+           (merged-args (seq-uniq (append args selected-command-args*)))
            (selected-command* (cons (car selected-command) merged-args))
            (cleaned-chain (seq-remove-at-position blue-transient--command-chain
                                                   blue-transient--selected-index)))
