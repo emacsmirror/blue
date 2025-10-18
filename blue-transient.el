@@ -129,7 +129,7 @@ possible saved state.")
 This save the current transient state for future invocations
 `transient-set'.  And refreshes the menu `transient-setup'."
   (transient-set)
-  (transient-setup 'blue-transient--menu))
+  (transient-setup (oref transient-current-prefix command)))
 
 (defun blue-transient-undo ()
   "Undo last change to `blue-transient--command-chain'."
