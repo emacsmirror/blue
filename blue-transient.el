@@ -30,6 +30,7 @@
 
 (require 'blue)
 (require 'cus-edit) ; For `custom-button' face.
+(require 'eieio)
 (require 'seq)
 (require 'transient)
 (require 'wid-edit) ; For `widget-field' face.
@@ -194,7 +195,6 @@ This save the current transient state for future invocations
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (blue-transient--insert-suffix-argument-to-selection)
     (setq blue-transient--selected-index 0)
     (blue-transient--set-and-setup)))
 
@@ -202,7 +202,6 @@ This save the current transient state for future invocations
   "Select previous command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (blue-transient--insert-suffix-argument-to-selection)
     (blue-transient--command-index-1)
     (blue-transient--set-and-setup)))
 
@@ -210,7 +209,6 @@ This save the current transient state for future invocations
   "Select next command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (blue-transient--insert-suffix-argument-to-selection)
     (blue-transient--command-index+1)
     (blue-transient--set-and-setup)))
 
@@ -218,7 +216,6 @@ This save the current transient state for future invocations
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (blue-transient--insert-suffix-argument-to-selection)
     (setq blue-transient--selected-index (1- (length blue-transient--command-chain)))
     (blue-transient--set-and-setup)))
 
@@ -237,7 +234,7 @@ This save the current transient state for future invocations
   "Get the selected command arguments suffixes values from the menu prompt."
   (let* ((args (transient-get-value))
          (selected-command (blue-transient--selected-command))
-         (selected-command-suffixes (mapcan #'last
+         (selected-command-suffixes (mapcar #'caddr
                                             (blue-transient--arguments-menu
                                              (car selected-command)))))
     (seq-filter (lambda (arg)
@@ -258,31 +255,30 @@ the end."
     (cons (car lst)
           (blue-transient--insert-nth (1- n) elem (cdr lst))))))
 
-(defun blue-transient--insert-suffix-argument-to-selection ()
-  "Append ARG to `blue-transient--command-chain' selected command."
-  (unless (< blue-transient--selected-index 0)
-    (let* ((args (blue-transient--selected-command-suffixes-values))
-           (selected-command (blue-transient--selected-command))
-           (selected-command-args (cdr selected-command))
-           (suffixes (blue-transient--arguments-menu (car selected-command)))
-           ;; Remove the ones controled by suffixes.
-           (selected-command-args* (print (seq-remove
-                                    (lambda (arg)
-                                      (seq-some (lambda (suffix)
-                                                  (let ((suffix-argument
-                                                         (car (last suffix))))
-                                                    (string-prefix-p suffix-argument
-                                                                     arg)))
-                                                suffixes))
-                                               args)))
-           (merged-args (seq-uniq (append args selected-command-args*)))
-           (selected-command* (cons (car selected-command) merged-args))
-           (cleaned-chain (seq-remove-at-position blue-transient--command-chain
-                                                  blue-transient--selected-index)))
-      (setq blue-transient--command-chain
-            (blue-transient--insert-nth blue-transient--selected-index
-                                        selected-command*
-                                        cleaned-chain)))))
+(defun blue-transient--update-selected-command-arguments ()
+  "Sync `blue-transient--command-chain' with selected command arguments."
+  (let* ((selected-command (blue-transient--selected-command))
+         (suffixes (blue-transient--arguments-menu (car selected-command)))
+         (suffixes-values (blue-transient--selected-command-suffixes-values))
+         (selected-command-args (cdr selected-command))
+         ;; Remove the ones controled by suffixes.
+         (selected-command-args* (seq-remove
+                                  (lambda (arg)
+                                    (seq-some (lambda (suffix)
+                                                (let ((suffix-argument
+                                                       (caddr suffix)))
+                                                  (string-prefix-p suffix-argument
+                                                                   arg)))
+                                              suffixes))
+                                  selected-command-args))
+         (merged-args (seq-uniq (append suffixes-values selected-command-args*)))
+         (selected-command* (cons (car selected-command) merged-args))
+         (cleaned-chain (seq-remove-at-position blue-transient--command-chain
+                                                blue-transient--selected-index)))
+    (setq blue-transient--command-chain
+          (blue-transient--insert-nth blue-transient--selected-index
+                                      selected-command*
+                                      cleaned-chain))))
 
 (defun blue-transient--del ()
   "Delete the last argument or command in `blue-transient--command-chain'.
@@ -623,7 +619,6 @@ to be specially handled."
              `(,command-key
                ,(capitalize command-invoke)
                (lambda () ,command-synopsis (interactive)
-                 (blue-transient--insert-suffix-argument-to-selection)
                  (blue-transient--save-state)
                  (let ((command-chain (if blue-transient--command-chain
                                           (blue-transient--insert-nth
@@ -659,6 +654,22 @@ to be specially handled."
               (apply #'vector item))
             grouped-commands)))
 
+
+;;; Selected command arguments.
+
+(require 'cl-generic)
+
+(defclass blue-transient--command-argument (transient-option) ()
+  "Class used for BLUE command arguments that can take a value.")
+
+(cl-defmethod transient-infix-set :after ((obj blue-transient--command-argument) value)
+  "Setter for the `blue-transient--command-argument' class.
+
+This function is meant for sideffects, it is responsible of keeping
+`blue-transient--command-chain' sync with the selected command argument
+suffixes."
+  (blue-transient--update-selected-command-arguments))
+
 ;; TODO: memoize this function introducing the current blueprint as argument to
 ;; ensure that the results are cached per blueprint.
 (defun blue-transient--arguments-menu (command)
@@ -673,9 +684,10 @@ to be specially handled."
                                              (msg (string-replace
                                                    "-" " " (string-trim-left suffix "--")))
                                              (msg* (capitalize msg)))
-                                        (list (concat "--" key)
-                                              msg*
-                                              (concat suffix "="))))
+                                        `(,(concat "--" key)
+                                          ,msg*
+                                          ,(concat suffix "=")
+                                          :class blue-transient--command-argument)))
                                     suffixes-keys)))
     menu-entries))
 
