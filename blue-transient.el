@@ -93,6 +93,9 @@ can become key characters."
 (defvar blue-transient--selected-index -1
   "Current element from `blue-transient--command-chain'.")
 
+(defvar blue-transient--selected-argument-index 0
+  "Current argument from `blue-transient--command-chain' selected command.")
+
 (defconst blue-transient--keychar-table
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   "Valid characters used to form the keys to dispatch commands.
@@ -181,21 +184,48 @@ This save the current transient state for future invocations
 
 ;;; Utilities.
 
-(defun blue-transient--command-index-1 ()
-  "Utility to remove 1 from  `blue-transient--selected-index' respecting bounds."
-  (setq blue-transient--selected-index (max (1- blue-transient--selected-index)
-                                            -1)))
+(defun blue-transient--command-index-1 (&optional skip-arguments)
+  "Utility to remove 1 from  `blue-transient--selected-index' respecting bounds.
 
-(defun blue-transient--command-index+1 ()
-  "Utility to add 1 from `blue-transient--selected-index' respecting bounds."
-  (setq blue-transient--selected-index (min (1+ blue-transient--selected-index)
-                                            (1- (length blue-transient--command-chain)))))
+If SKIP-ARGUMENTS is non-nil, jump to next command."
+  (let* ((selected-command (blue-transient--selected-command))
+         (selected-command-length (length selected-command))
+         (previous-command (blue-transient--previous-command))
+         (previous-command-length (length previous-command)))
+    (cond
+     ((and (not skip-arguments)
+           (> selected-command-length 1)
+           (> blue-transient--selected-argument-index 0))
+      (setq blue-transient--selected-argument-index
+            (1- blue-transient--selected-argument-index)))
+     (t
+      (setq blue-transient--selected-index (max (1- blue-transient--selected-index)
+                                                -1)
+            blue-transient--selected-argument-index (1- previous-command-length))))))
+
+(defun blue-transient--command-index+1 (&optional skip-arguments)
+  "Utility to add 1 from `blue-transient--selected-index' respecting bounds.
+
+If SKIP-ARGUMENTS is non-nil, jump to previous command."
+  (let* ((selected-command (blue-transient--selected-command))
+         (selected-command-length (length selected-command)))
+    (cond
+     ((and (not skip-arguments)
+           (> selected-command-length 1)
+           (< blue-transient--selected-argument-index (1- selected-command-length)))
+      (setq blue-transient--selected-argument-index
+            (1+ blue-transient--selected-argument-index)))
+     (t
+      (setq blue-transient--selected-index (min (1+ blue-transient--selected-index)
+                                                (1- (length blue-transient--command-chain)))
+            blue-transient--selected-argument-index 0)))))
 
 (defun blue-transient--select-first ()
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (setq blue-transient--selected-index 0)
+    (setq blue-transient--selected-index 0
+          blue-transient--selected-argument-index 0)
     (blue-transient--set-and-setup)))
 
 (defun blue-transient--select-previous ()
@@ -216,13 +246,21 @@ This save the current transient state for future invocations
   "Select first command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
-    (setq blue-transient--selected-index (1- (length blue-transient--command-chain)))
+    (let* ((selected-command (blue-transient--selected-command))
+           (selected-command-length (length selected-command)))
+      (setq blue-transient--selected-index (1- (length blue-transient--command-chain))
+            blue-transient--selected-argument-index (1- selected-command-length)))
     (blue-transient--set-and-setup)))
 
 (defun blue-transient--selected-command ()
   "Get the selected command from the `blue-transient' menu prompt."
   (unless (< blue-transient--selected-index 0)
     (nth blue-transient--selected-index blue-transient--command-chain)))
+
+(defun blue-transient--previous-command ()
+  "Get the previous command from the `blue-transient' menu prompt."
+  (unless (< blue-transient--selected-index 1)
+    (nth (1- blue-transient--selected-index) blue-transient--command-chain)))
 
 (defun blue-transient--selected-command-args-initial-values ()
   "Get the selected command arguments initial values."
@@ -281,37 +319,55 @@ the end."
                                       cleaned-chain))))
 
 (defun blue-transient--del ()
-  "Delete the last argument or command in `blue-transient--command-chain'.
-
-If the last command still has arguments, remove its last argument.
-If it has none left, remove the entire command."
+  "Delete the selected argument or command in `blue-transient--command-chain'."
   (interactive)
-  (unless (or (not blue-transient--command-chain)
-              (< blue-transient--selected-index 0))
-    (blue-transient--save-state)
-    (let* ((selected-command (blue-transient--selected-command)))
-      (if (> (length selected-command) 1)
-          ;; Remove last argument.
-          (setcdr selected-command
-                  (cdr (butlast selected-command)))
+  (let ((selected-index blue-transient--selected-index)
+        (selected-argument-index blue-transient--selected-argument-index))
+    (unless (or (not blue-transient--command-chain)
+                (< selected-index 0))
+      (blue-transient--save-state)
+      (blue-transient--command-index-1)
+      (if (> selected-argument-index 0)
+          ;; Remove selected argument.
+          (let* ((selected-command (blue-transient--selected-command))
+                 (selected-command* (seq-remove-at-position selected-command
+                                                            selected-argument-index))
+                 (cleaned-chain (seq-remove-at-position blue-transient--command-chain
+                                                        selected-index)))
+            (setq blue-transient--command-chain
+                  (blue-transient--insert-nth selected-index
+                                              selected-command*
+                                              cleaned-chain)))
         ;; Remove entire command.
         (setq blue-transient--command-chain
               (seq-remove-at-position blue-transient--command-chain
-                                      blue-transient--selected-index))
-        ;; Adjust command selection.
-        (blue-transient--command-index-1)))
-    (blue-transient--set-and-setup)))
+                                      selected-index)))
+      (blue-transient--set-and-setup))))
 
 (defun blue-transient--kill ()
-  "Delete `blue-transient--command-chain' chain starting from selection."
+  "Delete `blue-transient--command-chain' chain from selection."
   (interactive)
-  (when blue-transient--command-chain
-    (blue-transient--save-state)
-    (setq blue-transient--command-chain
-          (seq-take blue-transient--command-chain blue-transient--selected-index))
-    ;; Adjust command selection.
-    (blue-transient--command-index-1)
-    (blue-transient--set-and-setup)))
+  (let ((selected-index blue-transient--selected-index)
+        (selected-argument-index blue-transient--selected-argument-index))
+    (unless (or (not blue-transient--command-chain)
+                (< selected-index 0))
+      (blue-transient--save-state)
+      (blue-transient--command-index-1)
+      (let ((head (seq-take blue-transient--command-chain (1+ selected-index))))
+        (if (> selected-argument-index 0)
+            ;; Remove from selected argument.
+            (let* ((selected-command (blue-transient--selected-command))
+                   (selected-command* (seq-take selected-command
+                                                selected-argument-index))
+                   (cleaned-head (seq-remove-at-position head
+                                                         selected-index)))
+              (setq blue-transient--command-chain
+                    (blue-transient--insert-nth selected-index
+                                                selected-command*
+                                                cleaned-head)))
+          ;; Remove from selected command.
+          (setq blue-transient--command-chain (butlast head))))
+      (blue-transient--set-and-setup))))
 
 (defun blue-transient--clear ()
   "Clean command prompt."
@@ -396,39 +452,18 @@ If WEIGHT is passed as the ':weight' face property."
                                    head))
          (propertized-selection
           (when selected-command
-            (let* ((last-arg (cond
-                              ((length> selected-command 1)
-                               (car (last selected-command)))
-                              (selected-command-suffixes
-                               (car (last selected-command-suffixes)))))
-                   (front (or (butlast selected-command)
-                              (list (car selected-command))))
-                   (front* (seq-difference front selected-command-suffixes))
-                   ;; `last-arg' will be propertized independently.
-                   (selected-command-suffixes*
-                    (remove last-arg selected-command-suffixes))
-                   (propertized-front
-                    (let ((front-face
-                           (if (or (length> front* 1) last-arg)
-                               '(:inherit blue-hint-highlight :weight regular)
-                             'blue-hint-highlight)))
-                      (mapcar (lambda (arg)
-                                (propertize arg 'face front-face))
-                              front*)))
-                   (propertized-selected-command-suffixes
-                    (mapcar (lambda (suffix)
-                              (blue-transient--propertize-value-arg suffix 'regular))
-                            selected-command-suffixes*))
-                   (propertized-last-arg
-                    (when last-arg
-                      (list (if (member last-arg selected-command-suffixes)
-                                ;; Member of original suffixes.
-                                (blue-transient--propertize-value-arg last-arg)
-                              (propertize last-arg 'face 'blue-hint-highlight))))))
-              (string-join (append propertized-front
-                                   propertized-selected-command-suffixes
-                                   propertized-last-arg)
-                           (propertize " " 'face 'widget-field)))))
+            (string-join
+             (seq-map-indexed
+              (lambda (token i)
+                (if (= i blue-transient--selected-argument-index)
+                    (if (member token selected-command-suffixes)
+                        (blue-transient--propertize-value-arg token)
+                      (propertize token 'face 'blue-hint-highlight))
+                  (if (member token selected-command-suffixes)
+                      (blue-transient--propertize-value-arg token 'regular)
+                    (propertize token 'face '(:inherit blue-hint-highlight :weight regular)))))
+              selected-command)
+             (propertize " " 'face 'widget-field))))
          (propertized-tail (mapcar (lambda (tokens)
                                      (propertize (string-join tokens " ")
                                                  'face 'widget-field))
@@ -627,7 +662,7 @@ to be specially handled."
                                            blue-transient--command-chain)
                                         '((,command-invoke)))))
                    (setq blue-transient--command-chain command-chain)
-                   (blue-transient--command-index+1)
+                   (blue-transient--command-index+1 t)
                    (blue-transient--set-and-setup))))))
          category-commands))))
    categories))
@@ -780,7 +815,9 @@ keeps running in the compilation buffer."
   (interactive)
   (blue--check-blue-binary)
   (blue--ensure-cache)
-  (setq blue-transient--history-index 0)
+  (setq blue-transient--history-index 0
+        blue-transient--selected-index -1
+        blue-transient--selected-argument-index 0)
   (let* ((blue--blueprint (blue--find-blueprint))
          (prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
