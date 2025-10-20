@@ -26,8 +26,6 @@
 
 ;;; Code:
 
-;; TODO: define faces for transient menu.
-
 (require 'blue)
 (require 'cl-generic)
 (require 'cus-edit) ; For `custom-button' face.
@@ -81,6 +79,18 @@ Only those characters in group and target names, which match this regex,
 can become key characters."
   :group 'blue-transient
   :type 'regexp)
+
+(defface blue-transient-selection
+  '((t :inherit blue-hint-highlight))
+  "Face used to highlight selections.")
+
+(defface blue-transient-selection-suffix
+  '((t :inherit transient-argument))
+  "Face used to highlight suffixes.")
+
+(defface blue-transient-selection-suffix-value
+  '((t :inherit transient-value))
+  "Face used to highlight suffix values.")
 
 
 ;;; Internal variables.
@@ -430,16 +440,19 @@ the end."
         (push (copy-tree blue-transient--command-chain) blue-transient--history)))
     (blue--compile full-input comint)))
 
-(defun blue-transient--propertize-value-arg (arg &optional weight)
+(defun blue-transient--propertize-value-arg (arg selected)
   "Helper to propertize a transient ARG of the form 'arg=val'.
 
-If WEIGHT is passed as the ':weight' face property."
+SELECTED controls the face properties to apply."
   (let* ((split (string-split arg "="))
          (arg (concat (car split) "="))
          (val (string-join (cdr split)
-                           "=")))
-    (concat (propertize arg 'face `(:inherit transient-argument :weight ,weight))
-            (propertize val 'face `(:inherit transient-value :weight ,weight)))))
+                           "="))
+         (properties (if selected
+                         '(:underline t)
+                       '(:weight regular))))
+    (concat (propertize arg 'face `(:inherit blue-transient-selection-suffix ,@properties))
+            (propertize val 'face `(:inherit blue-transient-selection-suffix-value ,@properties)))))
 
 (defun blue-transient--menu-heading ()
   "Dynamic header for BLUE transient."
@@ -458,11 +471,11 @@ If WEIGHT is passed as the ':weight' face property."
               (lambda (token i)
                 (if (= i blue-transient--selected-argument-index)
                     (if (member token selected-command-suffixes)
-                        (blue-transient--propertize-value-arg token)
-                      (propertize token 'face 'blue-hint-highlight))
+                        (blue-transient--propertize-value-arg token t)
+                      (propertize token 'face '(:inherit blue-transient-selection :underline t)))
                   (if (member token selected-command-suffixes)
-                      (blue-transient--propertize-value-arg token 'regular)
-                    (propertize token 'face '(:inherit blue-hint-highlight :weight regular)))))
+                      (blue-transient--propertize-value-arg token nil)
+                    (propertize token 'face '(:inherit blue-transient-selection :weight regular)))))
               selected-command)
              (propertize " " 'face 'widget-field))))
          (propertized-tail (mapcar (lambda (tokens)
@@ -478,7 +491,7 @@ If WEIGHT is passed as the ':weight' face property."
          (header* (if propertized-selection
                       (concat header "  ")
                     (concat header
-                            (propertize " >" 'face 'blue-hint-highlight)))))
+                            (propertize " >" 'face 'blue-transient-selection)))))
     (concat header* input
             (propertize "\n" 'face '(:inherit widget-field :extend t)))))
 
