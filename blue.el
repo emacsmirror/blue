@@ -406,10 +406,11 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 ;;; Completion.
 
-(blue--define-memoized blue--autocomplete (input)
+(blue--define-memoized blue--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
   (when-let* ((store-dir blue--store-dir)
               (command (concat blue-binary
+                               " --file " blueprint
                                " --store-directory " store-dir
                                " .autocomplete \"blue " input "\""))
               (output (shell-command-to-string command)))
@@ -419,9 +420,11 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Completion table function for minibuffer prompt."
   (let ((result
          (while-no-input
-           (when-let* ((prompt-start (minibuffer-prompt-end))
+           (when-let* ((blueprint (or blue--blueprint
+                                      (blue--find-blueprint)))
+                       (prompt-start (minibuffer-prompt-end))
                        (input (buffer-substring prompt-start (point)))
-                       (completions (blue--autocomplete input)))
+                       (completions (blue--autocomplete blueprint input)))
              completions))))
     (and (consp result) result)))
 
