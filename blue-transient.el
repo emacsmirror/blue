@@ -281,10 +281,13 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
 
 (defun blue-transient--selected-command-suffixes-values ()
   "Get the selected command arguments suffixes values from the menu prompt."
-  (let* ((args (transient-get-value))
+  (let* ((blueprint (or blue--blueprint
+                        (blue--find-blueprint)))
+         (args (transient-get-value))
          (selected-command (blue-transient--selected-command))
          (selected-command-suffixes (mapcar #'caddr
                                             (blue-transient--arguments-menu
+                                             blueprint
                                              (car selected-command)))))
     (seq-filter (lambda (arg)
                   (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
@@ -306,8 +309,10 @@ the end."
 
 (defun blue-transient--update-selected-command-arguments ()
   "Sync `blue-transient--command-chain' with selected command arguments."
-  (let* ((selected-command (blue-transient--selected-command))
-         (suffixes (blue-transient--arguments-menu (car selected-command)))
+  (let* ((blueprint (or blue--blueprint
+                        (blue--find-blueprint)))
+         (selected-command (blue-transient--selected-command))
+         (suffixes (blue-transient--arguments-menu blueprint (car selected-command)))
          (suffixes-values (blue-transient--selected-command-suffixes-values))
          (selected-command-args (cdr selected-command))
          ;; Remove the ones controled by suffixes.
@@ -716,13 +721,11 @@ This function is meant for sideffects, it is responsible of keeping
 suffixes."
   (blue-transient--update-selected-command-arguments))
 
-;; TODO: memoize this function introducing the current blueprint as argument to
-;; ensure that the results are cached per blueprint.
-(defun blue-transient--arguments-menu (command)
+(blue--define-memoized blue-transient--arguments-menu (blueprint command)
   "Build transient menu for BLUE COMMAND arguments."
   (when-let* ((suffixes (seq-filter (lambda (suffix)
                                       (string-prefix-p "--" suffix))
-                                    (blue--autocomplete (concat command " --"))))
+                                    (blue--autocomplete blueprint (concat command " --"))))
               (suffixes-keys (blue-transient--assign-keys suffixes nil))
               (menu-entries (mapcar (lambda (pair)
                                       (let* ((suffix (car pair))
@@ -788,8 +791,10 @@ suffixes."
 
 (defun blue-transient--selected-command-suffix-arguments (_)
   "Helper function to group last command arguments in transient suffixes."
-  (if-let* ((selected-command (car (blue-transient--selected-command)))
-            (suffixes (blue-transient--arguments-menu selected-command))
+  (if-let* ((blueprint (or blue--blueprint
+                           (blue--find-blueprint)))
+            (selected-command (car (blue-transient--selected-command)))
+            (suffixes (blue-transient--arguments-menu blueprint selected-command))
             (columns (seq-split suffixes
                                 (/ (length suffixes) 2)))
             ;; Make each menu entry a vector. Each vector will be a column.
@@ -828,9 +833,11 @@ keeps running in the compilation buffer."
   (blue--ensure-cache)
   (setq blue-transient--history-index 0
         blue-transient--selected-index -1
-        blue-transient--selected-argument-index 0)
-  (let* ((blue--blueprint (blue--find-blueprint))
-         (prefix (car current-prefix-arg))
+        blue-transient--selected-argument-index 0
+        blue--blueprint (blue--find-blueprint)
+        blue--store-dir (make-temp-file "blue-" t)
+        blue--data (blue--get-data blue--blueprint))
+  (let* ((prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
          (last-build-dir (car build-dirs))
          (prefix (car current-prefix-arg))
@@ -844,7 +851,7 @@ keeps running in the compilation buffer."
       (setq build-dirs (cons build-dir build-dirs)
             last-build-dir (car build-dirs)))
     ;; Rebuild menu.
-    (let* ((commands (blue--get-commands blue--blueprint))
+    (let* ((commands (car blue--data))
            (indices (number-sequence 1 (length build-dirs)))
            (transient `(transient-define-prefix blue-transient--menu ()
                          :incompatible '(,(cons "--build-directory="

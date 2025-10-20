@@ -203,7 +203,7 @@ DIR is the directory where the replay data has been taken from."
   "Return the replay data for BLUEPRINT stored in DIR."
   (let* ((options (when blueprint
                     (list "--file" blueprint "--build-directory" dir)))
-         (output (blue--execute-serialize options "replay" t))
+         (output (blue--execute-serialize options '("replay")))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
