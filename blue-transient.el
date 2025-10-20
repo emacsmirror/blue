@@ -29,6 +29,7 @@
 ;; TODO: define faces for transient menu.
 
 (require 'blue)
+(require 'cl-generic)
 (require 'cus-edit) ; For `custom-button' face.
 (require 'eieio)
 (require 'seq)
@@ -692,13 +693,11 @@ to be specially handled."
 
 ;;; Selected command arguments.
 
-(require 'cl-generic)
-
 (defclass blue-transient--command-argument (transient-option) ()
   "Class used for BLUE command arguments that can take a value.")
 
 (cl-defmethod transient-infix-set :after ((obj blue-transient--command-argument) value)
-  "Setter for the `blue-transient--command-argument' class.
+  "Setter for the 'blue-transient--command-argument' class.
 
 This function is meant for sideffects, it is responsible of keeping
 `blue-transient--command-chain' sync with the selected command argument
