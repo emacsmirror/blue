@@ -808,6 +808,8 @@ suffixes."
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
 
+;; FIXME: blue switches get dissable when chaning selection.
+
 ;;;###autoload
 (defun blue-transient ()
   "Open transient menu for BLUE.
