@@ -154,7 +154,7 @@ This save the current transient state for future invocations
     (setq blue-transient--command-chain (pop blue-transient--undo-stack))
     ;; Adjust command selection.
     (setq blue-transient--selected-index (min blue-transient--selected-index
-                                              (length blue-transient--command-chain)))
+                                              (1- (length blue-transient--command-chain))))
     (blue-transient--set-and-setup)))
 
 (defun blue-transient-redo ()
