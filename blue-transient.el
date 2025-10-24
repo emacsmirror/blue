@@ -273,8 +273,8 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
   (unless (< blue-transient--selected-index 1)
     (nth (1- blue-transient--selected-index) blue-transient--command-chain)))
 
-(defun blue-transient--selected-command-args-initial-values ()
-  "Get the selected command arguments initial values."
+(defun blue-transient--selected-command-args-values ()
+  "Get the selected command arguments values."
   (let* ((selected-command (blue-transient--selected-command))
          (selected-command-args (cdr selected-command)))
     selected-command-args))
@@ -681,6 +681,8 @@ to be specially handled."
                                         '((,command-invoke)))))
                    (setq blue-transient--command-chain command-chain)
                    (blue-transient--command-index+1 t)
+                   ;; FIXME: somehow this does not work here and the BLUE
+                   ;; switches get resetted.
                    (blue-transient--set-and-setup))))))
          category-commands))))
    categories))
@@ -858,16 +860,14 @@ keeps running in the compilation buffer."
                                                 build-dirs))
                          :init-value
                          (lambda (obj)
-                           (let ((transient-state
-                                  (if-let ((saved (assq (oref obj command)
-                                                        transient-values)))
-                                      (cdr saved) ; Set state for the session.
-                                    (transient-default-value obj)))) ; Default.
+                           (let ((saved-state (transient-get-value))
+                                 (selected-command-args-values
+                                  (blue-transient--selected-command-args-values)))
                              (oset obj value
                                    (append
                                     (cons ,last-build-dir
-                                          (blue-transient--selected-command-args-initial-values))
-                                    transient-state))))
+                                          selected-command-args-values)
+                                    saved-state))))
                          [:description
                           blue-transient--menu-heading
                           :class
