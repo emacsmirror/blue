@@ -254,13 +254,13 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
     (blue-transient--set-and-setup)))
 
 (defun blue-transient--select-last ()
-  "Select first command for argument operation from `blue-transient--command-chain'."
+  "Select last command for argument operation from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
+    (setq blue-transient--selected-index (1- (length blue-transient--command-chain)))
     (let* ((selected-command (blue-transient--selected-command))
-           (selected-command-length (length selected-command)))
-      (setq blue-transient--selected-index (1- (length blue-transient--command-chain))
-            blue-transient--selected-argument-index (1- selected-command-length)))
+           (argument-lenght (length selected-command)))
+      (setq blue-transient--selected-argument-index (1- argument-lenght)))
     (blue-transient--set-and-setup)))
 
 (defun blue-transient--selected-command ()
@@ -834,8 +834,6 @@ keeps running in the compilation buffer."
   (blue--check-blue-binary)
   (blue--ensure-cache)
   (setq blue-transient--history-index 0
-        blue-transient--selected-index -1
-        blue-transient--selected-argument-index 0
         blue--blueprint (blue--find-blueprint)
         blue--store-dir (make-temp-file "blue-" t)
         blue--data (blue--get-data blue--blueprint))
