@@ -694,6 +694,7 @@ to be specially handled."
 This function is meant for sideffects, it is responsible of keeping
 `blue-transient--command-chain' sync with the selected command argument
 suffixes."
+  (blue-transient--save-state)
   (let* ((argument-prefix (oref obj argument))
          (blueprint (or blue--blueprint
                         (blue--find-blueprint)))
