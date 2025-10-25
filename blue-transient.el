@@ -273,22 +273,20 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
   (unless (< blue-transient--selected-index 1)
     (nth (1- blue-transient--selected-index) blue-transient--command-chain)))
 
-(defun blue-transient--selected-command-args-values ()
-  "Get the selected command arguments values."
-  (let* ((selected-command (blue-transient--selected-command))
-         (selected-command-args (cdr selected-command)))
-    selected-command-args))
-
-(defun blue-transient--selected-command-suffixes-values ()
+(defun blue-transient--selected-command-suffixes ()
   "Get the selected command arguments suffixes values from the menu prompt."
   (let* ((blueprint (or blue--blueprint
                         (blue--find-blueprint)))
-         (args (transient-get-value))
-         (selected-command (blue-transient--selected-command))
-         (selected-command-suffixes (mapcar #'caddr
-                                            (blue-transient--arguments-menu
-                                             blueprint
-                                             (car selected-command)))))
+         (selected-command (blue-transient--selected-command)))
+    (mapcar #'caddr
+            (blue-transient--arguments-menu
+             blueprint
+             (car selected-command)))))
+
+(defun blue-transient--selected-command-suffixes-values ()
+  "Get the selected command arguments suffixes values from the menu prompt."
+  (let ((args (transient-get-value))
+        (selected-command-suffixes (blue-transient--selected-command-suffixes)))
     (seq-filter (lambda (arg)
                   (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
                     (member arg-prefix selected-command-suffixes)))
@@ -809,8 +807,6 @@ suffixes."
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
 
-;; FIXME: blue switches get dissable when chaning selection.
-
 ;;;###autoload
 (defun blue-transient ()
   "Open transient menu for BLUE.
@@ -859,14 +855,22 @@ keeps running in the compilation buffer."
                                                 build-dirs))
                          :init-value
                          (lambda (obj)
-                           (let ((saved-state (transient-get-value))
-                                 (selected-command-args-values
-                                  (blue-transient--selected-command-args-values)))
+                           (let* ((saved-state (transient-get-value))
+                                  (selected-command-suffixes
+                                   (blue-transient--selected-command-suffixes))
+                                  (saved-state*
+                                   (seq-remove
+                                    (lambda (arg)
+                                      (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
+                                        (member arg-prefix selected-command-suffixes)))
+                                    saved-state))
+                                  (selected-command-args-values
+                                   (cdr (blue-transient--selected-command))))
                              (oset obj value
                                    (append
                                     (cons ,last-build-dir
                                           selected-command-args-values)
-                                    saved-state))))
+                                    saved-state*))))
                          [:description
                           blue-transient--menu-heading
                           :class
