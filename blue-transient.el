@@ -307,33 +307,6 @@ the end."
     (cons (car lst)
           (blue-transient--insert-nth (1- n) elem (cdr lst))))))
 
-(defun blue-transient--update-selected-command-arguments ()
-  "Sync `blue-transient--command-chain' with selected command arguments."
-  (let* ((blueprint (or blue--blueprint
-                        (blue--find-blueprint)))
-         (selected-command (blue-transient--selected-command))
-         (suffixes (blue-transient--arguments-menu blueprint (car selected-command)))
-         (suffixes-values (blue-transient--selected-command-suffixes-values))
-         (selected-command-args (cdr selected-command))
-         ;; Remove the ones controled by suffixes.
-         (selected-command-args* (seq-remove
-                                  (lambda (arg)
-                                    (seq-some (lambda (suffix)
-                                                (let ((suffix-argument
-                                                       (caddr suffix)))
-                                                  (string-prefix-p suffix-argument
-                                                                   arg)))
-                                              suffixes))
-                                  selected-command-args))
-         (merged-args (seq-uniq (append suffixes-values selected-command-args*)))
-         (selected-command* (cons (car selected-command) merged-args))
-         (cleaned-chain (seq-remove-at-position blue-transient--command-chain
-                                                blue-transient--selected-index)))
-    (setq blue-transient--command-chain
-          (blue-transient--insert-nth blue-transient--selected-index
-                                      selected-command*
-                                      cleaned-chain))))
-
 (defun blue-transient--del ()
   "Delete the selected argument or command in `blue-transient--command-chain'."
   (interactive)
@@ -721,7 +694,31 @@ to be specially handled."
 This function is meant for sideffects, it is responsible of keeping
 `blue-transient--command-chain' sync with the selected command argument
 suffixes."
-  (blue-transient--update-selected-command-arguments))
+  (let* ((argument-prefix (oref obj argument))
+         (blueprint (or blue--blueprint
+                        (blue--find-blueprint)))
+         (selected-command (blue-transient--selected-command))
+         (selected-command-args (cdr selected-command))
+         ;; Remove the ones controled value.
+         (selected-command-args* (seq-remove
+                                  (lambda (arg)
+                                    (string-prefix-p argument-prefix arg))
+                                  selected-command-args))
+         (arg-val (if value
+                      (list (concat argument-prefix value))
+                    '()))
+         (merged-args (seq-uniq (append selected-command-args*
+                                        arg-val)))
+         (selected-command* (cons (car selected-command) merged-args))
+         (cleaned-chain (seq-remove-at-position blue-transient--command-chain
+                                                blue-transient--selected-index)))
+    (setq blue-transient--command-chain
+          (blue-transient--insert-nth blue-transient--selected-index
+                                      selected-command*
+                                      cleaned-chain))
+    (let ((operation (if arg-val #'1+ #'1-)))
+      (setq blue-transient--selected-argument-index
+            (funcall operation blue-transient--selected-argument-index)))))
 
 (blue--define-memoized blue-transient--arguments-menu (blueprint command)
   "Build transient menu for BLUE COMMAND arguments."
