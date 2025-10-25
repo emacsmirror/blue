@@ -717,9 +717,10 @@ suffixes."
           (blue-transient--insert-nth blue-transient--selected-index
                                       selected-command*
                                       cleaned-chain))
-    (let ((operation (if arg-val #'1+ #'1-)))
+    (unless value
       (setq blue-transient--selected-argument-index
-            (funcall operation blue-transient--selected-argument-index)))))
+            (min blue-transient--selected-argument-index
+                 (1- (length selected-command-args)))))))
 
 (blue--define-memoized blue-transient--arguments-menu (blueprint command)
   "Build transient menu for BLUE COMMAND arguments."
