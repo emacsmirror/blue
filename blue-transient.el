@@ -494,8 +494,8 @@ SELECTED controls the face properties to apply."
          (header (propertize "Commands:" 'face 'bold))
          (header* (if propertized-selection
                       (concat header "  ")
-                    (concat header
-                            (propertize " >" 'face 'blue-transient-selection)))))
+                    (concat header " "
+                            (propertize ">" 'face 'blue-transient-selection)))))
     (concat header* input
             (propertize "\n" 'face '(:inherit widget-field :extend t)))))
 
