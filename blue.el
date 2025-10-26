@@ -110,6 +110,12 @@ directory has been stored in the cache."
 (defvar blue--blueprint nil
   "Current blueprint being processed.")
 
+(defvar blue--data nil
+  "Current blueprint data.")
+
+(defvar blue--store-dir nil
+  "Current blueprint store directory.")
+
 (defvar blue--cache-list nil
   "List structure containing directories of known BLUE caches for project.")
 
@@ -347,12 +353,12 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Serialization.
 
-(defun blue--execute-serialize (options command &optional parse-json-p)
-  "Execute BLUE serialization COMMAND with OPTIONS and return parsed output.
+(defun blue--execute-serialize (options commands &optional parse-json-p)
+  "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
   (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
-         (args (append (or options '()) (list "--color" "always" command)))
+         (args (append (or options '()) (append '("--color" "always") commands)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
          (raw-output (with-output-to-string
@@ -361,54 +367,37 @@ If RAW is non nil, the serialized string will not be evaluated."
          (propertized-output (ansi-color-apply raw-output))
          (filtered-output (replace-regexp-in-string ";;;.*\n?" "" raw-output)))
     (blue--log-output propertized-output command-string exit-code)
-    (cons (if (or parse-json-p
-                  (not (zerop exit-code)))
-              filtered-output
-            (json-parse-string filtered-output
-                               :object-type 'alist
-                               :array-type 'list
-                               :null-object nil
-                               :false-object nil))
-          exit-code)))
+    (cons filtered-output exit-code)))
 
-(defun blue--get-commands (blueprint)
-  "Return the commands provided by BLUEPRINT."
-  ;; Running in `temp-dir' is done to ensure that `.blue-store' does not get
+(defun blue--get-data (blueprint)
+  "Return the commands and execution environment provided by BLUEPRINT."
+  ;; Running in `store-dir' is done to ensure that `.blue-store' does not get
   ;; created in the current directory when invoking `blue' commands.
-  (let* ((temp-dir (make-temp-file "blue-" t))
-         (options (when blueprint
-                    (list "--file" blueprint
-                          "--store-directory" temp-dir)))
-         (output (unwind-protect
-                     (blue--execute-serialize options ".serialize-commands")
-                   (delete-directory temp-dir t)))
-         (data (car output))
-         (exit-code (cdr output)))
+  (when-let* ((store-dir blue--store-dir)
+              (options (when blueprint
+                         (list "--file" blueprint
+                               "--store-directory" store-dir)))
+              (cmd '(".serialize-commands" "--" ".serialize-execution-environment"))
+              (output (blue--execute-serialize options cmd))
+              (data (car output))
+              (exit-code (cdr output)))
     (if (zerop exit-code)
-        data
-      (error "[BLUE] Command serialization failed"
-             (with-current-buffer blue--log-buffer
-               (goto-char (point-min)))
-             (display-buffer blue--log-buffer)))))
-
-(defun blue--get-execution-environment (blueprint &optional dir)
-  "Return the BLUEPRINT configuration.
-
-If DIR is non-nil return the configuration stored in DIR."
-  (let* ((temp-dir (make-temp-file "blue-" t))
-         (options (when blueprint (list "--file" blueprint
-                                        "--store-directory" temp-dir)))
-         (output (unwind-protect
-                     (blue--execute-serialize options ".serialize-execution-environment")
-                   (delete-directory temp-dir t)))
-         (data (car output))
-         (exit-code (cdr output)))
-    (if (zerop exit-code)
-        data
-      (error "[BLUE] Configuration serialization failed"
-             (with-current-buffer blue--log-buffer
-               (goto-char (point-min)))
-             (display-buffer blue--log-buffer)))))
+        (with-temp-buffer
+          (insert data)
+          (goto-char (point-min))
+          (re-search-forward "\\(\\[.*\\]\\)\\({.*}\\)")
+          (let ((json1 (match-string-no-properties 1))
+                (json2 (match-string-no-properties 2)))
+            (cons (json-parse-string json1
+                                     :object-type 'alist
+                                     :array-type 'list
+                                     :null-object nil
+                                     :false-object nil)
+                  (json-parse-string json2
+                                     :object-type 'alist
+                                     :array-type 'list
+                                     :null-object nil
+                                     :false-object nil)))))))
 
 (defun blue--config-get (var config)
   "Retrieve variable VAR value from CONFIG."
@@ -417,24 +406,25 @@ If DIR is non-nil return the configuration stored in DIR."
 
 ;;; Completion.
 
-(blue--define-memoized blue--autocomplete (input)
+(blue--define-memoized blue--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
-  (let* ((temp-dir (make-temp-file "blue-" t))
-         (command (concat blue-binary
-                          " --store-directory " temp-dir
-                          " .autocomplete \"blue " input "\""))
-         (output (unwind-protect
-                     (shell-command-to-string command)
-                   (delete-directory temp-dir t))))
+  (when-let* ((store-dir blue--store-dir)
+              (command (concat blue-binary
+                               " --file " blueprint
+                               " --store-directory " store-dir
+                               " .autocomplete \"blue " input "\""))
+              (output (shell-command-to-string command)))
     (string-split output)))
 
 (defun blue--completion-table (&rest _)
   "Completion table function for minibuffer prompt."
   (let ((result
          (while-no-input
-           (when-let* ((prompt-start (minibuffer-prompt-end))
+           (when-let* ((blueprint (or blue--blueprint
+                                      (blue--find-blueprint)))
+                       (prompt-start (minibuffer-prompt-end))
                        (input (buffer-substring prompt-start (point)))
-                       (completions (blue--autocomplete input)))
+                       (completions (blue--autocomplete blueprint input)))
              completions))))
     (and (consp result) result)))
 
@@ -552,8 +542,8 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
 
 (defun blue--set-search-path (blueprint)
   "Set search path for BLUEPRINT."
-  (let* ((conf (blue--get-execution-environment blueprint))
-         (srcdir (blue--config-get "srcdir" conf)))
+  (when-let* ((conf (cdr blue--data))
+              (srcdir (blue--config-get "srcdir" conf)))
     ;; Make 'srcdir' errors searchable in compilation buffer.
     (setq-local blue--search-path (seq-uniq (cons srcdir compilation-search-path))
                 compilation-search-path blue--search-path)))
@@ -672,6 +662,9 @@ not exist."
   "Interactive prompt for BLUE commands."
   (blue--check-blue-binary)
   (blue--ensure-cache)
+  (setq blue--blueprint (blue--find-blueprint)
+        blue--store-dir (make-temp-file "blue-" t)
+        blue--data (blue--get-data blue--blueprint))
   (let* ((prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs default-directory))
          (last-build-dir (car build-dirs))
@@ -682,8 +675,7 @@ not exist."
     (setq blue--overiden-build-dir (when prompt-dir-p
                                      (blue--prompt-dir t))
           blue--build-dir (or blue--overiden-build-dir last-build-dir))
-    (if-let* ((blue--blueprint (blue--find-blueprint))
-              (commands (blue--get-commands blue--blueprint))
+    (if-let* ((commands (car blue--data))
               (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
               (completion-extra-properties
                (blue--create-completion-properties commands invocations))
