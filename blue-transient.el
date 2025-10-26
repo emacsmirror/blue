@@ -863,6 +863,11 @@ keeps running in the compilation buffer."
                                               ;; prototype, were the set (if
                                               ;; any) value is stored.
                                               (oref obj value)))
+                                  (selected-build-dir (seq-find
+                                                       (lambda (arg)
+                                                         (member arg ',build-dirs))
+                                                       value
+                                                       ,last-build-dir))
                                   ;; Removed selected command suffixes from
                                   ;; state since those should follow what
                                   ;; `blue-transient--command-chain' specifies
@@ -872,12 +877,11 @@ keeps running in the compilation buffer."
                                                     (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
                                                       (member arg-prefix selected-command-suffixes)))
                                                   value))
-                                  ;; Ensure that the `last-build-dir' and the
-                                  ;; suffixes present in
-                                  ;; `blue-transient--command-chain' are
-                                  ;; set.
+                                  ;; Ensure that a build dir and selected
+                                  ;; command suffixes present in
+                                  ;; `blue-transient--command-chain' are set.
                                   (value* (append
-                                           (cons ,last-build-dir
+                                           (cons selected-build-dir
                                                  selected-command-args-values)
                                            cleaned-value)))
                              (oset obj value value*)))
