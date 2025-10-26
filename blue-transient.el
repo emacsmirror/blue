@@ -275,9 +275,9 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
 
 (defun blue-transient--selected-command-suffixes ()
   "Get the selected command arguments suffixes values from the menu prompt."
-  (let* ((blueprint (or blue--blueprint
-                        (blue--find-blueprint)))
-         (selected-command (blue-transient--selected-command)))
+  (when-let* ((blueprint (or blue--blueprint
+                             (blue--find-blueprint)))
+              (selected-command (blue-transient--selected-command)))
     (mapcar #'caddr
             (blue-transient--arguments-menu
              blueprint
