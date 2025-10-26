@@ -397,7 +397,11 @@ If RAW is non nil, the serialized string will not be evaluated."
                                      :object-type 'alist
                                      :array-type 'list
                                      :null-object nil
-                                     :false-object nil)))))))
+                                     :false-object nil))))
+      (with-current-buffer blue--log-buffer
+        (goto-char (point-min)))
+      (display-buffer blue--log-buffer)
+      (error "[BLUE] Configuration serialization failed"))))
 
 (defun blue--config-get (var config)
   "Retrieve variable VAR value from CONFIG."
