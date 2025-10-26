@@ -652,8 +652,6 @@ to be specially handled."
                                         '((,command-invoke)))))
                    (setq blue-transient--command-chain command-chain)
                    (blue-transient--command-index+1 t)
-                   ;; FIXME: somehow this does not work here and the BLUE
-                   ;; switches get resetted.
                    (blue-transient--set-and-setup))))))
          category-commands))))
    categories))
@@ -855,22 +853,34 @@ keeps running in the compilation buffer."
                                                 build-dirs))
                          :init-value
                          (lambda (obj)
-                           (let* ((saved-state (transient-get-value))
-                                  (selected-command-suffixes
+                           (let* ((selected-command-suffixes
                                    (blue-transient--selected-command-suffixes))
-                                  (saved-state*
-                                   (seq-remove
-                                    (lambda (arg)
-                                      (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
-                                        (member arg-prefix selected-command-suffixes)))
-                                    saved-state))
                                   (selected-command-args-values
-                                   (cdr (blue-transient--selected-command))))
-                             (oset obj value
-                                   (append
-                                    (cons ,last-build-dir
-                                          selected-command-args-values)
-                                    saved-state*))))
+                                   (cdr (blue-transient--selected-command)))
+                                  (value (and (slot-boundp obj 'value)
+                                              ;; Already set because the live
+                                              ;; object is cloned from the
+                                              ;; prototype, were the set (if
+                                              ;; any) value is stored.
+                                              (oref obj value)))
+                                  ;; Removed selected command suffixes from
+                                  ;; state since those should follow what
+                                  ;; `blue-transient--command-chain' specifies
+                                  ;; instead of the saved state.
+                                  (cleaned-value (seq-remove
+                                                  (lambda (arg)
+                                                    (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
+                                                      (member arg-prefix selected-command-suffixes)))
+                                                  value))
+                                  ;; Ensure that the `last-build-dir' and the
+                                  ;; suffixes present in
+                                  ;; `blue-transient--command-chain' are
+                                  ;; set.
+                                  (value* (append
+                                           (cons ,last-build-dir
+                                                 selected-command-args-values)
+                                           cleaned-value)))
+                             (oset obj value value*)))
                          [:description
                           blue-transient--menu-heading
                           :class
