@@ -830,7 +830,6 @@ keeps running in the compilation buffer."
   (blue--ensure-cache)
   (setq blue-transient--history-index 0
         blue--blueprint (blue--find-blueprint)
-        blue--store-dir (make-temp-file "blue-" t)
         blue--data (blue--get-data blue--blueprint))
   (let* ((prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))

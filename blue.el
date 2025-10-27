@@ -113,9 +113,6 @@ directory has been stored in the cache."
 (defvar blue--data nil
   "Current blueprint data.")
 
-(defvar blue--store-dir nil
-  "Current blueprint store directory.")
-
 (defvar blue--cache-list nil
   "List structure containing directories of known BLUE caches for project.")
 
@@ -372,12 +369,8 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (defun blue--get-data (blueprint)
   "Return the commands and execution environment provided by BLUEPRINT."
-  ;; Running in `store-dir' is done to ensure that `.blue-store' does not get
-  ;; created in the current directory when invoking `blue' commands.
-  (when-let* ((store-dir blue--store-dir)
-              (options (when blueprint
-                         (list "--file" blueprint
-                               "--store-directory" store-dir)))
+  (when-let* ((options (when blueprint
+                         (list "--file" blueprint)))
               (cmd '(".serialize-commands" "--" ".serialize-execution-environment"))
               (output (blue--execute-serialize options cmd))
               (data (car output))
@@ -415,11 +408,9 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Use blue '.autocomplete' command to provide completion from INPUT."
   (let ((env (cons "GUILE_AUTO_COMPILE=0" process-environment))
         (path (exec-path)))
-    (let* ((store-dir blue--store-dir)
-           (default-directory (or blue--build-dir default-directory))
+    (let* ((default-directory (or blue--build-dir default-directory))
            (command (concat blue-binary
                             " --file " blueprint
-                            " --store-directory " store-dir
                             " .autocomplete \"blue " input "\""))
            (output (shell-command-to-string command)))
       (string-split output))))
@@ -671,7 +662,6 @@ not exist."
   (blue--check-blue-binary)
   (blue--ensure-cache)
   (setq blue--blueprint (blue--find-blueprint)
-        blue--store-dir (make-temp-file "blue-" t)
         blue--data (blue--get-data blue--blueprint))
   (let* ((prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs default-directory))
