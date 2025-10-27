@@ -683,7 +683,7 @@ to be specially handled."
 (cl-defmethod transient-infix-set :after ((obj blue-transient--command-argument) value)
   "Setter for the class symbol `blue-transient--command-argument'.
 
-This function is meant for sideffects, it is responsible of keeping
+This function is meant for side effects, it is responsible of keeping
 `blue-transient--command-chain' sync with the selected command argument
 suffixes."
   (blue-transient--save-state)
@@ -730,6 +730,19 @@ suffixes."
                                           :class blue-transient--command-argument)))
                                     suffixes-keys)))
     menu-entries))
+
+
+;;; Selected build directory.
+
+(defclass blue-transient--build-directory (transient-switch) ()
+  "Class used for selected BLUE build directories.")
+
+(cl-defmethod transient-infix-set :after ((_ blue-transient--build-directory) value)
+  "Setter for the class symbol `blue-transient--build-directory'.
+
+This function is meant for side effects, it is responsible of keeping
+`blue--build-dir' sync with the selected build directory."
+  (setq blue--build-dir value))
 
 
 ;;; UI.
@@ -881,6 +894,9 @@ keeps running in the compilation buffer."
                                            (cons selected-build-dir
                                                  selected-command-args-values)
                                            cleaned-value)))
+                             ;; Make sure the `blue--build-dir' is in sync with
+                             ;; the selected build directory.
+                             (setq blue--build-dir selected-build-dir)
                              (oset obj value value*)))
                          [:description
                           blue-transient--menu-heading
@@ -943,8 +959,10 @@ keeps running in the compilation buffer."
                            :prompt "Build directory: "
                            :reader transient-read-existing-directory)
                           ,@(seq-mapn (lambda (idx build-dir)
-                                        (list (concat " " (number-to-string idx)) "" build-dir
-                                              :format "%k %v"))
+                                        (list
+                                         (concat " " (number-to-string idx)) "" build-dir
+                                         :format "%k %v"
+                                         :class 'blue-transient--build-directory))
                                       indices build-dirs)]
                          [:description
                           (lambda ()
