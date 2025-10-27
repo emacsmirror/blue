@@ -357,7 +357,8 @@ If NO-SAVE is non-nil, don't save to disk immediately."
   "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
-  (let* ((process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
+  (let* ((default-directory (or blue--build-dir default-directory))
+         (process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (args (append (or options '()) (append '("--color" "always") commands)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
@@ -412,13 +413,16 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (blue--define-memoized blue--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
-  (when-let* ((store-dir blue--store-dir)
-              (command (concat blue-binary
-                               " --file " blueprint
-                               " --store-directory " store-dir
-                               " .autocomplete \"blue " input "\""))
-              (output (shell-command-to-string command)))
-    (string-split output)))
+  (let ((env (cons "GUILE_AUTO_COMPILE=0" process-environment))
+        (path (exec-path)))
+    (let* ((store-dir blue--store-dir)
+           (default-directory (or blue--build-dir default-directory))
+           (command (concat blue-binary
+                            " --file " blueprint
+                            " --store-directory " store-dir
+                            " .autocomplete \"blue " input "\""))
+           (output (shell-command-to-string command)))
+      (string-split output))))
 
 (defun blue--completion-table (&rest _)
   "Completion table function for minibuffer prompt."
