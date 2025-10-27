@@ -293,9 +293,9 @@ Give a relevant error message according to EXIT-CODE."
         (with-temp-buffer
           (insert-file-contents blue-cache-file)
           (setq blue--cache-list (read (current-buffer))))
-      (error (concat "[BLUE] Failed to read cache file: "
-                     (error-message-string err))
-             (setq blue--cache-list nil)))))
+      (error
+       (message "[BLUE] Failed to read cache file: %s" (error-message-string err))
+       (setq blue--cache-list nil)))))
 
 (defun blue--write-cache ()
   "Save `blue--cache-list' to `blue-cache-file'."
@@ -306,8 +306,8 @@ Give a relevant error message according to EXIT-CODE."
               (print-level nil))
           (pp blue--cache-list (current-buffer)))
         (write-region nil nil blue-cache-file nil 'silent))
-    (error (concat "[BLUE] Failed to write cache file: "
-                   (error-message-string err)))))
+    (error
+     (message "[BLUE] Failed to write cache file: %s" (error-message-string err)))))
 
 (defun blue--sanitize-cache ()
   "Remove non-existent directories from cache list."
@@ -350,7 +350,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Serialization.
 
-(defun blue--execute-serialize (options commands &optional parse-json-p)
+(defun blue--execute-serialize (options commands)
   "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
@@ -406,14 +406,12 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (blue--define-memoized blue--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
-  (let ((env (cons "GUILE_AUTO_COMPILE=0" process-environment))
-        (path (exec-path)))
-    (let* ((default-directory (or blue--build-dir default-directory))
-           (command (concat blue-binary
-                            " --file " blueprint
-                            " .autocomplete \"blue " input "\""))
-           (output (shell-command-to-string command)))
-      (string-split output))))
+  (let* ((default-directory (or blue--build-dir default-directory))
+         (command (concat blue-binary
+                          " --file " blueprint
+                          " .autocomplete \"blue " input "\""))
+         (output (shell-command-to-string command)))
+    (string-split output)))
 
 (defun blue--completion-table (&rest _)
   "Completion table function for minibuffer prompt."
@@ -539,8 +537,10 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
     ;; locally so it persists after the dynamic context ends.
     (setq default-directory default-directory)))
 
-(defun blue--set-search-path (blueprint)
-  "Set search path for BLUEPRINT."
+(defun blue--set-search-path ()
+  "Set current buffer search path.
+
+This is meant to be used in compilation buffers."
   (when-let* ((conf (cdr blue--data))
               (srcdir (blue--config-get "srcdir" conf)))
     ;; Make 'srcdir' errors searchable in compilation buffer.
@@ -581,7 +581,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
     (compilation-start command comint-p)
     ;; Make 'srcdir' errors searchable in compilation buffer.
     (with-current-buffer buf
-      (blue--set-search-path (blue--find-blueprint)))))
+      (blue--set-search-path))))
 
 
 ;;; Command Analysis.
@@ -608,7 +608,8 @@ COMINT-P selects `comint-mode' for compilation buffer."
 (defun blue--any-interactive-p (input-tokens)
   "Return t if an interactive command is part of INPUT-TOKENS.
 
-A comand is considered interactive if it is a member of `blue-interactive-commands'."
+A comand is considered interactive if it is a member of
+`blue-interactive-commands'."
   (let ((invocations (blue--parse-invocations input-tokens)))
     (seq-some #'blue--interactive-p invocations)))
 
@@ -683,7 +684,6 @@ not exist."
               (crm-prompt "[%d] [CMR%s] Command: "))
         (list (minibuffer-with-setup-hook #'blue--setup-minibuffer
                 (completing-read-multiple "Command: " invocations))
-              commands
               comint-flip)
       (list nil))))
 
@@ -730,23 +730,22 @@ not exist."
     (blue--write-cache)))
 
 ;;;###autoload
-(defun blue-run-command (input &optional commands comint-flip)
+(defun blue-run-command (input &optional comint-flip)
   "Run a BLUE command interactively.
 
 The prompt will hint for a directory where to run the BLUE command in a
 directory.  The hinted directories are directories where BLUE has been
 previously executed by `blue.el'.  The execution directory can be
-changed using 'M-<num>'.
+changed using `M-<num>'.
 
 Invoked with universal prefix argument '\\[universal-argument]', prompt
-for a directory to use when running 'blue'.
+for a directory to use when running `blue'.
 
 Invoked with double universal prefix argument '\\[universal-argument]
 \\[universal-argument]', invert the interactive heuristics configured by
 `blue-interactive-commands'.
 
 INPUT is a list of command strings.
-COMMANDS contains command metadata.
 COMINT-FLIP inverts the interactive compilation logic."
   (interactive (blue--prompt-for-commands))
 

@@ -40,7 +40,7 @@
 (defcustom blue-transient-menu-columns-limit nil
   "If non-nil, limits maximum allowed number of menu columns.
 Used by `blue-transient--menu-columns'."
-  :group 'blue-compile
+  :group 'blue-transient
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
 
@@ -82,15 +82,18 @@ can become key characters."
 
 (defface blue-transient-selection
   '((t :inherit blue-hint-highlight))
-  "Face used to highlight selections.")
+  "Face used to highlight selections."
+  :group 'blue-transient)
 
 (defface blue-transient-selection-suffix
   '((t :inherit transient-argument))
-  "Face used to highlight suffixes.")
+  "Face used to highlight suffixes."
+  :group 'blue-transient)
 
 (defface blue-transient-selection-suffix-value
   '((t :inherit transient-value))
-  "Face used to highlight suffix values.")
+  "Face used to highlight suffix values."
+  :group 'blue-transient)
 
 
 ;;; Internal variables.
@@ -140,7 +143,7 @@ possible saved state.")
   (setq blue-transient--redo-stack nil)) ; Clear redo when new change happens.
 
 (defun blue-transient--set-and-setup ()
-  "Set and setup 'blue-transient--menu'.
+  "Set and setup function `blue-transient--menu'.
 This save the current transient state for future invocations
 `transient-set'.  And refreshes the menu `transient-setup'."
   (transient-set)
@@ -232,7 +235,7 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
             blue-transient--selected-argument-index 0)))))
 
 (defun blue-transient--select-first ()
-  "Select first command for argument operation from `blue-transient--command-chain'."
+  "Select first command from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
     (setq blue-transient--selected-index 0
@@ -240,7 +243,7 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
     (blue-transient--set-and-setup)))
 
 (defun blue-transient--select-previous ()
-  "Select previous command for argument operation from `blue-transient--command-chain'."
+  "Select previous command from `blue-transient--command-chain'."
   (interactive)
   (when blue-transient--command-chain
     (blue-transient--command-index-1)
@@ -416,7 +419,7 @@ the end."
     (blue--compile full-input comint)))
 
 (defun blue-transient--propertize-value-arg (arg selected)
-  "Helper to propertize a transient ARG of the form 'arg=val'.
+  "Helper to propertize a transient ARG of the form `arg=val'.
 
 SELECTED controls the face properties to apply."
   (let* ((split (string-split arg "="))
@@ -530,7 +533,6 @@ to be specially handled."
     (while (< (length word-keys)
               (length words))
       (let (word
-            word-index
             word-key)
         (unless (and blue-transient-keychar-function
                      (seq-find
@@ -550,7 +552,6 @@ to be specially handled."
                              "Got duplicate key %s from `blue-transient-keychar-function'"
                              (string key)))
                           (setq word w
-                                word-index (seq-position word key)
                                 word-key key)))
                       (seq-remove (lambda (w)
                                     (assoc w word-keys))
@@ -585,8 +586,7 @@ to be specially handled."
                                                         (funcall casefn (elt word index)))))
                                                  sorted-words)))))
                                 sorted-words))
-                     (setq word-index index
-                           word-key (funcall casefn (elt word index)))))
+                     (setq word-key (funcall casefn (elt word index)))))
                  (number-sequence 0 max-len)))
               ;; Repeat above search a few times: first try characters as-is,
               ;; then try their upper-case and down-case variants.
@@ -608,8 +608,7 @@ to be specially handled."
           (setq word (seq-find (lambda (w)
                                  (not (assoc w word-keys)))
                                sorted-words)
-                word-key (blue-transient--random-key word key-map)
-                word-index (seq-position word word-key)))
+                word-key (blue-transient--random-key word key-map)))
         (push (list word
                     (string word-key))
               word-keys)
@@ -631,9 +630,6 @@ to be specially handled."
         (mapcar
          (lambda (command)
            (let* ((command-invoke (alist-get 'invoke command))
-                  (command-interactive-p (when (member command-invoke
-                                                       blue-interactive-commands)
-                                           t))
                   (command-key
                    (if (> (length category-commands) 1)
                        (concat (cadr (assoc category-name category-keys))
@@ -685,15 +681,13 @@ to be specially handled."
   "Class used for BLUE command arguments that can take a value.")
 
 (cl-defmethod transient-infix-set :after ((obj blue-transient--command-argument) value)
-  "Setter for the 'blue-transient--command-argument' class.
+  "Setter for the class symbol `blue-transient--command-argument'.
 
 This function is meant for sideffects, it is responsible of keeping
 `blue-transient--command-chain' sync with the selected command argument
 suffixes."
   (blue-transient--save-state)
   (let* ((argument-prefix (oref obj argument))
-         (blueprint (or blue--blueprint
-                        (blue--find-blueprint)))
          (selected-command (blue-transient--selected-command))
          (selected-command-args (cdr selected-command))
          ;; Remove the ones controled value.
@@ -805,12 +799,17 @@ suffixes."
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
 
+(defun blue-transient--menu ()
+  "Silence bytecompilation warnings.
+
+This will get redefined by `blue-transient'.")
+
 ;;;###autoload
 (defun blue-transient ()
   "Open transient menu for BLUE.
 
 Invoked with universal prefix argument '\\[universal-argument]', prompt
-for a directory to use when running 'blue'.
+for a directory to use when running `blue'.
 
 The following steps are performed:
 
@@ -834,7 +833,6 @@ keeps running in the compilation buffer."
   (let* ((prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
          (last-build-dir (car build-dirs))
-         (prefix (car current-prefix-arg))
          (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
                            (and blue-require-build-directory
                                 (not last-build-dir))))

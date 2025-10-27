@@ -120,7 +120,6 @@ Each record becomes a plist with field names as keywords."
          (origin (plist-get rec :origin))
          (class (plist-get rec :class))
          (error-msg (plist-get rec :error))
-         (has-error (not (null error-msg)))
          (heading (concat "Record " replay-hash)))
 
     (magit-insert-section (blue-record rec)
@@ -176,7 +175,7 @@ Each record becomes a plist with field names as keywords."
       (insert "\n"))))
 
 (defun blue-replay--display-recutils-magit (recs dir)
-  "Display parsed recutils RECS in a 'magit-section' buffer.
+  "Display parsed recutils RECS in a Magit section buffer.
 
 DIR is the directory where the replay data has been taken from."
   (let ((buf-name (blue-replay--get-buffer)))
@@ -196,7 +195,7 @@ DIR is the directory where the replay data has been taken from."
         ;; NOTE: `magit-insert-section' does not automatically display the
         ;; visibility indicators.
         (magit-map-sections #'magit-section-maybe-update-visibility-indicator))
-      (blue--set-search-path blue--blueprint))
+      (blue--set-search-path))
     (display-buffer buf-name)))
 
 (defun blue-replay--replay (blueprint dir)
@@ -221,7 +220,8 @@ DIR is the directory where the replay data has been taken from."
     (when (file-exists-p path)
       (find-file path)
       (when line
-        (goto-line line))
+        (goto-char (point-min))
+        (forward-line (1- line)))
       (when column
         (move-to-column column)))))
 
