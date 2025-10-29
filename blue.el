@@ -169,6 +169,12 @@ This is used when passing universal prefix argument `C-u' to
         (blue-log-mode)))
     buf*))
 
+(defun blue--get-build-dir ()
+  "Return `blue--build-dir' if it exists, nil otherwise."
+  (if (file-exists-p blue--build-dir)
+      blue--build-dir
+    nil))
+
 (defun blue--check-blue-binary ()
   "Check if `blue-binary' is in PATH."
   (let ((bin (executable-find blue-binary)))
@@ -354,7 +360,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
   "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
-  (let* ((default-directory (or blue--build-dir default-directory))
+  (let* ((default-directory (or (blue--get-build-dir) default-directory))
          (process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
          (args (append (or options '()) (append '("--color" "always") commands)))
          (command-string (string-join (cons blue-binary args) " "))
@@ -406,7 +412,7 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (blue--define-memoized blue--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
-  (let* ((default-directory (or blue--build-dir default-directory))
+  (let* ((default-directory (or (blue--get-build-dir) default-directory))
          (command (concat blue-binary
                           " --file " blueprint
                           " .autocomplete \"blue " input "\""))
@@ -487,7 +493,7 @@ If OVERRIDE is non nil disable CONFIGS."
 (defun blue--show-hints (&rest _)
   "Display build directory hints in minibuffer overlay."
   (when-let* ((build-dirs (blue--cache-get-build-dirs blue--blueprint))
-              (content (blue--create-hint-overlay build-dirs blue--build-dir blue--overiden-build-dir)))
+              (content (blue--create-hint-overlay build-dirs (blue--get-build-dir) blue--overiden-build-dir)))
     (unless blue--hint-overlay
       (setq blue--hint-overlay (make-overlay (point) (point))))
     (overlay-put blue--hint-overlay 'after-string content)
@@ -573,9 +579,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
                                                       command name-of-mode)))
          (buf (get-buffer-create
                (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
-         (default-directory (if blue--build-dir
-                                blue--build-dir
-                              default-directory)))
+         (default-directory (or (blue--get-build-dir) default-directory)))
     (setq-default compilation-directory default-directory)
     (blue--setup-buffer buf)
     (compilation-start command comint-p)
@@ -761,8 +765,8 @@ COMINT-FLIP inverts the interactive compilation logic."
                              " ")))
         ;; Bring `blue--build-dir' to the from of the list so it's ordered by
         ;; usage.
-        (when blue--build-dir
-          (blue--cache-add blue--build-dir))
+        (when-let* ((build-dir (blue--get-build-dir)))
+          (blue--cache-add build-dir))
         (blue--compile command-string comint)))))
 
 (provide 'blue)
