@@ -650,14 +650,16 @@ A comand is considered interactive if it is a member of
     (list :annotation-function (blue--create-annotation-fn commands width)
           :group-function (blue--create-group-fn commands))))
 
-(defun blue--prompt-dir (&optional create-p)
+(defun blue--prompt-dir (&optional create-p mustmatch)
   "Prompt for directory.
 
 If CREATE-P is non nil, create the directory and it's parents if they do
-not exist."
+not exist.
+
+MUSTMATCH is passed directly to `read-directory-name'."
   (let ((dir (directory-file-name
               (expand-file-name
-               (read-directory-name "Build directory: ")))))
+               (read-directory-name "Build directory: " nil nil mustmatch)))))
     (when (and create-p
                (not (file-exists-p dir)))
       (mkdir dir t))

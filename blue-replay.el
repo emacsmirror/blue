@@ -328,19 +328,25 @@ line:column information.")
 
 ;;;###autoload
 (defun blue-replay (dir)
-  "Interactively display replay data from DIR."
+  "Interactively display replay data from DIR.
+
+Invoked with universal prefix argument '\\[universal-argument]', prompt
+for a directory to use when running `blue'."
   (interactive
    (progn
      (blue--check-blue-binary)
      (blue--ensure-cache)
-     (let* ((known (blue--cache-get-build-dirs default-directory))
-            (cur-dir (directory-file-name (expand-file-name default-directory)))
-            (cached (member cur-dir known))
-            (prefix (car current-prefix-arg)))
-       (list (if (and cached
-                      (not prefix))
-                 cur-dir
-               (blue--prompt-dir))))))
+     (let* ((prefix (car current-prefix-arg))
+            (build-dirs (blue--cache-get-build-dirs default-directory))
+            (last-build-dir (car build-dirs))
+            (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
+                              (and blue-require-build-directory
+                                   (not last-build-dir))))
+            (build-dir (if (or prompt-dir-p
+                               (not last-build-dir))
+                           (blue--prompt-dir nil t)
+                         last-build-dir)))
+       (list build-dir))))
   (setq blue--blueprint (blue--find-blueprint)
         blue--build-dir dir)
   (let ((rec-data (blue-replay--replay blue--blueprint dir)))
