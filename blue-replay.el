@@ -139,7 +139,9 @@ Each record becomes a plist with field names as keywords."
                           (propertize
                            (buttonize replay #'blue-replay--exec-replay replay)
                            'font-lock-face 'custom-button
-                           'cursor-face 'custom-button-pressed)))))
+                           'cursor-face 'custom-button-pressed
+                           'help-echo (format "Click to replay buildable %s"
+                                              replay-hash))))))
 
       (when class
         (magit-insert-section (blue-field :class)
