@@ -171,7 +171,8 @@ This is used when passing universal prefix argument `C-u' to
 
 (defun blue--get-build-dir ()
   "Return `blue--build-dir' if it exists, nil otherwise."
-  (if (file-exists-p blue--build-dir)
+  (if (and blue--build-dir
+           (file-exists-p blue--build-dir))
       blue--build-dir
     nil))
 
