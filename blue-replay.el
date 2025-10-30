@@ -134,14 +134,18 @@ Each record becomes a plist with field names as keywords."
           (insert (format "%-10s %s\n" "origin:" origin))))
 
       (when replay
-        (magit-insert-section (blue-field :replay)
-          (insert (format "%-10s %s\n" "replay:"
-                          (propertize
-                           (buttonize replay #'blue-replay--exec-replay replay)
-                           'font-lock-face 'custom-button
-                           'cursor-face 'custom-button-pressed
-                           'help-echo (format "Click to replay buildable %s"
-                                              replay-hash))))))
+        (let ((help-msg (format "Click to replay buildable %s" replay-hash)))
+          (magit-insert-section (blue-field :replay)
+            (insert (format "%-10s %s\n" "replay:"
+                            (propertize
+                             (buttonize replay #'blue-replay--exec-replay replay)
+                             'font-lock-face 'custom-button
+                             'cursor-face 'custom-button-pressed
+                             'help-echo help-msg
+                             'cursor-sensor-functions
+                             `((lambda (_ _ status)
+                                 (when (eq status 'entered)
+                                   (message ,help-msg))))))))))
 
       (when class
         (magit-insert-section (blue-field :class)
@@ -319,7 +323,8 @@ line:column information.")
   :interactive nil
   :group 'blue
   (blue-replay-setup-font-lock)
-  (cursor-face-highlight-mode))
+  (cursor-face-highlight-mode)
+  (cursor-sensor-mode))
 
 ;;;###autoload
 (defun blue-replay (dir)
