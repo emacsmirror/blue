@@ -242,12 +242,9 @@ permissive.  So we match absolute paths or relative paths with
 line:column information.")
 
 (defvar blue-replay-font-lock-keywords
-  `(;; Class names in angle brackets
+  `(;; Class names in angle brackets.
     ("\\(#*<.*>\\)"
      (1 'font-lock-variable-use-face))
-
-    ("\\(\"[^\"]+\"\\)"
-     (1 'font-lock-string-face))
 
     ;; Make files clickable if they exist.
     (,blue-replay--file-rx
@@ -270,7 +267,11 @@ line:column information.")
       ;; Allow overriding previous fontification, eg. refontify strings.
       t))
 
-    ;; Keywords with colons (#:log, #:trs, #:cov)
+    ;; Strings.
+    ("\\(\"\\(?:\\\\.\\|[^\"\\]\\)*\"\\)"
+     (1 'font-lock-string-face t))
+
+    ;; Keywords with colons (#:log, #:trs, #:cov).
     ("\\(#:[a-zA-Z-]+\\)"
      (1 'font-lock-keyword-face))
 
@@ -281,15 +282,15 @@ line:column information.")
     ("^\s*\\([0-9]+\\.\\)"
      (1 'font-lock-number-face))
 
-    ;; Error types (&origin, &irritants, &message, etc.)
+    ;; Error types (&origin, &irritants, &message, etc).
     ("\\(&[a-zA-Z-]+\\)"
      (1 'font-lock-type-face))
 
-    ;; Plus signs for list items
+    ;; Plus signs for list items.
     ("^\s*\\(\\+\\)" . 'font-lock-comment-face))
   "Font lock keywords for blue build output.")
 
-;; Integration with blue-replay-mode
+;; Integration with blue-replay-mode.
 (defun blue-replay-setup-font-lock ()
   "Set up font-lock for `blue-replay-mode'."
   (setq font-lock-defaults '(blue-replay-font-lock-keywords t))
