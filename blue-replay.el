@@ -341,10 +341,9 @@ line:column information.")
                       (not prefix))
                  cur-dir
                (blue--prompt-dir))))))
-  ;; TODO: homogenize dynamic binding reliance. Some functions take
-  ;; `blue--blueprint' as an argument, other rely on the dynamic binding.
-  (let* ((blue--blueprint (blue--find-blueprint)) ; Bounded dynamicaly.
-         (rec-data (blue-replay--replay blue--blueprint dir)))
+  (setq blue--blueprint (blue--find-blueprint)
+        blue--build-dir dir)
+  (let ((rec-data (blue-replay--replay blue--blueprint dir)))
     (blue-replay--display-recutils-magit rec-data dir)))
 
 (provide 'blue-replay)
