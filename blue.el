@@ -37,7 +37,7 @@
 (require 'seq)
 
 
-;;; Configuration
+;;; Configuration.
 
 (defgroup blue nil
   "Operations on the current project."
@@ -82,7 +82,7 @@ directory has been stored in the cache."
   :group 'blue)
 
 
-;;; Faces
+;;; Faces.
 
 (defface blue-documentation
   '((t :inherit completions-annotations))

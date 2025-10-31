@@ -28,7 +28,7 @@
 (require 'blue)
 
 
-;;; Configuration
+;;; Configuration.
 
 (defvar blue-replay--buffer "*blue replay*"
   "Buffer to dump raw output of replay.")
@@ -56,7 +56,7 @@ Each record becomes a plist with field names as keywords."
       (let ((original-line line))
         (setq line (string-trim line))
         (cond
-         ;; Empty line marks end of record
+         ;; Empty line marks end of record.
          ((string-empty-p line)
           (when current-record
             (push current-record recs)
@@ -84,7 +84,7 @@ Each record becomes a plist with field names as keywords."
          ;; Multi-line value continuation - line starts with whitespace.
          ((and current-key (string-match "^[ \t]" original-line))
           (let* ((existing-value (plist-get current-record current-key))
-                 (continuation original-line)) ; Keep original indentation
+                 (continuation original-line)) ; Keep original indentation.
             (if existing-value
                 (setq current-record
                       (plist-put current-record current-key
@@ -100,14 +100,14 @@ Each record becomes a plist with field names as keywords."
                  (key (intern (concat ":" key-name)))
                  (value (match-string 2 line)))
             (setq current-key key)
-            ;; Build plist in order by appending to end
+            ;; Build plist in order by appending to end.
             (setq current-record
                   (append current-record
                           (list key (if (string-empty-p value)
                                         nil
                                       value)))))))))
 
-    ;; Don't forget the last record if there's no trailing newline
+    ;; Don't forget the last record if there's no trailing newline.
     (when current-record
       (push current-record recs))
 
@@ -128,7 +128,7 @@ Each record becomes a plist with field names as keywords."
                     'font-lock-face
                     '(:inherit font-lock-constant-face :weight bold)))
 
-      ;; Insert basic info
+      ;; Insert basic info.
       (when origin
         (magit-insert-section (blue-field :origin)
           (insert (format "%-10s %s\n" "origin:" origin))))
@@ -151,7 +151,7 @@ Each record becomes a plist with field names as keywords."
         (magit-insert-section (blue-field :class)
           (insert (format "%-10s %s\n" "class:" class))))
 
-      ;; Insert inputs section
+      ;; Insert inputs section.
       (let ((inputs (plist-get rec :inputs)))
         (when inputs
           (magit-insert-section (blue-inputs)
@@ -161,7 +161,7 @@ Each record becomes a plist with field names as keywords."
                   (insert "  + " input "\n"))
               (insert "  " inputs "\n")))))
 
-      ;; Insert outputs section
+      ;; Insert outputs section.
       (let ((outputs (plist-get rec :outputs)))
         (when outputs
           (magit-insert-section (blue-outputs)
@@ -171,7 +171,7 @@ Each record becomes a plist with field names as keywords."
                   (insert "  + " output "\n"))
               (insert "  " outputs "\n")))))
 
-      ;; Insert error section (collapsed by default if long)
+      ;; Insert error section (collapsed by default if long).
       (when error-msg
         (let ((error-lines (split-string error-msg "\n")))
           (magit-insert-section (blue-error)
@@ -217,7 +217,7 @@ DIR is the directory where the replay data has been taken from."
       (error (string-remove-suffix "\n" data)))))
 
 
-;;; Fontification
+;;; Fontification.
 
 (defun blue-replay--visit-location (file &optional line column)
   "Open FILE and move point to LINE and COLUMN if provided."
@@ -282,10 +282,10 @@ line:column information.")
     ("\\(#:[a-zA-Z-]+\\)"
      (1 'font-lock-keyword-face))
 
-    ;; ERROR: labels
+    ;; ERROR: labels.
     ("^\s*ERROR:" . 'error)
 
-    ;; Numbered error items
+    ;; Numbered error items.
     ("^\s*\\([0-9]+\\.\\)"
      (1 'font-lock-number-face))
 

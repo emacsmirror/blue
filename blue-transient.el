@@ -35,7 +35,7 @@
 (require 'wid-edit) ; For `widget-field' face.
 
 
-;;; Configuration
+;;; Configuration.
 
 (defcustom blue-transient-menu-columns-limit nil
   "If non-nil, limits maximum allowed number of menu columns.
