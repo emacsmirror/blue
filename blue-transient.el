@@ -853,7 +853,8 @@ keeps running in the compilation buffer."
     (setq blue--build-dir build-dir
           blue--data (blue--get-data blue--blueprint))
     ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
-    (blue--cache-add build-dir)
+    (when build-dir
+      (blue--cache-add build-dir))
     ;; Rebuild menu.
     (let* ((commands (car blue--data))
            ;; Update `build-dirs' since cache could have been updated in the
