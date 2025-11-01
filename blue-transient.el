@@ -841,22 +841,25 @@ keeps running in the compilation buffer."
   (blue--check-blue-binary)
   (blue--ensure-cache)
   (setq blue-transient--history-index 0
-        blue--blueprint (blue--find-blueprint)
-        blue--data (blue--get-data blue--blueprint))
+        blue--blueprint (blue--find-blueprint))
   (let* ((prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
          (last-build-dir (car build-dirs))
          (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
                            (and blue-require-build-directory
                                 (not last-build-dir))))
-         (build-dir (when prompt-dir-p
-                      (blue--prompt-dir t))))
-    (when build-dir
-      (blue--cache-add build-dir)
-      (setq build-dirs (cons build-dir build-dirs)
-            last-build-dir (car build-dirs)))
+         (build-dir (if prompt-dir-p
+                        (blue--prompt-dir t)
+                      last-build-dir)))
+    (setq blue--build-dir build-dir
+          blue--data (blue--get-data blue--blueprint))
+    ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
+    (blue--cache-add build-dir)
     ;; Rebuild menu.
     (let* ((commands (car blue--data))
+           ;; Update `build-dirs' since cache could have been updated in the
+           ;; previous lines.
+           (build-dirs (blue--cache-get-build-dirs blue--blueprint))
            (indices (number-sequence 1 (length build-dirs)))
            (transient `(transient-define-prefix blue-transient--menu ()
                          :incompatible '(,(cons "--build-directory="
@@ -877,7 +880,7 @@ keeps running in the compilation buffer."
                                                        (lambda (arg)
                                                          (member arg ',build-dirs))
                                                        value
-                                                       ,last-build-dir))
+                                                       ,build-dir))
                                   ;; Removed selected command suffixes from
                                   ;; state since those should follow what
                                   ;; `blue-transient--command-chain' specifies

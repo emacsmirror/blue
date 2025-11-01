@@ -669,10 +669,9 @@ MUSTMATCH is passed directly to `read-directory-name'."
   "Interactive prompt for BLUE commands."
   (blue--check-blue-binary)
   (blue--ensure-cache)
-  (setq blue--blueprint (blue--find-blueprint)
-        blue--data (blue--get-data blue--blueprint))
+  (setq blue--blueprint (blue--find-blueprint))
   (let* ((prefix (car current-prefix-arg))
-         (build-dirs (blue--cache-get-build-dirs default-directory))
+         (build-dirs (blue--cache-get-build-dirs blue--blueprint))
          (last-build-dir (car build-dirs))
          (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
                            (and blue-require-build-directory
@@ -680,7 +679,8 @@ MUSTMATCH is passed directly to `read-directory-name'."
          (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
     (setq blue--overiden-build-dir (when prompt-dir-p
                                      (blue--prompt-dir t))
-          blue--build-dir (or blue--overiden-build-dir last-build-dir))
+          blue--build-dir (or blue--overiden-build-dir last-build-dir)
+          blue--data (blue--get-data blue--blueprint))
     (if-let* ((commands (car blue--data))
               (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
               (completion-extra-properties
