@@ -278,13 +278,9 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
 
 (defun blue-transient--selected-command-suffixes ()
   "Get the selected command arguments suffixes values from the menu prompt."
-  (when-let* ((blueprint (or blue--blueprint
-                             (blue--find-blueprint)))
-              (selected-command (blue-transient--selected-command)))
+  (when-let* ((selected-command (blue-transient--selected-command)))
     (mapcar #'caddr
-            (blue-transient--arguments-menu
-             blueprint
-             (car selected-command)))))
+            (blue-transient--arguments-menu (car selected-command)))))
 
 (defun blue-transient--selected-command-suffixes-values ()
   "Get the selected command arguments suffixes values from the menu prompt."
@@ -712,11 +708,16 @@ suffixes."
             (min blue-transient--selected-argument-index
                  (1- (length selected-command-args)))))))
 
-(blue--define-memoized blue-transient--arguments-menu (blueprint command)
+(defun blue-transient--arguments-menu (command)
   "Build transient menu for BLUE COMMAND arguments."
-  (when-let* ((suffixes (seq-filter (lambda (suffix)
+  (when-let* ((commands-data (car blue--data))
+              (command-data (seq-find (lambda (cmd)
+                                        (equal (alist-get 'invoke cmd) command))
+                                      commands-data))
+              (completion-table (alist-get 'completion-table command-data))
+              (suffixes (seq-filter (lambda (suffix)
                                       (string-prefix-p "--" suffix))
-                                    (blue--autocomplete blueprint (concat command " --"))))
+                                    completion-table))
               (suffixes-keys (blue-transient--assign-keys suffixes nil))
               (menu-entries (mapcar (lambda (pair)
                                       (let* ((suffix (car pair))
@@ -795,10 +796,8 @@ This function is meant for side effects, it is responsible of keeping
 
 (defun blue-transient--selected-command-suffix-arguments (_)
   "Helper function to group last command arguments in transient suffixes."
-  (if-let* ((blueprint (or blue--blueprint
-                           (blue--find-blueprint)))
-            (selected-command (car (blue-transient--selected-command)))
-            (suffixes (blue-transient--arguments-menu blueprint selected-command))
+  (if-let* ((selected-command (car (blue-transient--selected-command)))
+            (suffixes (blue-transient--arguments-menu selected-command))
             (columns (seq-split suffixes
                                 (/ (length suffixes) 2)))
             ;; Make each menu entry a vector. Each vector will be a column.
