@@ -342,10 +342,16 @@ for a directory to use when running `blue'."
             (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
                               (and blue-require-build-directory
                                    (not last-build-dir))))
-            (build-dir (if (or prompt-dir-p
-                               (not last-build-dir))
-                           (blue--prompt-dir nil t)
-                         last-build-dir)))
+            (current-dir (directory-file-name (expand-file-name default-directory)))
+            (build-dir (cond
+                        ;; If we are in a known dir let's use that one.
+                        ((member current-dir build-dirs)
+                         current-dir)
+                        ((or prompt-dir-p
+                             (not last-build-dir))
+                         (blue--prompt-dir nil t))
+                        (t
+                         last-build-dir))))
        (list build-dir))))
   (setq blue--blueprint (blue--find-blueprint)
         blue--build-dir dir)
