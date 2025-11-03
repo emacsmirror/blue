@@ -412,6 +412,8 @@ the end."
       ;; Avoid not pushing consecutive duplicates.
       (unless (equal blue-transient--command-chain last-hist)
         (push (copy-tree blue-transient--command-chain) blue-transient--history)))
+    ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
+    (blue--cache-add blue--build-dir)
     (blue--compile full-input comint)))
 
 (defun blue-transient--propertize-value-arg (arg selected)
