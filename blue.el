@@ -510,7 +510,8 @@ If OVERRIDE is non nil disable CONFIGS."
                 (lambda ()
                   (interactive)
                   (setq blue--build-dir
-                        (nth (1- index) (blue--cache-get-build-dirs blue--blueprint)))
+                        (nth (1- index) (blue--cache-get-build-dirs blue--blueprint))
+                        default-directory blue--build-dir) ; Make completion work from selected build dir.
                   (blue--show-hints)))))
 
 (defun blue--setup-minibuffer ()
@@ -680,7 +681,8 @@ MUSTMATCH is passed directly to `read-directory-name'."
     (setq blue--overiden-build-dir (when prompt-dir-p
                                      (blue--prompt-dir t))
           blue--build-dir (or blue--overiden-build-dir last-build-dir)
-          blue--data (blue--get-data blue--blueprint))
+          blue--data (blue--get-data blue--blueprint)
+          default-directory blue--build-dir) ; Make completion work from selected build dir.
     (if-let* ((commands (car blue--data))
               (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
               (completion-extra-properties

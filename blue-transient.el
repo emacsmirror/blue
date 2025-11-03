@@ -743,7 +743,8 @@ suffixes."
 
 This function is meant for side effects, it is responsible of keeping
 `blue--build-dir' sync with the selected build directory."
-  (setq blue--build-dir value))
+  (setq blue--build-dir value
+        default-directory blue--build-dir)) ; Make completion work from selected build dir.
 
 
 ;;; UI.
@@ -851,7 +852,8 @@ keeps running in the compilation buffer."
                         (blue--prompt-dir t)
                       last-build-dir)))
     (setq blue--build-dir build-dir
-          blue--data (blue--get-data blue--blueprint))
+          blue--data (blue--get-data blue--blueprint)
+          default-directory blue--build-dir) ; Make completion work from selected build dir.
     ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
     (when build-dir
       (blue--cache-add build-dir))
