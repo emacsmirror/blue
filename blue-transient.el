@@ -396,9 +396,11 @@ the end."
          (is-interactive (blue--any-interactive-p blue-transient--command-chain))
          (comint (xor is-interactive comint-flip))
          (known-build-dirs (blue--cache-get-build-dirs default-directory))
-         (blue--build-dir (seq-find (lambda (dir)
-                                      (transient-arg-value dir args))
-                                    known-build-dirs))
+         (build--dir-arg (transient-arg-value "--build-directory=" args))
+         (blue--build-dir (or build--dir-arg
+                              (seq-find (lambda (dir)
+                                          (transient-arg-value dir args))
+                                        known-build-dirs)))
          (commands (mapcar (lambda (token)
                              (string-join token " "))
                            blue-transient--command-chain))
@@ -413,7 +415,8 @@ the end."
       (unless (equal blue-transient--command-chain last-hist)
         (push (copy-tree blue-transient--command-chain) blue-transient--history)))
     ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
-    (blue--cache-add blue--build-dir)
+    (when blue--build-dir
+      (blue--cache-add blue--build-dir))
     (blue--compile full-input comint)))
 
 (defun blue-transient--propertize-value-arg (arg selected)
@@ -745,8 +748,9 @@ suffixes."
 
 This function is meant for side effects, it is responsible of keeping
 `blue--build-dir' sync with the selected build directory."
-  (setq blue--build-dir value
-        default-directory blue--build-dir)) ; Make completion work from selected build dir.
+  (setq blue--build-dir value)
+  ;; Make completion work from selected build dir.
+  (blue--set-default-directory blue--build-dir))
 
 
 ;;; UI.
@@ -854,8 +858,9 @@ keeps running in the compilation buffer."
                         (blue--prompt-dir t)
                       last-build-dir)))
     (setq blue--build-dir build-dir
-          blue--data (blue--get-data blue--blueprint)
-          default-directory blue--build-dir) ; Make completion work from selected build dir.
+          blue--data (blue--get-data blue--blueprint))
+    ;; Make completion work from selected build dir.
+    (blue--set-default-directory blue--build-dir)
     ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
     (when build-dir
       (blue--cache-add build-dir))

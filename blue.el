@@ -189,6 +189,11 @@ This is used when passing universal prefix argument `C-u' to
         (error msg*)))
     bin))
 
+(defun blue--set-default-directory (dir)
+  "Helper to safely set the `default-directory' to DIR."
+  (when (and (stringp dir) (file-exists-p dir))
+    (setq default-directory dir)))
+
 ;; TODO: should we use 'blue' to locate the 'blueprint.scm'?
 (defun blue--find-blueprint (&optional path)
   "Return path to top-level `blueprint.scm'.
@@ -681,8 +686,9 @@ MUSTMATCH is passed directly to `read-directory-name'."
     (setq blue--overiden-build-dir (when prompt-dir-p
                                      (blue--prompt-dir t))
           blue--build-dir (or blue--overiden-build-dir last-build-dir)
-          blue--data (blue--get-data blue--blueprint)
-          default-directory blue--build-dir) ; Make completion work from selected build dir.
+          blue--data (blue--get-data blue--blueprint))
+    ;; Make completion work from selected build dir.
+    (blue--set-default-directory blue--build-dir)
     (if-let* ((commands (car blue--data))
               (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
               (completion-extra-properties
