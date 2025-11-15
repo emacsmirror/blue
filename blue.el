@@ -362,7 +362,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 
 ;;; Serialization.
 
-(defun blue--execute-serialize (options commands)
+(defun blue--execute-deserialize (options commands)
   "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
@@ -384,7 +384,7 @@ If RAW is non nil, the serialized string will not be evaluated."
   (when-let* ((options (when blueprint
                          (list "--file" blueprint)))
               (cmd '(".serialize-commands" "--" ".serialize-execution-environment"))
-              (output (blue--execute-serialize options cmd))
+              (output (blue--execute-deserialize options cmd))
               (data (car output))
               (exit-code (cdr output)))
     (if (zerop exit-code)
