@@ -466,11 +466,17 @@ BUILD-DIR is the directory of the known build directory.
 If CURRENT is non-nil the entry will be highlighted."
   (let ((face (if (string-equal build-dir current)
                   'blue-hint-highlight
-                'blue-hint-faded)))
+                'blue-hint-faded))
+        (build-dir* (buttonize build-dir
+                               (lambda (_)
+                                 (execute-kbd-macro
+                                  (kbd (concat "M-" (number-to-string index))))))))
     (concat
      (propertize (number-to-string index) 'face 'blue-hint-index)
      " "
-     (propertize build-dir 'face face))))
+     (propertize build-dir*
+                 'face face
+                 'help-echo "Click to select build directory"))))
 
 (defun blue--create-hint-overlay (build-dirs current override)
   "Create hint overlay content from BUILD-DIRS and CURRENT build-dir.
