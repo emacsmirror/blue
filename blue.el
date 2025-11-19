@@ -281,20 +281,6 @@ EXIT-CODE is the return value of CMD."
           (insert "\n"))
         (when exit-code (insert (blue--format-footer exit-code)))))))
 
-(defun blue--handle-error (exit-code)
-  "Handle and display command execution errors.
-
-Give a relevant error message according to EXIT-CODE."
-  (let* ((prefix (propertize "[ERROR] " 'face 'error))
-         (msg (if (numberp exit-code)
-                  (propertize (format "Error %s" exit-code) 'face 'error)
-                (concat (propertize "`blue'" 'face 'font-lock-constant-face)
-                        " command not found in "
-                        (propertize "`exec-path'" 'face 'font-lock-type-face))))
-         (msg* (concat prefix msg)))
-    (blue--log-output (concat msg* "\n"))
-    (message msg*)))
-
 
 ;;; Cache.
 
@@ -360,7 +346,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
     (cadr (assoc-string blueprint blue--cache-list))))
 
 
-;;; Serialization.
+;;; Deserialization.
 
 (defun blue--execute-deserialize (options commands)
   "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
@@ -391,7 +377,14 @@ If RAW is non nil, the serialized string will not be evaluated."
         (with-temp-buffer
           (insert data)
           (goto-char (point-min))
-          (re-search-forward "\\(\\[.*\\]\\)\\({.*}\\)")
+          (condition-case err
+              (re-search-forward "\\(\\[.*\\]\\)\\({.*}\\)")
+            (search-failed
+             (blue--log-output (error-message-string err) "[BLUE] `re-search-forward'" 1)
+             (with-current-buffer blue--log-buffer
+               (goto-char (point-min)))
+             (display-buffer blue--log-buffer)
+             (error "[BLUE] Deserialization failed")))
           (let ((json1 (match-string-no-properties 1))
                 (json2 (match-string-no-properties 2)))
             (cons (json-parse-string json1
@@ -407,7 +400,7 @@ If RAW is non nil, the serialized string will not be evaluated."
       (with-current-buffer blue--log-buffer
         (goto-char (point-min)))
       (display-buffer blue--log-buffer)
-      (error "[BLUE] Configuration serialization failed"))))
+      (error "[BLUE] Deserialization failed"))))
 
 (defun blue--config-get (var config)
   "Retrieve variable VAR value from CONFIG."
