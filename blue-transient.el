@@ -921,7 +921,7 @@ keeps running in the compilation buffer."
                            ("-a" "Always build" "--always-build")
                            (5 "-c" "Color" "--color="
                               :choices ("auto" "always" "never"))
-                           (5 "-C" "Compiled load path" "--compiled-load-path"
+                           (5 "-C" "Compiled load path" "--compiled-load-path="
                               :prompt "Compiled load path: "
                               :reader transient-read-existing-directory)
                            (5 "-F" "File" "--file="

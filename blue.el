@@ -354,7 +354,7 @@ If NO-SAVE is non-nil, don't save to disk immediately."
 If RAW is non nil, the serialized string will not be evaluated."
   (let* ((default-directory (or (blue--get-build-dir) default-directory))
          (process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
-         (args (append (or options '()) (append '("--color" "always") commands)))
+         (args (append (or options '()) (cons "--color=always" commands)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
          (raw-output (with-output-to-string
@@ -368,7 +368,7 @@ If RAW is non nil, the serialized string will not be evaluated."
 (defun blue--get-data (blueprint)
   "Return the commands and execution environment provided by BLUEPRINT."
   (when-let* ((options (when blueprint
-                         (list "--file" blueprint)))
+                         (list (concat "--file=" blueprint))))
               (cmd '(".serialize-commands" "--" ".serialize-execution-environment"))
               (output (blue--execute-deserialize options cmd))
               (data (car output))
@@ -413,8 +413,8 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Use blue '.autocomplete' command to provide completion from INPUT."
   (let* ((default-directory (or (blue--get-build-dir) default-directory))
          (command (concat blue-binary
-                          " --file " blueprint
-                          " .autocomplete \"blue " input "\""))
+                          " --file=" blueprint
+                          " .autocomplete bash \"blue " input "\""))
          (output (shell-command-to-string command)))
     (string-split output)))
 
