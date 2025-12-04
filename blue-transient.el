@@ -622,31 +622,29 @@ to be specially handled."
    (lambda (category)
      (let* ((category-name (car category))
             (category-commands (cdr category))
-            (category-command-names (mapcar (lambda (command)
-                                              (alist-get 'invoke command))
-                                            category-commands))
-            (category-command-keys (blue-transient--assign-keys category-command-names nil)))
+            (category-command-invocations (blue--get-command-invocations category-commands))
+            (category-command-keys (blue-transient--assign-keys category-command-invocations nil)))
        (append
         (list (capitalize category-name))
         (mapcar
          (lambda (command)
-           (let* ((command-invoke (alist-get 'invoke command))
+           (let* ((command-name (symbol-name (car command)))
                   (command-key
                    (if (> (length category-commands) 1)
                        (concat (cadr (assoc category-name category-keys))
-                               (cadr (assoc command-invoke category-command-keys)))
-                     (cadr (assoc command-invoke category-command-keys))))
-                  (command-synopsis (alist-get 'synopsis command)))
+                               (cadr (assoc command-name category-command-keys)))
+                     (cadr (assoc command-name category-command-keys))))
+                  (command-synopsis (blue--command-get-slot 'synopsis command)))
              `(,command-key
-               ,(capitalize command-invoke)
+               ,(capitalize command-name)
                (lambda () ,command-synopsis (interactive)
                  (blue-transient--save-state)
                  (let ((command-chain (if blue-transient--command-chain
                                           (blue-transient--insert-nth
                                            (1+ blue-transient--selected-index)
-                                           '(,command-invoke)
+                                           '(,command-name)
                                            blue-transient--command-chain)
-                                        '((,command-invoke)))))
+                                        '((,command-name)))))
                    (setq blue-transient--command-chain command-chain)
                    (blue-transient--command-index+1 t)
                    (blue-transient--set-and-setup))))))
@@ -655,20 +653,20 @@ to be specially handled."
 
 (defun blue-transient--build-menu (commands)
   "Build transient menu for BLUE COMMANDS."
-  (let* ((category-names (seq-uniq (mapcar (lambda (command)
-                                             (alist-get 'category command))
-                                           commands)))
-         (category-keys (blue-transient--assign-keys category-names t))
-         (sorted-commands-by-category
-          (mapcar (lambda (category)
-                    (cons category
-                          (seq-filter (lambda (command)
-                                        (string-equal (alist-get 'category command)
-                                                      category))
-                                      commands)))
-                  category-names))
+  (let* ((categories (blue--get-command-categories commands))
+         (category-keys (blue-transient--assign-keys categories t))
+         (commands-by-category
+          (mapcar
+           (lambda (category)
+             (cons category
+                   (seq-filter
+                    (lambda (command)
+                      (string-equal (blue--command-get-slot 'category command)
+                                    category))
+                    commands)))
+           categories))
          (grouped-commands
-          (blue-transient--group-commands sorted-commands-by-category
+          (blue-transient--group-commands commands-by-category
                                           category-keys)))
     ;; Make each menu entry a vector.
     (mapcar (lambda (item)
@@ -713,29 +711,28 @@ suffixes."
             (min blue-transient--selected-argument-index
                  (1- (length selected-command-args)))))))
 
-(defun blue-transient--arguments-menu (command)
-  "Build transient menu for BLUE COMMAND arguments."
-  (when-let* ((commands-data (car blue--data))
-              (command-data (seq-find (lambda (cmd)
-                                        (equal (alist-get 'invoke cmd) command))
-                                      commands-data))
-              (completion-table (alist-get 'completion-table command-data))
-              (suffixes (seq-filter (lambda (suffix)
-                                      (string-prefix-p "--" suffix))
-                                    completion-table))
-              (suffixes-keys (blue-transient--assign-keys suffixes nil))
-              (menu-entries (mapcar (lambda (pair)
-                                      (let* ((suffix (car pair))
-                                             (key (cadr pair))
-                                             (msg (string-replace
-                                                   "-" " " (string-trim-left suffix "--")))
-                                             (msg* (capitalize msg)))
-                                        `(,(concat "--" key)
-                                          ,msg*
-                                          ,(concat suffix "=")
-                                          :class blue-transient--command-argument)))
-                                    suffixes-keys)))
-    menu-entries))
+(defun blue-transient--argument-menu-entry (key option)
+  "Create a transient argument entry from BLUE option."
+  (when-let* ((long-label (blue--get-long-label option)))
+    `(,(concat "--" key)
+      ,(capitalize long-label)
+      ,(concat "--" long-label "=")
+      :summary ,(alist-get 'doc option)
+      :class blue-transient--command-argument)))
+
+(defun blue-transient--arguments-menu (command-name)
+  "Build transient menu for BLUE COMMAND-NAME arguments."
+  (when-let* ((commands (car blue--data))
+              (command (blue--get-command (intern command-name) commands))
+              (options (blue--command-get-slot 'options command))
+              (option-labels (mapcar #'blue--get-long-label options))
+              (option-keys (blue-transient--assign-keys option-labels nil))
+              (entries (mapcar (lambda (option)
+                                 (when-let* ((label (blue--get-long-label option))
+                                             (key (cadr (assoc-string label option-keys))))
+                                   (blue-transient--argument-menu-entry key option)))
+                               options)))
+    entries))
 
 
 ;;; Selected build directory.

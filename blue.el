@@ -410,16 +410,28 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Retrieve CMD from COMMANDS."
   (assoc command commands))
 
+(defun blue--command-get-slot (slot command)
+  "Retrieve SLOT from COMMAND."
+  (let ((fields (alist-get 'fields command)))
+    (alist-get slot fields)))
+
 (defun blue--get-command-invocations (commands)
   "Retrieve command names from COMMANDS."
   (mapcar (lambda (command)
             (symbol-name (car command)))
           commands))
 
-(defun blue--command-get-slot (slot command)
-  "Retrieve SLOT from COMMAND."
-  (let ((fields (alist-get 'fields command)))
-    (alist-get slot fields)))
+(defun blue--get-command-categories (commands)
+  "Retrieve command categories from COMMANDS."
+  (seq-uniq (mapcar (lambda (command)
+                      (blue--command-get-slot 'category command))
+                    commands)))
+
+(defun blue--get-long-label (option)
+  "Retrieve long lable from OPTION."
+  (when-let* ((labels (alist-get 'labels option))
+              (long-labels (alist-get 'long labels)))
+    (car long-labels)))
 
 
 ;;; Completion.
