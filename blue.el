@@ -378,7 +378,7 @@ If RAW is non nil, the serialized string will not be evaluated."
           (insert data)
           (goto-char (point-min))
           (condition-case err
-              (re-search-forward "\\(\\[.*\\]\\)\\({.*}\\)")
+              (re-search-forward "\\({.*}\\)\\({.*}\\)")
             (search-failed
              (blue--log-output (error-message-string err) "[BLUE] `re-search-forward'" 1)
              (with-current-buffer blue--log-buffer
@@ -405,6 +405,21 @@ If RAW is non nil, the serialized string will not be evaluated."
 (defun blue--config-get (var config)
   "Retrieve variable VAR value from CONFIG."
   (cdr (assoc-string var config)))
+
+(defun blue--get-command (command commands)
+  "Retrieve CMD from COMMANDS."
+  (assoc command commands))
+
+(defun blue--get-command-invocations (commands)
+  "Retrieve command names from COMMANDS."
+  (mapcar (lambda (command)
+            (symbol-name (car command)))
+          commands))
+
+(defun blue--command-get-slot (slot command)
+  "Retrieve SLOT from COMMAND."
+  (let ((fields (alist-get 'fields command)))
+    (alist-get slot fields)))
 
 
 ;;; Completion.
@@ -629,10 +644,9 @@ A comand is considered interactive if it is a member of
 (defun blue--create-annotation-fn (commands width)
   "Create annotation function for COMMANDS with WIDTH alignment."
   (lambda (candidate)
-    (when-let* ((entry (seq-find (lambda (cmd)
-                                   (string= candidate (alist-get 'invoke cmd)))
-                                 commands))
-                (synopsis (alist-get 'synopsis entry)))
+    (when-let* ((invocation (intern candidate))
+                (command (blue--get-command invocation commands))
+                (synopsis (blue--command-get-slot 'synopsis command)))
       (concat (make-string (+ blue-annotation-padding
                               (- width (string-width candidate)))
                            ?\s)
@@ -643,16 +657,15 @@ A comand is considered interactive if it is a member of
   (lambda (candidate transform)
     (if transform
         candidate
-      (when-let* ((entry (seq-find (lambda (cmd)
-                                     (string= candidate (alist-get 'invoke cmd)))
-                                   commands))
-                  (category (alist-get 'category entry)))
-        category))))
+      (when-let* ((invocation (intern candidate))
+                  (command (blue--get-command invocation commands)))
+        (blue--command-get-slot 'category command)))))
 
-(defun blue--create-completion-properties (commands invocations)
+(defun blue--create-completion-properties (commands)
   "Create completion properties for COMMANDS and INVOCATIONS."
-  (let ((width (if invocations (apply #'max (mapcar #'string-width invocations)) 0)))
-    (list :annotation-function (blue--create-annotation-fn commands width)
+  (when-let* ((invocations (blue--get-command-invocations commands))
+              (max-width (apply #'max (mapcar #'string-width invocations))))
+    (list :annotation-function (blue--create-annotation-fn commands max-width)
           :group-function (blue--create-group-fn commands))))
 
 (defun blue--prompt-dir (&optional create-p mustmatch)
@@ -689,9 +702,9 @@ MUSTMATCH is passed directly to `read-directory-name'."
     ;; Make completion work from selected build dir.
     (blue--set-default-directory blue--build-dir)
     (if-let* ((commands (car blue--data))
-              (invocations (mapcar (lambda (cmd) (alist-get 'invoke cmd)) commands))
+              (invocations (blue--get-command-invocations commands))
               (completion-extra-properties
-               (blue--create-completion-properties commands invocations))
+               (blue--create-completion-properties commands))
               (crm-separator (propertize "[ \t]*--[ \t]+"
                                          'separator "--"
                                          'description "double-dash-separated list"))
