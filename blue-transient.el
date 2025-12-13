@@ -711,6 +711,8 @@ suffixes."
             (min blue-transient--selected-argument-index
                  (1- (length selected-command-args)))))))
 
+;; TODO: Use the autocomplete option slot to provide the apropriate argument
+;; interface.
 (defun blue-transient--argument-menu-entry (key option)
   "Create a transient argument entry from BLUE option."
   (when-let* ((long-label (blue--get-long-label option)))

@@ -461,18 +461,32 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Completion for `blue'."
   (while (pcomplete-here* (blue--completion-table))))
 
+;; FIXME: only working for 'replay' command.
+(defun blue--serialized-completion-table (&rest _)
+  "Retrieve completion candidates from serialized data."
+  (when blue--data
+    (let* ((commands (car blue--data))
+           (result
+            (while-no-input
+              (if-let* ((prompt-start (minibuffer-prompt-end))
+                        (input (buffer-substring-no-properties prompt-start (point)))
+                        (cmds+args (string-split input " -- "))
+                        (last-cmd+args (car (last cmds+args)))
+                        (last-cmd (car (string-split last-cmd+args)))
+                        (cmd  (blue--get-command (intern last-cmd) commands))
+                        (autocompletion (blue--command-get-slot 'autocomplete cmd))
+                        (values (alist-get 'values autocompletion)))
+                  values
+                (blue--get-command-invocations commands)))))
+      (and (consp result) result))))
+
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
-  (pcase (bounds-of-thing-at-point 'symbol)
-    (`(,beg . ,end)
-     ;; `beg-no-prompt' is required to ensure that completion receives the
-     ;; correct user input bounds even for prompts that do not leave any
-     ;; whitespace between the prompt and the user input. For example, the
-     ;; `transient-infix' default prompts, eg.: 'output=...'.
-     (let ((beg-no-prompt (max beg (minibuffer-prompt-end))))
-       (list beg-no-prompt end
-             (completion-table-with-cache #'blue--completion-table)
-             :exclusive 'no)))))
+  ;; KLUDGE: revert back to detecting prompt so it does not trigger unnecessary
+  ;; completions.
+  (list (point) (point)
+        (completion-table-with-cache #'blue--serialized-completion-table)
+        :exclusive 'no))
 
 
 ;;; Minibuffer Hints.
