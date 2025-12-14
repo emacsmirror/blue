@@ -461,32 +461,42 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Completion for `blue'."
   (while (pcomplete-here* (blue--completion-table))))
 
-;; FIXME: only working for 'replay' command.
-(defun blue--serialized-completion-table (&rest _)
-  "Retrieve completion candidates from serialized data."
+(defun blue--get-completion-table (command)
+  "Generate completion table for COMMAND."
+  (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
+         (values (alist-get 'values autocompletion))
+         (options (blue--command-get-slot 'options command)))
+    options))
+
+;; (defun blue--get-command-completion-table (command)
+;;   "Generate an appropriate completion table for command."
+;;   (let ((autocompletion (blue--command-get-slot 'autocomplete cmd))
+;;         (values (alist-get 'values autocompletion))
+;;         (options (blue--command-get-slot 'options cmd)))
+;;     ))
+
+(defun blue--completion-at-point ()
+  "`completion-at-point' function for `blue-run-command'."
   (when blue--data
     (let* ((commands (car blue--data))
            (result
             (while-no-input
-              (if-let* ((prompt-start (minibuffer-prompt-end))
-                        (input (buffer-substring-no-properties prompt-start (point)))
-                        (cmds+args (string-split input " -- "))
-                        (last-cmd+args (car (last cmds+args)))
-                        (last-cmd (car (string-split last-cmd+args)))
-                        (cmd  (blue--get-command (intern last-cmd) commands))
-                        (autocompletion (blue--command-get-slot 'autocomplete cmd))
-                        (values (alist-get 'values autocompletion)))
-                  values
-                (blue--get-command-invocations commands)))))
+              (let* ((prompt-start (minibuffer-prompt-end))
+                     (input (buffer-substring-no-properties prompt-start (point)))
+                     (cmds+args (string-split input " -- "))
+                     (last-cmd+args (car (last cmds+args))))
+                (when-let* ((last-cmd (car (string-split last-cmd+args)))
+                            (cmd (blue--get-command (intern last-cmd) commands)))
+                  (let* ((autocompletion (blue--command-get-slot 'autocomplete cmd))
+                         (values (print (alist-get 'values autocompletion)))
+                         (options (print (blue--command-get-slot 'options cmd))))
+                    (print (cons values options))))
+                ;; values
+                ;; (blue--get-command-invocations commands)
+                (let ((cape-file-prefix "="))
+                  (cape-file))
+                ))))
       (and (consp result) result))))
-
-(defun blue--completion-at-point ()
-  "`completion-at-point' function for `blue-run-command'."
-  ;; KLUDGE: revert back to detecting prompt so it does not trigger unnecessary
-  ;; completions.
-  (list (point) (point)
-        (completion-table-with-cache #'blue--serialized-completion-table)
-        :exclusive 'no))
 
 
 ;;; Minibuffer Hints.
@@ -567,7 +577,9 @@ If OVERRIDE is non nil disable CONFIGS."
   (unless blue--overiden-build-dir
     (let ((build-dirs (blue--cache-get-build-dirs blue--blueprint)))
       (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length build-dirs)))))
-  (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
+  ;; KLUDGE: force only blue completion.
+  (setq completion-at-point-functions #'blue--completion-at-point)
+  ;; (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
   (blue--show-hints))
 
 
