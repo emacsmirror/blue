@@ -461,6 +461,53 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Completion for `blue'."
   (while (pcomplete-here* (blue--completion-table))))
 
+(defcustom blue-complete--file-prefix ""
+  "File completion trigger prefixes.
+The value can be a string or a list of strings.  The default
+`file:' is the prefix of Org file links which work in arbitrary
+buffers via `org-open-at-point-global'."
+  :type '(choice string (repeat string)))
+
+(defvar blue-complete--file-properties
+  (list :annotation-function (lambda (s) (if (string-suffix-p "/" s) " Dir" " File"))
+        :company-kind (lambda (s) (if (string-suffix-p "/" s) 'folder 'file))
+        :exclusive 'no
+        :category 'file)
+  "Completion extra properties for `blue--complete-file'.")
+
+(defun blue-complete--bounds (thing)
+  "Return bounds of THING."
+  (or (bounds-of-thing-at-point thing) (cons (point) (point))))
+
+(defun blue--complete-file ()
+  "Complete file name at point."
+  (pcase-let* ((prefix (and blue-complete--file-prefix
+                            (looking-back
+                             (concat
+                              (regexp-opt (ensure-list blue-complete--file-prefix) t)
+                              "[^ \n\t]*")
+                             (pos-bol))
+                            (match-end 1)))
+               (`(,beg . ,end) (if prefix
+                                   (cons prefix (point))
+                                 (blue-complete--bounds 'filename)))
+               (non-essential t)
+               (file (buffer-substring-no-properties beg end)))
+    (when (or prefix
+              (and (string-search "/" file)
+                   (file-exists-p (file-name-directory
+                                   (substitute-in-file-name file)))))
+      (unless (boundp 'comint-unquote-function)
+        (require 'comint))
+      `( ,beg ,end
+         ,(completion-table-with-quoting
+           #'read-file-name-internal
+           comint-unquote-function
+           comint-requote-function)
+         ,@(when (or prefix (string-match-p "./" file))
+             '(:company-prefix-length t))
+         ,@blue-complete--file-properties))))
+
 (defun blue--get-completion-table (command)
   "Generate completion table for COMMAND."
   (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
@@ -468,13 +515,22 @@ If RAW is non nil, the serialized string will not be evaluated."
          (options (blue--command-get-slot 'options command)))
     options))
 
-;; (defun blue--get-command-completion-table (command)
-;;   "Generate an appropriate completion table for command."
-;;   (let ((autocompletion (blue--command-get-slot 'autocomplete cmd))
-;;         (values (alist-get 'values autocompletion))
-;;         (options (blue--command-get-slot 'options cmd)))
-;;     ))
+(defun blue--get-command-completion-table (command)
+  "Generate an appropriate completion table for command."
+  (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
+         (values (alist-get 'values autocompletion))
+         (options (blue--command-get-slot 'options command))
+         (long-labels (mapcar #'(lambda (option)
+                                  (let* ((arguments (alist-get 'arguments option))
+                                         (type (alist-get 'type arguments)))
+                                    (concat "--" (blue--get-long-label option)
+                                            (if (string= type "required")
+                                                "="
+                                              " "))))
+                              options)))
+    long-labels))
 
+;; NOTE: `file-name-all-completions' may be useful.
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
   (when blue--data
@@ -486,17 +542,28 @@ If RAW is non nil, the serialized string will not be evaluated."
                      (cmds+args (string-split input " -- "))
                      (last-cmd+args (car (last cmds+args))))
                 (when-let* ((last-cmd (car (string-split last-cmd+args)))
-                            (cmd (blue--get-command (intern last-cmd) commands)))
-                  (let* ((autocompletion (blue--command-get-slot 'autocomplete cmd))
-                         (values (print (alist-get 'values autocompletion)))
-                         (options (print (blue--command-get-slot 'options cmd))))
-                    (print (cons values options))))
+                            (cmd (blue--get-command (intern last-cmd) commands))
+                            (table (blue--get-command-completion-table cmd)))
+                  table)
                 ;; values
                 ;; (blue--get-command-invocations commands)
-                (let ((cape-file-prefix "="))
-                  (cape-file))
+                ;; (let ((blue-complete--file-prefix "="))
+                ;;   (blue--complete-file))
                 ))))
-      (and (consp result) result))))
+      (when (consp result)
+        (pcase (bounds-of-thing-at-point 'symbol)
+          ((pred (lambda (bounds)
+                   (equal (cdr bounds) (point))))
+           (let ((blue-complete--file-prefix "="))
+             (blue--complete-file)))
+          (`(,beg . ,end)
+           (list beg end
+                 result
+                 :exclusive 'no))
+          (_
+           (list (point) (point)
+                 result
+                 :exclusive 'no)))))))
 
 
 ;;; Minibuffer Hints.
