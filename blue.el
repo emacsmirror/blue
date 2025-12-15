@@ -852,10 +852,11 @@ A comand is considered interactive if it is a member of
   (lambda (candidate)
     (when-let* ((invocation (intern candidate))
                 (command (blue--get-command invocation commands))
-                (synopsis (blue--command-get-slot 'synopsis command)))
-      (concat (make-string (+ blue-annotation-padding
-                              (- width (string-width candidate)))
-                           ?\s)
+                (synopsis (blue--command-get-slot 'synopsis command))
+                (padding (max (+ blue-annotation-padding
+                                 (- width (string-width candidate)))
+                              2)))
+      (concat (make-string padding ?\s)
               (propertize synopsis 'face 'blue-documentation)))))
 
 (defun blue--create-group-fn (commands)
