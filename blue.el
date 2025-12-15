@@ -593,6 +593,22 @@ buffers via `org-open-at-point-global'."
                                     ;; Adding prefix and suffix '--...=' length.
                                     3)
                                0))
+           (annotation-function
+            `(lambda (candidate)
+               (when-let* ((long-label (string-trim candidate "--" "="))
+                           (option (blue--get-option-from-label long-label ',cmd))
+                           (doc (alist-get 'doc option))
+                           (arguments (alist-get 'arguments option))
+                           (arg-name (alist-get 'name arguments))
+                           (padding (max (+ blue-annotation-padding
+                                            (- ,labels-max-width
+                                               (+ (string-width candidate)
+                                                  (string-width arg-name))))
+                                         2)))
+                 (concat
+                  (propertize arg-name 'face 'blue-documentation)
+                  (make-string padding ?\s)
+                  (propertize doc 'face 'blue-documentation)))))
            (table
             (while-no-input
               (and cmd
@@ -618,22 +634,7 @@ buffers via `org-open-at-point-global'."
          `( ,beg ,end
             ,table
             :exclusive 'no
-            :annotation-function
-            (lambda (candidate)
-              (when-let* ((long-label (string-trim candidate "--" "="))
-                          (option (blue--get-option-from-label long-label ',cmd))
-                          (doc (alist-get 'doc option))
-                          (arguments (alist-get 'arguments option))
-                          (arg-name (alist-get 'name arguments))
-                          (padding (max (+ blue-annotation-padding
-                                           (- ,labels-max-width
-                                              (+ (string-width candidate)
-                                                 (string-width arg-name))))
-                                        2)))
-                (concat
-                 (propertize arg-name 'face 'blue-documentation)
-                 (make-string padding ?\s)
-                 (propertize doc 'face 'blue-documentation))))))
+            :annotation-function ,annotation-function))
         ;; Command argument completion.
         (_
          (when-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
@@ -649,22 +650,7 @@ buffers via `org-open-at-point-global'."
              `( ,(point) ,(point)
                 ,table
                 :exclusive 'no
-                :annotation-function
-                (lambda (candidate)
-                  (when-let* ((long-label (string-trim candidate "--" "="))
-                              (option (blue--get-option-from-label long-label ',cmd))
-                              (doc (alist-get 'doc option))
-                              (arguments (alist-get 'arguments option))
-                              (arg-name (alist-get 'name arguments))
-                              (padding (max (+ blue-annotation-padding
-                                               (- ,labels-max-width
-                                                  (+ (string-width candidate)
-                                                     (string-width arg-name))))
-                                            2)))
-                    (concat
-                     (propertize arg-name 'face 'blue-documentation)
-                     (make-string padding ?\s)
-                     (propertize doc 'face 'blue-documentation)))))))))))))
+                :annotation-function ,annotation-function)))))))))
 
 
 ;;; Minibuffer Hints.
