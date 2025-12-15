@@ -461,7 +461,7 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Completion for `blue'."
   (while (pcomplete-here* (blue--completion-table))))
 
-(defcustom blue-complete--file-prefix ""
+(defcustom blue-complete--file-prefix "="
   "File completion trigger prefixes.
 The value can be a string or a list of strings.  The default
 `file:' is the prefix of Org file links which work in arbitrary
@@ -544,18 +544,18 @@ buffers via `org-open-at-point-global'."
                 (when-let* ((last-cmd (car (string-split last-cmd+args)))
                             (cmd (blue--get-command (intern last-cmd) commands))
                             (table (blue--get-command-completion-table cmd)))
-                  table)
-                ;; values
-                ;; (blue--get-command-invocations commands)
-                ;; (let ((blue-complete--file-prefix "="))
-                ;;   (blue--complete-file))
-                ))))
+                  table)))))
       (when (consp result)
         (pcase (bounds-of-thing-at-point 'symbol)
           ((pred (lambda (bounds)
-                   (equal (cdr bounds) (point))))
-           (let ((blue-complete--file-prefix "="))
-             (blue--complete-file)))
+                   (and blue-complete--file-prefix
+                        (looking-back
+                         (concat
+                          (regexp-opt (ensure-list blue-complete--file-prefix) t)
+                          "[^ \n\t]*")
+                         (pos-bol))
+                        (match-end 1))))
+           (blue--complete-file))
           (`(,beg . ,end)
            (list beg end
                  result
