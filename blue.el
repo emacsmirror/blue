@@ -581,6 +581,15 @@ buffers via `org-open-at-point-global'."
            (last-cmd (and last-cmd+args
                           (car (string-split last-cmd+args))))
            (cmd (and last-cmd (blue--get-command (intern last-cmd) commands)))
+           (options (blue--command-get-slot 'options cmd))
+           (labels-width
+            (+ (apply #'max
+                      (mapcan
+                       #'(lambda (option)
+                           (let ((long-labels (blue--get-option-long-labels option)))
+                             (mapcar #'string-width long-labels)))
+                       options))
+               3)) ; To accommodate for prefix and suffix '--...='.
            (table
             (while-no-input
               (and cmd
@@ -603,9 +612,24 @@ buffers via `org-open-at-point-global'."
                (blue--complete-directory)
              (blue--complete-file))))
         (`(,beg . ,end)
-         (list beg end
-               table
-               :exclusive 'no))
+         `( ,beg ,end
+            ,table
+            :exclusive 'no
+            :annotation-function
+            (lambda (candidate)
+              (let* ((long-label (string-trim candidate "--" "="))
+                     (option (blue--get-option-from-label long-label ',cmd))
+                     (doc (alist-get 'doc option))
+                     (arguments (alist-get 'arguments option))
+                     (arg-name (alist-get 'name arguments))
+                     (padding (max (+ blue-annotation-padding
+                                      (- ,labels-width (+ (string-width candidate)
+                                                          (string-width arg-name))))
+                                   2)))
+                (concat
+                 (propertize arg-name 'face 'blue-documentation)
+                 (make-string padding ?\s)
+                 (propertize doc 'face 'blue-documentation))))))
         ;; Command argument completion.
         (_
          (when-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
@@ -618,9 +642,24 @@ buffers via `org-open-at-point-global'."
              (blue--complete-file))
             ((and (string-equal type "set")
                   table)
-             (list (point) (point)
-                   table
-                   :exclusive 'no)))))))))
+             `( ,(point) ,(point)
+                ,table
+                :exclusive 'no
+                :annotation-function
+                (lambda (candidate)
+                  (let* ((long-label (string-trim candidate "--" "="))
+                         (option (blue--get-option-from-label long-label ',cmd))
+                         (doc (alist-get 'doc option))
+                         (arguments (alist-get 'arguments option))
+                         (arg-name (alist-get 'name arguments))
+                         (padding (max (+ blue-annotation-padding
+                                          (- ,labels-width (+ (string-width candidate)
+                                                              (string-width arg-name))))
+                                       2)))
+                    (concat
+                     (propertize arg-name 'face 'blue-documentation)
+                     (make-string padding ?\s)
+                     (propertize doc 'face 'blue-documentation)))))))))))))
 
 
 ;;; Minibuffer Hints.
