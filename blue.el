@@ -568,7 +568,7 @@ buffers via `org-open-at-point-global'."
                                                 "="
                                               " "))))
                               options)))
-    long-labels))
+    (append values long-labels)))
 
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
@@ -585,31 +585,42 @@ buffers via `org-open-at-point-global'."
             (while-no-input
               (and cmd
                    (blue--get-command-completion-table cmd)))))
-      (when (consp table)
-        (pcase (bounds-of-thing-at-point 'symbol)
-          ((pred (lambda (bounds)
-                   (and blue-complete--file-prefix
-                        (looking-back
-                         (concat
-                          (regexp-opt (ensure-list blue-complete--file-prefix) t)
-                          "[^ \n\t]*")
-                         (pos-bol))
-                        (match-end 1))))
-           (let* ((thing (thing-at-point 'symbol))
-                  (long-label (string-trim thing "--" "="))
-                  (option (blue--get-option-from-label long-label cmd))
-                  (autocomplete (alist-get 'autocomplete option)))
-             (if (string-equal autocomplete "directory")
-                 (blue--complete-directory)
-                 (blue--complete-file))))
-          (`(,beg . ,end)
-           (list beg end
-                 table
-                 :exclusive 'no))
-          (_
-           (list (point) (point)
-                 table
-                 :exclusive 'no)))))))
+      (pcase (bounds-of-thing-at-point 'symbol)
+        ;; Long option argument completion.
+        ((pred (lambda (bounds)
+                 (and blue-complete--file-prefix
+                      (looking-back
+                       (concat
+                        (regexp-opt (ensure-list blue-complete--file-prefix) t)
+                        "[^ \n\t]*")
+                       (pos-bol))
+                      (match-end 1))))
+         (let* ((thing (thing-at-point 'symbol))
+                (long-label (string-trim thing "--" "="))
+                (option (blue--get-option-from-label long-label cmd))
+                (autocomplete (alist-get 'autocomplete option)))
+           (if (string-equal autocomplete "directory")
+               (blue--complete-directory)
+             (blue--complete-file))))
+        (`(,beg . ,end)
+         (list beg end
+               table
+               :exclusive 'no))
+        ;; Command argument completion.
+        (_
+         (when-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
+                     (type (alist-get 'type autocomplete))
+                     (blue-complete--file-prefix ""))
+           (cond
+            ((string-equal type "directory")
+             (blue--complete-directory))
+            ((string-equal type "file")
+             (blue--complete-file))
+            ((and (string-equal type "set")
+                  table)
+             (list (point) (point)
+                   table
+                   :exclusive 'no)))))))))
 
 
 ;;; Minibuffer Hints.
