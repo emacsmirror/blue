@@ -634,6 +634,7 @@ buffers via `org-open-at-point-global'."
          `( ,beg ,end
             ,table
             :exclusive 'no
+            :company-kind (lambda (_) 'property)
             :annotation-function ,annotation-function))
         ;; Command argument completion.
         (_
@@ -650,6 +651,7 @@ buffers via `org-open-at-point-global'."
              `( ,(point) ,(point)
                 ,table
                 :exclusive 'no
+                :company-kind (lambda (_) 'property)
                 :annotation-function ,annotation-function)))))))))
 
 
