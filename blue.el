@@ -407,7 +407,7 @@ If RAW is non nil, the serialized string will not be evaluated."
   (cdr (assoc-string var config)))
 
 (defun blue--get-command (command commands)
-  "Retrieve CMD from COMMANDS."
+  "Retrieve COMMAND from COMMANDS."
   (assoc command commands))
 
 (defun blue--command-get-slot (slot command)
@@ -427,11 +427,19 @@ If RAW is non nil, the serialized string will not be evaluated."
                       (blue--command-get-slot 'category command))
                     commands)))
 
-(defun blue--get-long-label (option)
+(defun blue--get-option-long-labels (option)
   "Retrieve long lable from OPTION."
   (when-let* ((labels (alist-get 'labels option))
               (long-labels (alist-get 'long labels)))
-    (car long-labels)))
+    long-labels))
+
+(defun blue--get-option-from-label (label command)
+  "Retrieve option from COMMAND that matches LABEL."
+  (let ((options (blue--command-get-slot 'options command)))
+    (seq-find (lambda (option)
+                (let ((long-labels (blue--get-option-long-labels option)))
+                  (member label long-labels)))
+              options)))
 
 
 ;;; Completion.
@@ -508,6 +516,38 @@ buffers via `org-open-at-point-global'."
              '(:company-prefix-length t))
          ,@blue-complete--file-properties))))
 
+(defun blue--complete-directory ()
+  "Complete directory name at point."
+  (pcase-let* ((prefix (and blue-complete--file-prefix
+                            (looking-back
+                             (concat
+                              (regexp-opt (ensure-list blue-complete--file-prefix) t)
+                              "[^ \n\t]*")
+                             (pos-bol))
+                            (match-end 1)))
+               (`(,beg . ,end) (if prefix
+                                   (cons prefix (point))
+                                 (blue-complete--bounds 'filename)))
+               (non-essential t)
+               (file (buffer-substring-no-properties beg end)))
+    (when (or prefix
+              (and (string-search "/" file)
+                   (file-exists-p (file-name-directory
+                                   (substitute-in-file-name file)))))
+      (unless (boundp 'comint-unquote-function)
+        (require 'comint))
+      `( ,beg ,end
+         ,(completion-table-with-quoting
+           (apply-partially #'completion-table-with-predicate
+                            #'read-file-name-internal
+                            #'file-directory-p
+                            'strict)
+           comint-unquote-function
+           comint-requote-function)
+         ,@(when (or prefix (string-match-p "./" file))
+             '(:company-prefix-length t))
+         ,@blue-complete--file-properties))))
+
 (defun blue--get-completion-table (command)
   "Generate completion table for COMMAND."
   (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
@@ -523,29 +563,29 @@ buffers via `org-open-at-point-global'."
          (long-labels (mapcar #'(lambda (option)
                                   (let* ((arguments (alist-get 'arguments option))
                                          (type (alist-get 'type arguments)))
-                                    (concat "--" (blue--get-long-label option)
+                                    (concat "--" (car (blue--get-option-long-labels option))
                                             (if (string= type "required")
                                                 "="
                                               " "))))
                               options)))
     long-labels))
 
-;; NOTE: `file-name-all-completions' may be useful.
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
   (when blue--data
     (let* ((commands (car blue--data))
-           (result
+           (prompt-start (minibuffer-prompt-end))
+           (input (buffer-substring-no-properties prompt-start (point)))
+           (cmds+args (string-split input " -- "))
+           (last-cmd+args (car (last cmds+args)))
+           (last-cmd (and last-cmd+args
+                          (car (string-split last-cmd+args))))
+           (cmd (and last-cmd (blue--get-command (intern last-cmd) commands)))
+           (table
             (while-no-input
-              (let* ((prompt-start (minibuffer-prompt-end))
-                     (input (buffer-substring-no-properties prompt-start (point)))
-                     (cmds+args (string-split input " -- "))
-                     (last-cmd+args (car (last cmds+args))))
-                (when-let* ((last-cmd (car (string-split last-cmd+args)))
-                            (cmd (blue--get-command (intern last-cmd) commands))
-                            (table (blue--get-command-completion-table cmd)))
-                  table)))))
-      (when (consp result)
+              (and cmd
+                   (blue--get-command-completion-table cmd)))))
+      (when (consp table)
         (pcase (bounds-of-thing-at-point 'symbol)
           ((pred (lambda (bounds)
                    (and blue-complete--file-prefix
@@ -555,14 +595,20 @@ buffers via `org-open-at-point-global'."
                           "[^ \n\t]*")
                          (pos-bol))
                         (match-end 1))))
-           (blue--complete-file))
+           (let* ((thing (thing-at-point 'symbol))
+                  (long-label (string-trim thing "--" "="))
+                  (option (blue--get-option-from-label long-label cmd))
+                  (autocomplete (alist-get 'autocomplete option)))
+             (if (string-equal autocomplete "directory")
+                 (blue--complete-directory)
+                 (blue--complete-file))))
           (`(,beg . ,end)
            (list beg end
-                 result
+                 table
                  :exclusive 'no))
           (_
            (list (point) (point)
-                 result
+                 table
                  :exclusive 'no)))))))
 
 
