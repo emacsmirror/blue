@@ -116,6 +116,9 @@ can become key characters."
 
 This is used to create the `blue-transient' menu.")
 
+;; FIXME: if this holds the menu, it should be resetted everytime this module is
+;; reloaded, that will avoid the inconsistent state where the transient does not
+;; get evaluated and remains with the stub definition.
 (defvar blue-transient--menu-expresion nil
   "Last evaluated transient.
 
@@ -817,10 +820,12 @@ This function is meant for side effects, it is responsible of keeping
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
 
+;; FIXME: find a less stateful way of doing this.
 (defun blue-transient--menu ()
   "Silence bytecompilation warnings.
 
-This will get redefined by `blue-transient'.")
+This will get redefined by `blue-transient'."
+  (error "This should have been redefined by `blue-transient'"))
 
 ;;;###autoload
 (defun blue-transient ()
