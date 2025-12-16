@@ -613,6 +613,12 @@ buffers via `org-open-at-point-global'."
                    (font-lock-mode 1)
                    (font-lock-ensure)
                    (current-buffer)))))
+           (argument-completion-properties
+            (list
+             :affixation-function affixation-function
+             :company-doc-buffer options-doc-buffer-function
+             :company-kind kind-function
+             :exclusive 'no))
            (table
             (while-no-input
               (and cmd
@@ -637,10 +643,7 @@ buffers via `org-open-at-point-global'."
         (`(,beg . ,end)
          `( ,beg ,end
             ,table
-            :exclusive 'no
-            :company-kind ,kind-function
-            :company-doc-buffer ,options-doc-buffer-function
-            :affixation-function ,affixation-function))
+            ,@argument-completion-properties))
         ;; Command argument completion.
         (_
          (if-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
@@ -655,19 +658,10 @@ buffers via `org-open-at-point-global'."
                     table)
                `( ,(point) ,(point)
                   ,table
-                  :exclusive 'no
-                  :company-kind ,kind-function
-                  :company-doc-buffer ,options-doc-buffer-function
-                  :affixation-function ,affixation-function)))
-           (let ((extra-properties (blue--create-completion-properties commands)))
-             `( ,(point) ,(point)
-                ,commands
-                :exclusive 'no
-                :company-kind (lambda (candidate)
-                                (if (string-prefix-p "--" candidate)
-                                    'property
-                                  'command))
-                ,@extra-properties))))))))
+                  ,@argument-completion-properties)))
+           `( ,(point) ,(point)
+              ,commands
+              ,@(blue--command-completion-properties commands))))))))
 
 
 ;;; Minibuffer Hints.
@@ -869,12 +863,17 @@ A comand is considered interactive if it is a member of
                   (command (blue--get-command invocation commands)))
         (blue--command-get-slot 'category command)))))
 
-(defun blue--create-completion-properties (commands)
+(defun blue--command-completion-properties (commands)
   "Create completion properties for COMMANDS and INVOCATIONS."
   (when-let* ((invocations (blue--get-command-invocations commands))
               (max-width (apply #'max (mapcar #'string-width invocations))))
-    (list :annotation-function (blue--create-annotation-fn commands max-width)
-          :group-function (blue--create-group-fn commands))))
+    (list
+     :annotation-function (blue--create-annotation-fn commands max-width)
+     :company-kind (lambda (candidate)
+                     (if (string-prefix-p "--" candidate)
+                         'property 'command))
+     :exclusive 'no
+     :group-function (blue--create-group-fn commands))))
 
 (defun blue--prompt-dir (&optional create-p mustmatch)
   "Prompt for directory.
@@ -912,7 +911,7 @@ MUSTMATCH is passed directly to `read-directory-name'."
     (if-let* ((commands (car blue--data))
               (invocations (blue--get-command-invocations commands))
               (completion-extra-properties
-               (blue--create-completion-properties commands))
+               (blue--command-completion-properties commands))
               (crm-separator (propertize "[ \t]*--[ \t]+"
                                          'separator "--"
                                          'description "double-dash-separated list"))
