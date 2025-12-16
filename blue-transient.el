@@ -845,12 +845,10 @@ This function is meant for side effects, it is responsible of keeping
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
 
-;; FIXME: find a less stateful way of doing this.
-(defun blue-transient--menu ()
-  "Silence bytecompilation warnings.
-
-This will get redefined by `blue-transient'."
-  (error "This should have been redefined by `blue-transient'"))
+;; This function is defined at run-time during the evaluation of
+;; `blue-transient'. Let's declare it here to silence the byte-compilation
+;; warning.
+(declare-function blue-transient--menu "blue-transient" ())
 
 ;;;###autoload
 (defun blue-transient ()
@@ -877,7 +875,8 @@ keeps running in the compilation buffer."
   (blue--ensure-cache)
   (setq blue-transient--history-index 0
         blue--blueprint (blue--find-blueprint))
-  (let* ((prefix (car current-prefix-arg))
+  (let* ((blue-transient-menu 'blue-transient--menu)
+         (prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
          (last-build-dir (car build-dirs))
          (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
@@ -899,7 +898,7 @@ keeps running in the compilation buffer."
            ;; previous lines.
            (build-dirs (blue--cache-get-build-dirs blue--blueprint))
            (indices (number-sequence 1 (length build-dirs)))
-           (transient `(transient-define-prefix blue-transient--menu ()
+           (transient `(transient-define-prefix ,blue-transient-menu ()
                          :incompatible '(,(cons "--build-directory="
                                                 build-dirs))
                          :init-value
@@ -1064,7 +1063,7 @@ keeps running in the compilation buffer."
         (setq blue-transient--menu-expresion transient)
         (eval transient))
       ;; Open menu.
-      (blue-transient--menu))))
+      (funcall blue-transient-menu))))
 
 (provide 'blue-transient)
 ;;; blue-transient.el ends here.
