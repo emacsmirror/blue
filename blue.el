@@ -591,6 +591,22 @@ buffers via `org-open-at-point-global'."
                               (arg-name (alist-get 'name arguments)))
                     (list candidate nil (propertize arg-name 'face 'blue-documentation))))
                 candidates)))
+           (doc-buffer-function
+            `(lambda (candidate)
+               (when-let* ((long-label (string-trim candidate "--" "="))
+                           (option (blue--get-option-from-label long-label ',cmd))
+                           (doc (alist-get 'doc option))
+                           (arguments (alist-get 'arguments option))
+                           (arg-name (alist-get 'name arguments)))
+                 (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+                   (erase-buffer)
+                   (insert doc)
+                   (font-lock-add-keywords
+                    nil
+                    `((,arg-name . 'blue-documentation)))
+                   (font-lock-mode 1)
+                   (font-lock-ensure)
+                   (current-buffer)))))
            (table
             (while-no-input
               (and cmd
@@ -617,6 +633,7 @@ buffers via `org-open-at-point-global'."
             ,table
             :exclusive 'no
             :company-kind (lambda (_) 'property)
+            :company-doc-buffer ,doc-buffer-function
             :affixation-function ,affixation-function))
         ;; Command argument completion.
         (_
@@ -634,6 +651,7 @@ buffers via `org-open-at-point-global'."
                 ,table
                 :exclusive 'no
                 :company-kind (lambda (_) 'property)
+                :company-doc-buffer ,doc-buffer-function
                 :affixation-function ,affixation-function)))))))))
 
 
