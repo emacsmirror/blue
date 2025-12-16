@@ -718,7 +718,7 @@ suffixes."
 ;; interface.
 (defun blue-transient--argument-menu-entry (key option)
   "Create a transient argument entry from BLUE option."
-  (when-let* ((long-label (blue--get-long-label option)))
+  (when-let* ((long-label (car (blue--get-option-long-labels option))))
     `(,(concat "--" key)
       ,(capitalize long-label)
       ,(concat "--" long-label "=")
@@ -730,10 +730,10 @@ suffixes."
   (when-let* ((commands (car blue--data))
               (command (blue--get-command (intern command-name) commands))
               (options (blue--command-get-slot 'options command))
-              (option-labels (mapcar #'blue--get-long-label options))
+              (option-labels (seq-mapcat #'blue--get-option-long-labels options))
               (option-keys (blue-transient--assign-keys option-labels nil))
               (entries (mapcar (lambda (option)
-                                 (when-let* ((label (blue--get-long-label option))
+                                 (when-let* ((label (car (blue--get-option-long-labels option)))
                                              (key (cadr (assoc-string label option-keys))))
                                    (blue-transient--argument-menu-entry key option)))
                                options)))
