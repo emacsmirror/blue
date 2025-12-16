@@ -592,7 +592,12 @@ buffers via `org-open-at-point-global'."
                       (list candidate "" (propertize arg-name 'face 'blue-documentation))
                     (list candidate "" "")))
                 candidates)))
-           (doc-buffer-function
+           (kind-function
+            (lambda (candidate)
+              (if (string-prefix-p "--" candidate)
+                  'property
+                'command)))
+           (options-doc-buffer-function
             `(lambda (candidate)
                (when-let* ((long-label (string-trim candidate "--" "="))
                            (option (blue--get-option-from-label long-label ',cmd))
@@ -633,33 +638,36 @@ buffers via `org-open-at-point-global'."
          `( ,beg ,end
             ,table
             :exclusive 'no
-            :company-kind (lambda (candidate)
-                            (if (string-prefix-p "--" candidate)
-                                'property
-                              'command))
-            :company-doc-buffer ,doc-buffer-function
+            :company-kind ,kind-function
+            :company-doc-buffer ,options-doc-buffer-function
             :affixation-function ,affixation-function))
         ;; Command argument completion.
         (_
-         (when-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
-                     (type (alist-get 'type autocomplete))
-                     (blue-complete--file-prefix ""))
-           (cond
-            ((string-equal type "directory")
-             (blue--complete-directory))
-            ((string-equal type "file")
-             (blue--complete-file))
-            ((and (string-equal type "set")
-                  table)
+         (if-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
+                   (type (alist-get 'type autocomplete))
+                   (blue-complete--file-prefix ""))
+             (cond
+              ((string-equal type "directory")
+               (blue--complete-directory))
+              ((string-equal type "file")
+               (blue--complete-file))
+              ((and (string-equal type "set")
+                    table)
+               `( ,(point) ,(point)
+                  ,table
+                  :exclusive 'no
+                  :company-kind ,kind-function
+                  :company-doc-buffer ,options-doc-buffer-function
+                  :affixation-function ,affixation-function)))
+           (let ((extra-properties (blue--create-completion-properties commands)))
              `( ,(point) ,(point)
-                ,table
+                ,commands
                 :exclusive 'no
                 :company-kind (lambda (candidate)
                                 (if (string-prefix-p "--" candidate)
                                     'property
                                   'command))
-                :company-doc-buffer ,doc-buffer-function
-                :affixation-function ,affixation-function)))))))))
+                ,@extra-properties))))))))
 
 
 ;;; Minibuffer Hints.
