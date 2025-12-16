@@ -633,7 +633,10 @@ buffers via `org-open-at-point-global'."
          `( ,beg ,end
             ,table
             :exclusive 'no
-            :company-kind (lambda (_) 'property)
+            :company-kind (lambda (candidate)
+                            (if (string-prefix-p "--" candidate)
+                                'property
+                              'command))
             :company-doc-buffer ,doc-buffer-function
             :affixation-function ,affixation-function))
         ;; Command argument completion.
@@ -651,7 +654,10 @@ buffers via `org-open-at-point-global'."
              `( ,(point) ,(point)
                 ,table
                 :exclusive 'no
-                :company-kind (lambda (_) 'property)
+                :company-kind (lambda (candidate)
+                                (if (string-prefix-p "--" candidate)
+                                    'property
+                                  'command))
                 :company-doc-buffer ,doc-buffer-function
                 :affixation-function ,affixation-function)))))))))
 
