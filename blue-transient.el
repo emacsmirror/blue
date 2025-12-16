@@ -719,11 +719,36 @@ suffixes."
 (defun blue-transient--argument-menu-entry (key option)
   "Create a transient argument entry from BLUE option."
   (when-let* ((long-label (car (blue--get-option-long-labels option))))
-    `(,(concat "--" key)
-      ,(capitalize long-label)
-      ,(concat "--" long-label "=")
-      :summary ,(alist-get 'doc option)
-      :class blue-transient--command-argument)))
+    (let* ((doc (alist-get 'doc option))
+           (arguments (alist-get 'arguments option))
+           (type (alist-get 'type arguments))
+           (trans-label (concat "--"
+                                long-label
+                                (if (string= type "required")
+                                    "="
+                                  " ")))
+           (autocomplete (alist-get 'autocomplete option))
+           (reader (cond
+                    ((string-equal autocomplete "directory")
+                     #'transient-read-directory)
+                    ((string-equal autocomplete "file")
+                     #'transient-read-file)
+                    ;; TODO:
+                    ;; ((and (string-equal autocomplete "set")
+                    ;;       table)
+                    ;;  `( ,(point) ,(point)
+                    ;;     ,table
+                    ;;     :exclusive 'no
+                    ;;     :company-kind (lambda (_) 'property)
+                    ;;     :company-doc-buffer ,doc-buffer-function
+                    ;;     :affixation-function ,affixation-function))
+                    )))
+      `(,(concat "--" key)
+        ,(capitalize long-label)
+        ,trans-label
+        :summary ,doc
+        :reader ,reader
+        :class blue-transient--command-argument))))
 
 (defun blue-transient--arguments-menu (command-name)
   "Build transient menu for BLUE COMMAND-NAME arguments."
