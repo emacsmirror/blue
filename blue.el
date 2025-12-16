@@ -585,11 +585,12 @@ buffers via `org-open-at-point-global'."
             `(lambda (candidates)
                (mapcar
                 (lambda (candidate)
-                  (when-let* ((long-label (string-trim candidate "--" "="))
-                              (option (blue--get-option-from-label long-label ',cmd))
-                              (arguments (alist-get 'arguments option))
-                              (arg-name (alist-get 'name arguments)))
-                    (list candidate nil (propertize arg-name 'face 'blue-documentation))))
+                  (if-let* ((long-label (string-trim candidate "--" "="))
+                            (option (blue--get-option-from-label long-label ',cmd))
+                            (arguments (alist-get 'arguments option))
+                            (arg-name (alist-get 'name arguments)))
+                      (list candidate "" (propertize arg-name 'face 'blue-documentation))
+                    (list candidate "" "")))
                 candidates)))
            (doc-buffer-function
             `(lambda (candidate)
