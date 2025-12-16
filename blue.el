@@ -581,34 +581,16 @@ buffers via `org-open-at-point-global'."
            (last-cmd (and last-cmd+args
                           (car (string-split last-cmd+args))))
            (cmd (and last-cmd (blue--get-command (intern last-cmd) commands)))
-           (options (blue--command-get-slot 'options cmd))
-           (label-widths (mapcan
-                          #'(lambda (option)
-                              (let ((long-labels (blue--get-option-long-labels option)))
-                                (mapcar #'string-width long-labels)))
-                          options))
-           (labels-max-width (if label-widths
-                                 (+ (apply #'max
-                                           label-widths)
-                                    ;; Adding prefix and suffix '--...=' length.
-                                    3)
-                               0))
-           (annotation-function
-            `(lambda (candidate)
-               (when-let* ((long-label (string-trim candidate "--" "="))
-                           (option (blue--get-option-from-label long-label ',cmd))
-                           (doc (alist-get 'doc option))
-                           (arguments (alist-get 'arguments option))
-                           (arg-name (alist-get 'name arguments))
-                           (padding (max (+ blue-annotation-padding
-                                            (- ,labels-max-width
-                                               (+ (string-width candidate)
-                                                  (string-width arg-name))))
-                                         2)))
-                 (concat
-                  (propertize arg-name 'face 'blue-documentation)
-                  (make-string padding ?\s)
-                  (propertize doc 'face 'blue-documentation)))))
+           (affixation-function
+            `(lambda (candidates)
+               (mapcar
+                (lambda (candidate)
+                  (when-let* ((long-label (string-trim candidate "--" "="))
+                              (option (blue--get-option-from-label long-label ',cmd))
+                              (arguments (alist-get 'arguments option))
+                              (arg-name (alist-get 'name arguments)))
+                    (list candidate nil (propertize arg-name 'face 'blue-documentation))))
+                candidates)))
            (table
             (while-no-input
               (and cmd
@@ -635,7 +617,7 @@ buffers via `org-open-at-point-global'."
             ,table
             :exclusive 'no
             :company-kind (lambda (_) 'property)
-            :annotation-function ,annotation-function))
+            :affixation-function ,affixation-function))
         ;; Command argument completion.
         (_
          (when-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
@@ -652,7 +634,7 @@ buffers via `org-open-at-point-global'."
                 ,table
                 :exclusive 'no
                 :company-kind (lambda (_) 'property)
-                :annotation-function ,annotation-function)))))))))
+                :affixation-function ,affixation-function)))))))))
 
 
 ;;; Minibuffer Hints.
