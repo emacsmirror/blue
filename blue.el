@@ -548,13 +548,6 @@ buffers via `org-open-at-point-global'."
              '(:company-prefix-length t))
          ,@blue-complete--file-properties))))
 
-(defun blue--get-completion-table (command)
-  "Generate completion table for COMMAND."
-  (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
-         (values (alist-get 'values autocompletion))
-         (options (blue--command-get-slot 'options command)))
-    options))
-
 (defun blue--get-command-completion-table (command)
   "Generate an appropriate completion table for command."
   (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
@@ -625,7 +618,7 @@ buffers via `org-open-at-point-global'."
                    (blue--get-command-completion-table cmd)))))
       (pcase (bounds-of-thing-at-point 'symbol)
         ;; Long option argument completion.
-        ((pred (lambda (bounds)
+        ((pred (lambda (_)
                  (and blue-complete--file-prefix
                       (looking-back
                        (concat
