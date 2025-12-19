@@ -563,6 +563,8 @@ buffers via `org-open-at-point-global'."
                               options)))
     (append values long-labels)))
 
+;; TODO: Provide doc-buffer with help message for command completion.
+;; TODO: Handle configure system-name completion type.
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
   (when blue--data
@@ -587,9 +589,10 @@ buffers via `org-open-at-point-global'."
                 candidates)))
            (kind-function
             (lambda (candidate)
-              (if (string-prefix-p "--" candidate)
-                  'property
-                'command)))
+              (cond
+               ((string-prefix-p "--" candidate) 'property)
+               ((member candidate commands) 'command)
+               (t 'event))))
            (options-doc-buffer-function
             `(lambda (candidate)
                (when-let* ((long-label (string-trim candidate "--" "="))
@@ -863,8 +866,10 @@ A comand is considered interactive if it is a member of
     (list
      :annotation-function (blue--create-annotation-fn commands max-width)
      :company-kind (lambda (candidate)
-                     (if (string-prefix-p "--" candidate)
-                         'property 'command))
+                     (cond
+                      ((string-prefix-p "--" candidate) 'property)
+                      ((member candidate invocations) 'command)
+                      (t 'event)))
      :exclusive 'no
      :group-function (blue--create-group-fn commands))))
 
