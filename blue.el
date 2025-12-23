@@ -407,7 +407,7 @@ If RAW is non nil, the serialized string will not be evaluated."
   (cdr (assoc-string var config)))
 
 (defun blue--get-command (command commands)
-  "Retrieve CMD from COMMANDS."
+  "Retrieve COMMAND from COMMANDS."
   (assoc command commands))
 
 (defun blue--command-get-slot (slot command)
@@ -427,11 +427,19 @@ If RAW is non nil, the serialized string will not be evaluated."
                       (blue--command-get-slot 'category command))
                     commands)))
 
-(defun blue--get-long-label (option)
+(defun blue--get-option-long-labels (option)
   "Retrieve long lable from OPTION."
   (when-let* ((labels (alist-get 'labels option))
               (long-labels (alist-get 'long labels)))
-    (car long-labels)))
+    long-labels))
+
+(defun blue--get-option-from-label (label command)
+  "Retrieve option from COMMAND that matches LABEL."
+  (let ((options (blue--command-get-slot 'options command)))
+    (seq-find (lambda (option)
+                (let ((long-labels (blue--get-option-long-labels option)))
+                  (member label long-labels)))
+              options)))
 
 
 ;;; Completion.
@@ -461,18 +469,248 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Completion for `blue'."
   (while (pcomplete-here* (blue--completion-table))))
 
+(defcustom blue-complete--prefix "="
+  "File completion trigger prefixes.
+The value can be a string or a list of strings.  The default
+`file:' is the prefix of Org file links which work in arbitrary
+buffers via `org-open-at-point-global'."
+  :type '(choice string (repeat string)))
+
+(defvar blue-complete--file-properties
+  (list :annotation-function (lambda (s) (if (string-suffix-p "/" s) " Dir" " File"))
+        :company-kind (lambda (s) (if (string-suffix-p "/" s) 'folder 'file))
+        :exclusive 'no
+        :category 'file)
+  "Completion extra properties for `blue--complete-file'.")
+
+(defcustom blue-complete-target-names
+  '(
+    "aarch64-linux-gnu"
+    "arm-linux-gnueabihf"
+    "avr"
+    "i586-pc-gnu"
+    "i686-linux-gnu"
+    "i686-w64-mingw32"
+    "loongarch64-linux-gnu"
+    "mips64el-linux-gnu"
+    "or1k-elf"
+    "powerpc-linux-gnu"
+    "powerpc64-linux-gnu"
+    "powerpc64le-linux-gnu"
+    "riscv64-linux-gnu"
+    "x86_64-linux-gnu"
+    "x86_64-linux-gnux32"
+    "x86_64-pc-gnu"
+    "x86_64-w64-mingw32"
+    "xtensa-ath9k-elf")
+  "Common system names."
+  :group 'blue
+  :type '(repeat string))
+
+(defun blue-complete--bounds (thing)
+  "Return bounds of THING."
+  (or (bounds-of-thing-at-point thing) (cons (point) (point))))
+
+(defun blue--complete-file ()
+  "Complete file name at point."
+  (pcase-let* ((prefix (and blue-complete--prefix
+                            (looking-back
+                             (concat
+                              (regexp-opt (ensure-list blue-complete--prefix) t)
+                              "[^ \n\t]*")
+                             (pos-bol))
+                            (match-end 1)))
+               (`(,beg . ,end) (if prefix
+                                   (cons prefix (point))
+                                 (blue-complete--bounds 'filename)))
+               (non-essential t)
+               (file (buffer-substring-no-properties beg end)))
+    (when (or prefix
+              (and (string-search "/" file)
+                   (file-exists-p (file-name-directory
+                                   (substitute-in-file-name file)))))
+      (unless (boundp 'comint-unquote-function)
+        (require 'comint))
+      `( ,beg ,end
+         ,(completion-table-with-quoting
+           #'read-file-name-internal
+           comint-unquote-function
+           comint-requote-function)
+         ,@(when (or prefix (string-match-p "./" file))
+             '(:company-prefix-length t))
+         ,@blue-complete--file-properties))))
+
+(defun blue--complete-directory ()
+  "Complete directory name at point."
+  (pcase-let* ((prefix (and blue-complete--prefix
+                            (looking-back
+                             (concat
+                              (regexp-opt (ensure-list blue-complete--prefix) t)
+                              "[^ \n\t]*")
+                             (pos-bol))
+                            (match-end 1)))
+               (`(,beg . ,end) (if prefix
+                                   (cons prefix (point))
+                                 (blue-complete--bounds 'filename)))
+               (non-essential t)
+               (file (buffer-substring-no-properties beg end)))
+    (when (or prefix
+              (and (string-search "/" file)
+                   (file-exists-p (file-name-directory
+                                   (substitute-in-file-name file)))))
+      (unless (boundp 'comint-unquote-function)
+        (require 'comint))
+      `( ,beg ,end
+         ,(completion-table-with-quoting
+           (apply-partially #'completion-table-with-predicate
+                            #'read-file-name-internal
+                            #'file-directory-p
+                            'strict)
+           comint-unquote-function
+           comint-requote-function)
+         ,@(when (or prefix (string-match-p "./" file))
+             '(:company-prefix-length t))
+         ,@blue-complete--file-properties))))
+
+(defun blue--complete-system-name ()
+  "Complete system name at point."
+  (pcase-let* ((prefix (and blue-complete--prefix
+                            (looking-back
+                             (concat
+                              (regexp-opt (ensure-list blue-complete--prefix) t)
+                              "[^ \n\t]*")
+                             (pos-bol))
+                            (match-end 1)))
+               (`(,beg . ,end) (if prefix
+                                   (cons prefix (point))
+                                 (blue-complete--bounds 'filename)))
+               (non-essential t))
+    (when prefix
+      `( ,beg ,end
+         ,blue-complete-target-names
+         :company-kind (lambda (s) 'macro)
+         :exclusive 'no))))
+
+(defun blue--get-command-completion-table (command)
+  "Generate an appropriate completion table for command."
+  (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
+         (values (alist-get 'values autocompletion))
+         (options (blue--command-get-slot 'options command))
+         (long-labels (mapcar #'(lambda (option)
+                                  (let* ((arguments (alist-get 'arguments option))
+                                         (type (alist-get 'type arguments)))
+                                    (concat "--" (car (blue--get-option-long-labels option))
+                                            (if (string= type "required")
+                                                "="
+                                              " "))))
+                              options)))
+    (append values long-labels)))
+
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
-  (pcase (bounds-of-thing-at-point 'symbol)
-    (`(,beg . ,end)
-     ;; `beg-no-prompt' is required to ensure that completion receives the
-     ;; correct user input bounds even for prompts that do not leave any
-     ;; whitespace between the prompt and the user input. For example, the
-     ;; `transient-infix' default prompts, eg.: 'output=...'.
-     (let ((beg-no-prompt (max beg (minibuffer-prompt-end))))
-       (list beg-no-prompt end
-             (completion-table-with-cache #'blue--completion-table)
-             :exclusive 'no)))))
+  (when blue--data
+    (let* ((commands (car blue--data))
+           (prompt-start (minibuffer-prompt-end))
+           (input (buffer-substring-no-properties prompt-start (point)))
+           (cmds+args (string-split input " -- "))
+           (last-cmd+args (car (last cmds+args)))
+           (last-cmd (and last-cmd+args
+                          (car (string-split last-cmd+args))))
+           (cmd (and last-cmd (blue--get-command (intern last-cmd) commands)))
+           (affixation-function
+            (lambda (candidates)
+              (mapcar
+               (lambda (candidate)
+                 (if-let* ((long-label (string-trim candidate "--" "="))
+                           (option (blue--get-option-from-label long-label cmd))
+                           (arguments (alist-get 'arguments option))
+                           (arg-name (alist-get 'name arguments)))
+                     (list candidate "" (propertize arg-name 'face 'blue-documentation))
+                   (list candidate "" "")))
+               candidates)))
+           (kind-function
+            (lambda (candidate)
+              (cond
+               ((string-prefix-p "--" candidate) 'property)
+               ((member candidate commands) 'command)
+               (t 'event))))
+           (options-doc-buffer-function
+            (lambda (candidate)
+              (when-let* ((long-label (string-trim candidate "--" "="))
+                          (option (blue--get-option-from-label long-label cmd))
+                          (doc (alist-get 'doc option))
+                          (arguments (alist-get 'arguments option))
+                          (arg-name (alist-get 'name arguments)))
+                (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+                  (erase-buffer)
+                  (insert doc)
+                  (font-lock-add-keywords
+                   nil
+                   `((,arg-name . 'blue-documentation)))
+                  (font-lock-mode 1)
+                  (font-lock-ensure)
+                  (current-buffer)))))
+           (argument-completion-properties
+            (list
+             :affixation-function affixation-function
+             :company-doc-buffer options-doc-buffer-function
+             :company-kind kind-function
+             :exclusive 'no))
+           (table
+            (while-no-input
+              (and cmd
+                   (blue--get-command-completion-table cmd)))))
+      (pcase (bounds-of-thing-at-point 'symbol)
+        ;; Long option argument completion.
+        ((pred (lambda (_)
+                 (and blue-complete--prefix
+                      (looking-back
+                       (concat
+                        (regexp-opt (ensure-list blue-complete--prefix) t)
+                        "[^ \n\t]*")
+                       (pos-bol))
+                      (match-end 1))))
+         (let* ((thing (thing-at-point 'symbol))
+                (long-label (string-trim thing "--" "="))
+                (option (blue--get-option-from-label long-label cmd))
+                (autocomplete (alist-get 'autocomplete option)))
+           (cond
+            ((string-equal autocomplete "directory")
+             (blue--complete-directory))
+            ((string-equal autocomplete "file")
+             (blue--complete-file))
+            ((string-equal autocomplete "system-name")
+             (blue--complete-system-name))
+            ((and (string-equal autocomplete "set")
+                  table)
+             `( ,(point) ,(point)
+                ,table
+                ,@argument-completion-properties)))))
+        ;; Resume completion of partial argument input.
+        (`(,beg . ,end)
+         `( ,beg ,end
+            ,table
+            ,@argument-completion-properties))
+        ;; Command argument completion.
+        (_
+         (if-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
+                   (type (alist-get 'type autocomplete))
+                   (blue-complete--prefix ""))
+             (cond
+              ((string-equal type "directory")
+               (blue--complete-directory))
+              ((string-equal type "file")
+               (blue--complete-file))
+              ((string-equal type "system-name")
+               (blue--complete-system-name))
+              ((and (string-equal type "set")
+                    table)
+               `( ,(point) ,(point)
+                  ,table
+                  ,@argument-completion-properties)))
+           `( ,(point) ,(point)
+              ,commands
+              ,@(blue--command-completion-properties commands))))))))
 
 
 ;;; Minibuffer Hints.
@@ -653,17 +891,6 @@ A comand is considered interactive if it is a member of
 
 ;;; Command Prompt.
 
-(defun blue--create-annotation-fn (commands width)
-  "Create annotation function for COMMANDS with WIDTH alignment."
-  (lambda (candidate)
-    (when-let* ((invocation (intern candidate))
-                (command (blue--get-command invocation commands))
-                (synopsis (blue--command-get-slot 'synopsis command)))
-      (concat (make-string (+ blue-annotation-padding
-                              (- width (string-width candidate)))
-                           ?\s)
-              (propertize synopsis 'face 'blue-documentation)))))
-
 (defun blue--create-group-fn (commands)
   "Create group function for COMMANDS."
   (lambda (candidate transform)
@@ -673,12 +900,44 @@ A comand is considered interactive if it is a member of
                   (command (blue--get-command invocation commands)))
         (blue--command-get-slot 'category command)))))
 
-(defun blue--create-completion-properties (commands)
+(defun blue--command-completion-properties (commands)
   "Create completion properties for COMMANDS and INVOCATIONS."
   (when-let* ((invocations (blue--get-command-invocations commands))
-              (max-width (apply #'max (mapcar #'string-width invocations))))
-    (list :annotation-function (blue--create-annotation-fn commands max-width)
-          :group-function (blue--create-group-fn commands))))
+              (max-width (apply #'max (mapcar #'string-width invocations)))
+              (annotation-function
+               (lambda (candidate)
+                 (when-let* ((invocation (intern candidate))
+                             (command (blue--get-command invocation commands))
+                             (synopsis (blue--command-get-slot 'synopsis command))
+                             (padding (max (+ blue-annotation-padding
+                                              (- max-width (string-width candidate)))
+                                           2)))
+                   (concat (make-string padding ?\s)
+                           (propertize synopsis 'face 'blue-documentation)))))
+              (options-doc-buffer-function
+               (lambda (candidate)
+                 (when-let* ((invocation (intern candidate))
+                             (command (blue--get-command invocation commands))
+                             (help-msg (blue--command-get-slot 'help command)))
+                   (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+                     (erase-buffer)
+                     (insert help-msg)
+                     (font-lock-add-keywords
+                      nil
+                      `(("\\[.+\\]\s*\\.\\{3\\}*" . 'blue-documentation)))
+                     (font-lock-mode 1)
+                     (font-lock-ensure)
+                     (current-buffer))))))
+    (list
+     :annotation-function annotation-function
+     :company-doc-buffer options-doc-buffer-function
+     :company-kind (lambda (candidate)
+                     (cond
+                      ((string-prefix-p "--" candidate) 'property)
+                      ((member candidate invocations) 'command)
+                      (t 'event)))
+     :exclusive 'no
+     :group-function (blue--create-group-fn commands))))
 
 (defun blue--prompt-dir (&optional create-p mustmatch)
   "Prompt for directory.
@@ -716,7 +975,7 @@ MUSTMATCH is passed directly to `read-directory-name'."
     (if-let* ((commands (car blue--data))
               (invocations (blue--get-command-invocations commands))
               (completion-extra-properties
-               (blue--create-completion-properties commands))
+               (blue--command-completion-properties commands))
               (crm-separator (propertize "[ \t]*--[ \t]+"
                                          'separator "--"
                                          'description "double-dash-separated list"))

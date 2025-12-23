@@ -116,6 +116,9 @@ can become key characters."
 
 This is used to create the `blue-transient' menu.")
 
+;; FIXME: if this holds the menu, it should be resetted everytime this module is
+;; reloaded, that will avoid the inconsistent state where the transient does not
+;; get evaluated and remains with the stub definition.
 (defvar blue-transient--menu-expresion nil
   "Last evaluated transient.
 
@@ -711,24 +714,51 @@ suffixes."
             (min blue-transient--selected-argument-index
                  (1- (length selected-command-args)))))))
 
+;; TODO: Use the autocomplete option slot to provide the apropriate argument
+;; interface.
 (defun blue-transient--argument-menu-entry (key option)
   "Create a transient argument entry from BLUE option."
-  (when-let* ((long-label (blue--get-long-label option)))
-    `(,(concat "--" key)
-      ,(capitalize long-label)
-      ,(concat "--" long-label "=")
-      :summary ,(alist-get 'doc option)
-      :class blue-transient--command-argument)))
+  (when-let* ((long-label (car (blue--get-option-long-labels option))))
+    (let* ((doc (alist-get 'doc option))
+           (arguments (alist-get 'arguments option))
+           (type (alist-get 'type arguments))
+           (trans-label (concat "--"
+                                long-label
+                                (if (string= type "required")
+                                    "="
+                                  " ")))
+           (autocomplete (alist-get 'autocomplete option))
+           (reader (cond
+                    ((string-equal autocomplete "directory")
+                     #'transient-read-directory)
+                    ((string-equal autocomplete "file")
+                     #'transient-read-file)
+                    ;; TODO:
+                    ;; ((and (string-equal autocomplete "set")
+                    ;;       table)
+                    ;;  `( ,(point) ,(point)
+                    ;;     ,table
+                    ;;     :exclusive 'no
+                    ;;     :company-kind (lambda (_) 'property)
+                    ;;     :company-doc-buffer ,doc-buffer-function
+                    ;;     :affixation-function ,affixation-function))
+                    )))
+      `(,(concat "--" key)
+        ,(capitalize long-label)
+        ,trans-label
+        :summary ,doc
+        :reader ,reader
+        :class blue-transient--command-argument))))
 
 (defun blue-transient--arguments-menu (command-name)
   "Build transient menu for BLUE COMMAND-NAME arguments."
   (when-let* ((commands (car blue--data))
               (command (blue--get-command (intern command-name) commands))
               (options (blue--command-get-slot 'options command))
-              (option-labels (mapcar #'blue--get-long-label options))
+              (option-labels (seq-mapcat #'blue--get-option-long-labels options))
               (option-keys (blue-transient--assign-keys option-labels nil))
               (entries (mapcar (lambda (option)
-                                 (when-let* ((label (blue--get-long-label option))
+                                 (when-let* ((label (car (blue--get-option-long-labels option)))
                                              (key (cadr (assoc-string label option-keys))))
                                    (blue-transient--argument-menu-entry key option)))
                                options)))
@@ -815,10 +845,10 @@ This function is meant for side effects, it is responsible of keeping
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
 
-(defun blue-transient--menu ()
-  "Silence bytecompilation warnings.
-
-This will get redefined by `blue-transient'.")
+;; This function is defined at run-time during the evaluation of
+;; `blue-transient'. Let's declare it here to silence the byte-compilation
+;; warning.
+(declare-function blue-transient--menu "blue-transient" ())
 
 ;;;###autoload
 (defun blue-transient ()
@@ -845,7 +875,8 @@ keeps running in the compilation buffer."
   (blue--ensure-cache)
   (setq blue-transient--history-index 0
         blue--blueprint (blue--find-blueprint))
-  (let* ((prefix (car current-prefix-arg))
+  (let* ((blue-transient-menu 'blue-transient--menu)
+         (prefix (car current-prefix-arg))
          (build-dirs (blue--cache-get-build-dirs blue--blueprint))
          (last-build-dir (car build-dirs))
          (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
@@ -867,7 +898,7 @@ keeps running in the compilation buffer."
            ;; previous lines.
            (build-dirs (blue--cache-get-build-dirs blue--blueprint))
            (indices (number-sequence 1 (length build-dirs)))
-           (transient `(transient-define-prefix blue-transient--menu ()
+           (transient `(transient-define-prefix ,blue-transient-menu ()
                          :incompatible '(,(cons "--build-directory="
                                                 build-dirs))
                          :init-value
@@ -1032,7 +1063,7 @@ keeps running in the compilation buffer."
         (setq blue-transient--menu-expresion transient)
         (eval transient))
       ;; Open menu.
-      (blue-transient--menu))))
+      (funcall blue-transient-menu))))
 
 (provide 'blue-transient)
 ;;; blue-transient.el ends here.
