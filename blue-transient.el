@@ -27,6 +27,8 @@
 ;;; Code:
 
 (require 'blue)
+(require 'blue-complete)
+
 (require 'cl-generic)
 (require 'cus-edit) ; For `custom-button' face.
 (require 'eieio)
@@ -790,7 +792,7 @@ This function is meant for side effects, it is responsible of keeping
   ;; NOTE: `corfu--minibuffer-on` won't enable `corfu-mode'
   ;; if `completion-at-point-functions` isn't local.
   (add-hook 'completion-at-point-functions
-            #'blue--completion-at-point nil t))
+            #'blue-completion-at-point nil t))
 
 (defun blue-transient--prompt-args ()
   "Helper for prompting BLUE command arguments."

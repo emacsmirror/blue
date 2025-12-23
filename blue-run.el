@@ -24,6 +24,7 @@
 ;;; Code:
 
 (require 'blue)
+(require 'blue-complete)
 
 
 ;;; Minibuffer Hints.
@@ -104,7 +105,7 @@ If OVERRIDE is non nil disable CONFIGS."
   (unless blue--overiden-build-dir
     (let ((build-dirs (blue--cache-get-build-dirs blue--blueprint)))
       (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length build-dirs)))))
-  (add-hook 'completion-at-point-functions #'blue--completion-at-point nil t)
+  (add-hook 'completion-at-point-functions #'blue-completion-at-point nil t)
   (blue--show-hints))
 
 
