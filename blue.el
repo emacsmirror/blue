@@ -577,16 +577,16 @@ buffers via `org-open-at-point-global'."
                           (car (string-split last-cmd+args))))
            (cmd (and last-cmd (blue--get-command (intern last-cmd) commands)))
            (affixation-function
-            `(lambda (candidates)
-               (mapcar
-                (lambda (candidate)
-                  (if-let* ((long-label (string-trim candidate "--" "="))
-                            (option (blue--get-option-from-label long-label ',cmd))
-                            (arguments (alist-get 'arguments option))
-                            (arg-name (alist-get 'name arguments)))
-                      (list candidate "" (propertize arg-name 'face 'blue-documentation))
-                    (list candidate "" "")))
-                candidates)))
+            (lambda (candidates)
+              (mapcar
+               (lambda (candidate)
+                 (if-let* ((long-label (string-trim candidate "--" "="))
+                           (option (blue--get-option-from-label long-label cmd))
+                           (arguments (alist-get 'arguments option))
+                           (arg-name (alist-get 'name arguments)))
+                     (list candidate "" (propertize arg-name 'face 'blue-documentation))
+                   (list candidate "" "")))
+               candidates)))
            (kind-function
             (lambda (candidate)
               (cond
@@ -594,21 +594,21 @@ buffers via `org-open-at-point-global'."
                ((member candidate commands) 'command)
                (t 'event))))
            (options-doc-buffer-function
-            `(lambda (candidate)
-               (when-let* ((long-label (string-trim candidate "--" "="))
-                           (option (blue--get-option-from-label long-label ',cmd))
-                           (doc (alist-get 'doc option))
-                           (arguments (alist-get 'arguments option))
-                           (arg-name (alist-get 'name arguments)))
-                 (with-current-buffer (get-buffer-create "*blue-capf-doc*")
-                   (erase-buffer)
-                   (insert doc)
-                   (font-lock-add-keywords
-                    nil
-                    `((,arg-name . 'blue-documentation)))
-                   (font-lock-mode 1)
-                   (font-lock-ensure)
-                   (current-buffer)))))
+            (lambda (candidate)
+              (when-let* ((long-label (string-trim candidate "--" "="))
+                          (option (blue--get-option-from-label long-label cmd))
+                          (doc (alist-get 'doc option))
+                          (arguments (alist-get 'arguments option))
+                          (arg-name (alist-get 'name arguments)))
+                (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+                  (erase-buffer)
+                  (insert doc)
+                  (font-lock-add-keywords
+                   nil
+                   `((,arg-name . 'blue-documentation)))
+                  (font-lock-mode 1)
+                  (font-lock-ensure)
+                  (current-buffer)))))
            (argument-completion-properties
             (list
              :affixation-function affixation-function
@@ -838,18 +838,6 @@ A comand is considered interactive if it is a member of
 
 ;;; Command Prompt.
 
-(defun blue--create-annotation-fn (commands width)
-  "Create annotation function for COMMANDS with WIDTH alignment."
-  (lambda (candidate)
-    (when-let* ((invocation (intern candidate))
-                (command (blue--get-command invocation commands))
-                (synopsis (blue--command-get-slot 'synopsis command))
-                (padding (max (+ blue-annotation-padding
-                                 (- width (string-width candidate)))
-                              2)))
-      (concat (make-string padding ?\s)
-              (propertize synopsis 'face 'blue-documentation)))))
-
 (defun blue--create-group-fn (commands)
   "Create group function for COMMANDS."
   (lambda (candidate transform)
@@ -862,9 +850,19 @@ A comand is considered interactive if it is a member of
 (defun blue--command-completion-properties (commands)
   "Create completion properties for COMMANDS and INVOCATIONS."
   (when-let* ((invocations (blue--get-command-invocations commands))
-              (max-width (apply #'max (mapcar #'string-width invocations))))
+              (max-width (apply #'max (mapcar #'string-width invocations)))
+              (annotation-function
+               (lambda (candidate)
+                 (when-let* ((invocation (intern candidate))
+                             (command (blue--get-command invocation commands))
+                             (synopsis (blue--command-get-slot 'synopsis command))
+                             (padding (max (+ blue-annotation-padding
+                                              (- max-width (string-width candidate)))
+                                           2)))
+                   (concat (make-string padding ?\s)
+                           (propertize synopsis 'face 'blue-documentation))))))
     (list
-     :annotation-function (blue--create-annotation-fn commands max-width)
+     :annotation-function annotation-function
      :company-kind (lambda (candidate)
                      (cond
                       ((string-prefix-p "--" candidate) 'property)
