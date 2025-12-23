@@ -23,9 +23,10 @@
 
 ;;; Code:
 
-(require 'magit-section)
-(require 'cus-edit) ; Required for `custom-button' face.
 (require 'blue)
+
+(require 'cus-edit) ; Required for `custom-button' face.
+(require 'magit-section)
 
 
 ;;; Configuration.
@@ -323,7 +324,7 @@ line:column information.")
 (define-derived-mode blue-replay-mode magit-section-mode "Blue-replay"
   "Mode for looking at BLUE replay data."
   :interactive nil
-  :group 'blue
+  :group 'blue-replay
   (blue-replay-setup-font-lock)
   (cursor-face-highlight-mode)
   (cursor-sensor-mode))
