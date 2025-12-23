@@ -563,7 +563,6 @@ buffers via `org-open-at-point-global'."
                               options)))
     (append values long-labels)))
 
-;; TODO: Provide doc-buffer with help message for command completion.
 ;; TODO: Handle configure system-name completion type.
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
@@ -860,9 +859,24 @@ A comand is considered interactive if it is a member of
                                               (- max-width (string-width candidate)))
                                            2)))
                    (concat (make-string padding ?\s)
-                           (propertize synopsis 'face 'blue-documentation))))))
+                           (propertize synopsis 'face 'blue-documentation)))))
+              (options-doc-buffer-function
+               (lambda (candidate)
+                 (when-let* ((invocation (intern candidate))
+                             (command (blue--get-command invocation commands))
+                             (help-msg (blue--command-get-slot 'help command)))
+                   (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+                     (erase-buffer)
+                     (insert help-msg)
+                     (font-lock-add-keywords
+                      nil
+                      `(("\\[.+\\]\s*\\.\\{3\\}*" . 'blue-documentation)))
+                     (font-lock-mode 1)
+                     (font-lock-ensure)
+                     (current-buffer))))))
     (list
      :annotation-function annotation-function
+     :company-doc-buffer options-doc-buffer-function
      :company-kind (lambda (candidate)
                      (cond
                       ((string-prefix-p "--" candidate) 'property)
