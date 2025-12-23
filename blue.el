@@ -469,7 +469,7 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Completion for `blue'."
   (while (pcomplete-here* (blue--completion-table))))
 
-(defcustom blue-complete--file-prefix "="
+(defcustom blue-complete--prefix "="
   "File completion trigger prefixes.
 The value can be a string or a list of strings.  The default
 `file:' is the prefix of Org file links which work in arbitrary
@@ -483,16 +483,40 @@ buffers via `org-open-at-point-global'."
         :category 'file)
   "Completion extra properties for `blue--complete-file'.")
 
+(defcustom blue-complete-target-names
+  '(
+    "aarch64-linux-gnu"
+    "arm-linux-gnueabihf"
+    "avr"
+    "i586-pc-gnu"
+    "i686-linux-gnu"
+    "i686-w64-mingw32"
+    "loongarch64-linux-gnu"
+    "mips64el-linux-gnu"
+    "or1k-elf"
+    "powerpc-linux-gnu"
+    "powerpc64-linux-gnu"
+    "powerpc64le-linux-gnu"
+    "riscv64-linux-gnu"
+    "x86_64-linux-gnu"
+    "x86_64-linux-gnux32"
+    "x86_64-pc-gnu"
+    "x86_64-w64-mingw32"
+    "xtensa-ath9k-elf")
+  "Common system names."
+  :group 'blue
+  :type '(repeat string))
+
 (defun blue-complete--bounds (thing)
   "Return bounds of THING."
   (or (bounds-of-thing-at-point thing) (cons (point) (point))))
 
 (defun blue--complete-file ()
   "Complete file name at point."
-  (pcase-let* ((prefix (and blue-complete--file-prefix
+  (pcase-let* ((prefix (and blue-complete--prefix
                             (looking-back
                              (concat
-                              (regexp-opt (ensure-list blue-complete--file-prefix) t)
+                              (regexp-opt (ensure-list blue-complete--prefix) t)
                               "[^ \n\t]*")
                              (pos-bol))
                             (match-end 1)))
@@ -518,10 +542,10 @@ buffers via `org-open-at-point-global'."
 
 (defun blue--complete-directory ()
   "Complete directory name at point."
-  (pcase-let* ((prefix (and blue-complete--file-prefix
+  (pcase-let* ((prefix (and blue-complete--prefix
                             (looking-back
                              (concat
-                              (regexp-opt (ensure-list blue-complete--file-prefix) t)
+                              (regexp-opt (ensure-list blue-complete--prefix) t)
                               "[^ \n\t]*")
                              (pos-bol))
                             (match-end 1)))
@@ -548,6 +572,25 @@ buffers via `org-open-at-point-global'."
              '(:company-prefix-length t))
          ,@blue-complete--file-properties))))
 
+(defun blue--complete-system-name ()
+  "Complete system name at point."
+  (pcase-let* ((prefix (and blue-complete--prefix
+                            (looking-back
+                             (concat
+                              (regexp-opt (ensure-list blue-complete--prefix) t)
+                              "[^ \n\t]*")
+                             (pos-bol))
+                            (match-end 1)))
+               (`(,beg . ,end) (if prefix
+                                   (cons prefix (point))
+                                 (blue-complete--bounds 'filename)))
+               (non-essential t))
+    (when prefix
+      `( ,beg ,end
+         ,blue-complete-target-names
+         :company-kind (lambda (s) 'macro)
+         :exclusive 'no))))
+
 (defun blue--get-command-completion-table (command)
   "Generate an appropriate completion table for command."
   (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
@@ -563,7 +606,6 @@ buffers via `org-open-at-point-global'."
                               options)))
     (append values long-labels)))
 
-;; TODO: Handle configure system-name completion type.
 (defun blue--completion-at-point ()
   "`completion-at-point' function for `blue-run-command'."
   (when blue--data
@@ -621,10 +663,10 @@ buffers via `org-open-at-point-global'."
       (pcase (bounds-of-thing-at-point 'symbol)
         ;; Long option argument completion.
         ((pred (lambda (_)
-                 (and blue-complete--file-prefix
+                 (and blue-complete--prefix
                       (looking-back
                        (concat
-                        (regexp-opt (ensure-list blue-complete--file-prefix) t)
+                        (regexp-opt (ensure-list blue-complete--prefix) t)
                         "[^ \n\t]*")
                        (pos-bol))
                       (match-end 1))))
@@ -632,9 +674,19 @@ buffers via `org-open-at-point-global'."
                 (long-label (string-trim thing "--" "="))
                 (option (blue--get-option-from-label long-label cmd))
                 (autocomplete (alist-get 'autocomplete option)))
-           (if (string-equal autocomplete "directory")
-               (blue--complete-directory)
-             (blue--complete-file))))
+           (cond
+            ((string-equal autocomplete "directory")
+             (blue--complete-directory))
+            ((string-equal autocomplete "file")
+             (blue--complete-file))
+            ((string-equal autocomplete "system-name")
+             (blue--complete-system-name))
+            ((and (string-equal autocomplete "set")
+                  table)
+             `( ,(point) ,(point)
+                ,table
+                ,@argument-completion-properties)))))
+        ;; Resume completion of partial argument input.
         (`(,beg . ,end)
          `( ,beg ,end
             ,table
@@ -643,12 +695,14 @@ buffers via `org-open-at-point-global'."
         (_
          (if-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
                    (type (alist-get 'type autocomplete))
-                   (blue-complete--file-prefix ""))
+                   (blue-complete--prefix ""))
              (cond
               ((string-equal type "directory")
                (blue--complete-directory))
               ((string-equal type "file")
                (blue--complete-file))
+              ((string-equal type "system-name")
+               (blue--complete-system-name))
               ((and (string-equal type "set")
                     table)
                `( ,(point) ,(point)
