@@ -369,7 +369,9 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Return the commands and execution environment provided by BLUEPRINT."
   (when-let* ((options (when blueprint
                          (list (concat "--file=" blueprint))))
-              (cmd '(".serialize-commands" "--" ".serialize-execution-environment"))
+              (cmd '(".serialize-commands" "--"
+                     ".serialize-execution-environment" "--"
+                     ".serialize-ui"))
               (output (blue--execute-deserialize options cmd))
               (data (car output))
               (exit-code (cdr output)))
@@ -378,25 +380,23 @@ If RAW is non nil, the serialized string will not be evaluated."
           (insert data)
           (goto-char (point-min))
           (condition-case err
-              (re-search-forward "\\({.*}\\)\\({.*}\\)")
+              (re-search-forward "\\({.*}\\)\\({.*}\\)\\(\\[.*\\]\\)")
             (search-failed
              (blue--log-output (error-message-string err) "[BLUE] `re-search-forward'" 1)
              (with-current-buffer blue--log-buffer
                (goto-char (point-min)))
              (display-buffer blue--log-buffer)
              (error "[BLUE] Deserialization failed")))
-          (let ((json1 (match-string-no-properties 1))
-                (json2 (match-string-no-properties 2)))
-            (cons (json-parse-string json1
-                                     :object-type 'alist
-                                     :array-type 'list
-                                     :null-object nil
-                                     :false-object nil)
-                  (json-parse-string json2
-                                     :object-type 'alist
-                                     :array-type 'list
-                                     :null-object nil
-                                     :false-object nil))))
+          (let ((commands (match-string-no-properties 1))
+                (exec-env (match-string-no-properties 2))
+                (ui (match-string-no-properties 3)))
+            (mapcar (lambda (json)
+                      (json-parse-string json
+                                         :object-type 'alist
+                                         :array-type 'list
+                                         :null-object nil
+                                         :false-object nil))
+                    (list commands exec-env ui))))
       (with-current-buffer blue--log-buffer
         (goto-char (point-min)))
       (display-buffer blue--log-buffer)
@@ -465,7 +465,7 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
   "Set current buffer search path.
 
 This is meant to be used in compilation buffers."
-  (when-let* ((conf (cdr blue--data))
+  (when-let* ((conf (cadr blue--data))
               (srcdir (blue--config-get "srcdir" conf)))
     ;; Make 'srcdir' errors searchable in compilation buffer.
     (setq-local blue--search-path (seq-uniq (cons srcdir compilation-search-path))
