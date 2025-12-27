@@ -262,8 +262,9 @@ buffers via `org-open-at-point-global'."
               (if cmd ; Complete commands or UI options.
                   (blue--get-command-completion-table cmd)
                 (blue--get-ui-completion-table ui-options)))))
+      ;; TODO: refactor duplicated code.
       (pcase (bounds-of-thing-at-point 'symbol)
-        ;; Long option argument completion.
+        ;; Option value completion (from UI or command).
         ((pred (lambda (_)
                  (and blue-complete--prefix
                       (looking-back
@@ -275,25 +276,26 @@ buffers via `org-open-at-point-global'."
          (let* ((thing (thing-at-point 'symbol))
                 (long-label (string-trim thing "--" "="))
                 (option (blue--get-option-from-label long-label options))
-                (autocomplete (alist-get 'autocomplete option)))
+                (autocomplete (alist-get 'autocomplete option))
+                (type (alist-get 'type autocomplete)))
            (cond
-            ((string-equal autocomplete "directory")
+            ((string-equal type "directory")
              (blue--complete-directory))
-            ((string-equal autocomplete "file")
+            ((string-equal type "file")
              (blue--complete-file))
-            ((string-equal autocomplete "system-name")
+            ((string-equal type "system-name")
              (blue--complete-system-name))
-            ((and (string-equal autocomplete "set")
-                  table)
-             `( ,(point) ,(point)
-                ,table
-                ,@argument-completion-properties)))))
-        ;; Resume completion of partial argument input.
+            ((string-equal type "set")
+             (let ((table (alist-get 'values autocomplete)))
+               `( ,(point) ,(point)
+                  ,table
+                  ,@argument-completion-properties))))))
+        ;; Resume completion of partial input.
         (`(,beg . ,end)
          `( ,beg ,end
             ,table
             ,@argument-completion-properties))
-        ;; Command argument completion.
+        ;; Command argument or option completion.
         (_
          (if-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
                    (type (alist-get 'type autocomplete))
@@ -305,11 +307,11 @@ buffers via `org-open-at-point-global'."
                (blue--complete-file))
               ((string-equal type "system-name")
                (blue--complete-system-name))
-              ((and (string-equal type "set")
-                    table)
-               `( ,(point) ,(point)
-                  ,table
-                  ,@argument-completion-properties)))
+              ((string-equal type "set")
+               (let ((table (alist-get 'values autocomplete)))
+                 `( ,(point) ,(point)
+                    ,table
+                    ,@argument-completion-properties))))
            `( ,(point) ,(point)
               ,commands
               ,@(blue--command-completion-properties commands))))))))
