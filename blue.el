@@ -427,19 +427,19 @@ If RAW is non nil, the serialized string will not be evaluated."
                       (blue--command-get-slot 'category command))
                     commands)))
 
+;; TODO: fallback to short labels when there are no long-labels.
 (defun blue--get-option-long-labels (option)
   "Retrieve long lable from OPTION."
   (when-let* ((labels (alist-get 'labels option))
               (long-labels (alist-get 'long labels)))
     long-labels))
 
-(defun blue--get-option-from-label (label command)
-  "Retrieve option from COMMAND that matches LABEL."
-  (let ((options (blue--command-get-slot 'options command)))
-    (seq-find (lambda (option)
-                (let ((long-labels (blue--get-option-long-labels option)))
-                  (member label long-labels)))
-              options)))
+(defun blue--get-option-from-label (label options)
+  "Retrieve option from OPTIONS that matches LABEL."
+  (seq-find (lambda (option)
+              (let ((long-labels (blue--get-option-long-labels option)))
+                (member label long-labels)))
+            options))
 
 
 ;;; Compilation.

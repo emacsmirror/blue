@@ -173,7 +173,7 @@ buffers via `org-open-at-point-global'."
          :exclusive 'no))))
 
 (defun blue--get-command-completion-table (command)
-  "Generate an appropriate completion table for command."
+  "Generate an appropriate completion table for COMMAND."
   (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
          (values (alist-get 'values autocompletion))
          (options (blue--command-get-slot 'options command))
@@ -187,6 +187,19 @@ buffers via `org-open-at-point-global'."
                               options)))
     (append values long-labels)))
 
+(defun blue--get-ui-completion-table (options)
+  "Generate an appropriate completion table for UI OPTIONS."
+  (let* ((long-labels
+          (mapcar #'(lambda (option)
+                      (let* ((arguments (alist-get 'arguments option))
+                             (type (alist-get 'type arguments)))
+                        (concat "--" (car (blue--get-option-long-labels option))
+                                (if (string= type "required")
+                                    "="
+                                  " "))))
+                  options)))
+    long-labels))
+
 
 ;;; Interfaces.
 
@@ -194,6 +207,7 @@ buffers via `org-open-at-point-global'."
   "`completion-at-point' function for `blue-run-command'."
   (when blue--data
     (let* ((commands (car blue--data))
+           (ui-options (caddr blue--data))
            (prompt-start (minibuffer-prompt-end))
            (input (buffer-substring-no-properties prompt-start (point)))
            (cmds+args (string-split input " -- "))
@@ -201,12 +215,15 @@ buffers via `org-open-at-point-global'."
            (last-cmd (and last-cmd+args
                           (car (string-split last-cmd+args))))
            (cmd (and last-cmd (blue--get-command (intern last-cmd) commands)))
+           (options (if cmd
+                        (blue--command-get-slot 'options cmd)
+                      ui-options))
            (affixation-function
             (lambda (candidates)
               (mapcar
                (lambda (candidate)
                  (if-let* ((long-label (string-trim candidate "--" "="))
-                           (option (blue--get-option-from-label long-label cmd))
+                           (option (blue--get-option-from-label long-label options))
                            (arguments (alist-get 'arguments option))
                            (arg-name (alist-get 'name arguments)))
                      (list candidate "" (propertize arg-name 'face 'blue-documentation))
@@ -221,7 +238,7 @@ buffers via `org-open-at-point-global'."
            (options-doc-buffer-function
             (lambda (candidate)
               (when-let* ((long-label (string-trim candidate "--" "="))
-                          (option (blue--get-option-from-label long-label cmd))
+                          (option (blue--get-option-from-label long-label options))
                           (doc (alist-get 'doc option))
                           (arguments (alist-get 'arguments option))
                           (arg-name (alist-get 'name arguments)))
@@ -242,8 +259,9 @@ buffers via `org-open-at-point-global'."
              :exclusive 'no))
            (table
             (while-no-input
-              (and cmd
-                   (blue--get-command-completion-table cmd)))))
+              (if cmd ; Complete commands or UI options.
+                  (blue--get-command-completion-table cmd)
+                (blue--get-ui-completion-table ui-options)))))
       (pcase (bounds-of-thing-at-point 'symbol)
         ;; Long option argument completion.
         ((pred (lambda (_)
@@ -256,7 +274,7 @@ buffers via `org-open-at-point-global'."
                       (match-end 1))))
          (let* ((thing (thing-at-point 'symbol))
                 (long-label (string-trim thing "--" "="))
-                (option (blue--get-option-from-label long-label cmd))
+                (option (blue--get-option-from-label long-label options))
                 (autocomplete (alist-get 'autocomplete option)))
            (cond
             ((string-equal autocomplete "directory")
