@@ -25,14 +25,6 @@
 
 (require 'blue)
 
-(defcustom blue-complete--prefix "="
-  "File completion trigger prefixes.
-The value can be a string or a list of strings.  The default
-`file:' is the prefix of Org file links which work in arbitrary
-buffers via `org-open-at-point-global'."
-  :type 'string
-  :group 'blue-complete)
-
 (defcustom blue-complete-target-names
   '(
     "aarch64-linux-gnu"
@@ -56,6 +48,9 @@ buffers via `org-open-at-point-global'."
   "Common system names."
   :group 'blue-complete
   :type '(repeat string))
+
+(defvar blue-complete--option-value-prefix "="
+  "Regex to identify inputs expecting a value for an option")
 
 (defvar blue-complete--file-properties
   (list :annotation-function (lambda (s) (if (string-suffix-p "/" s) " Dir" " File"))
@@ -94,17 +89,13 @@ buffers via `org-open-at-point-global'."
 
 (defun blue--complete-file ()
   "Complete file name at point."
-  (pcase-let* ((prefix (and blue-complete--prefix
-                            (looking-back
-                             (concat
-                              (regexp-opt (ensure-list blue-complete--prefix) t)
-                              "[^ \n\t]*")
-                             (pos-bol))
-                            (match-end 1)))
+  (pcase-let* ((prefix
+                (and
+                 (looking-back blue-complete--option-value-prefix (pos-bol))
+                 (match-end 1)))
                (`(,beg . ,end) (if prefix
                                    (cons prefix (point))
                                  (blue-complete--bounds 'filename)))
-               (non-essential t)
                (file (buffer-substring-no-properties beg end)))
     (when (or prefix
               (and (string-search "/" file)
@@ -123,17 +114,13 @@ buffers via `org-open-at-point-global'."
 
 (defun blue--complete-directory ()
   "Complete directory name at point."
-  (pcase-let* ((prefix (and blue-complete--prefix
-                            (looking-back
-                             (concat
-                              (regexp-opt (ensure-list blue-complete--prefix) t)
-                              "[^ \n\t]*")
-                             (pos-bol))
-                            (match-end 1)))
+  (pcase-let* ((prefix
+                (and
+                 (looking-back blue-complete--option-value-prefix (pos-bol))
+                 (match-end 1)))
                (`(,beg . ,end) (if prefix
                                    (cons prefix (point))
                                  (blue-complete--bounds 'filename)))
-               (non-essential t)
                (file (buffer-substring-no-properties beg end)))
     (when (or prefix
               (and (string-search "/" file)
@@ -155,17 +142,13 @@ buffers via `org-open-at-point-global'."
 
 (defun blue--complete-system-name ()
   "Complete system name at point."
-  (pcase-let* ((prefix (and blue-complete--prefix
-                            (looking-back
-                             (concat
-                              (regexp-opt (ensure-list blue-complete--prefix) t)
-                              "[^ \n\t]*")
-                             (pos-bol))
-                            (match-end 1)))
+  (pcase-let* ((prefix
+                (and
+                 (looking-back blue-complete--option-value-prefix (pos-bol))
+                 (match-end 1)))
                (`(,beg . ,end) (if prefix
                                    (cons prefix (point))
-                                 (blue-complete--bounds 'filename)))
-               (non-essential t))
+                                 (blue-complete--bounds 'symbol))))
     (when prefix
       `( ,beg ,end
          ,blue-complete-target-names
@@ -210,6 +193,8 @@ buffers via `org-open-at-point-global'."
            (ui-options (caddr blue--data))
            (prompt-start (minibuffer-prompt-end))
            (input (buffer-substring-no-properties prompt-start (point)))
+           (bounds-at-pt (or (bounds-of-thing-at-point 'symbol)
+                             (cons (point) (point))))
            (cmds+args (string-split input " -- "))
            (last-cmd+args (car (last cmds+args)))
            (last-cmd (and last-cmd+args
@@ -251,70 +236,55 @@ buffers via `org-open-at-point-global'."
                   (font-lock-mode 1)
                   (font-lock-ensure)
                   (current-buffer)))))
-           (argument-completion-properties
-            (list
-             :affixation-function affixation-function
-             :company-doc-buffer options-doc-buffer-function
-             :company-kind kind-function
-             :exclusive 'no))
-           (table
-            (while-no-input
-              (if cmd ; Complete commands or UI options.
-                  (blue--get-command-completion-table cmd)
-                (blue--get-ui-completion-table ui-options)))))
-      ;; TODO: refactor duplicated code.
-      (pcase (bounds-of-thing-at-point 'symbol)
-        ;; Option value completion (from UI or command).
-        ((pred (lambda (_)
-                 (and blue-complete--prefix
-                      (looking-back
-                       (concat
-                        (regexp-opt (ensure-list blue-complete--prefix) t)
-                        "[^ \n\t]*")
-                       (pos-bol))
-                      (match-end 1))))
-         (let* ((thing (thing-at-point 'symbol))
-                (long-label (string-trim thing "--" "="))
-                (option (blue--get-option-from-label long-label options))
-                (autocomplete (alist-get 'autocomplete option))
-                (type (alist-get 'type autocomplete)))
-           (cond
-            ((string-equal type "directory")
-             (blue--complete-directory))
-            ((string-equal type "file")
-             (blue--complete-file))
-            ((string-equal type "system-name")
-             (blue--complete-system-name))
-            ((string-equal type "set")
-             (let ((table (alist-get 'values autocomplete)))
-               `( ,(point) ,(point)
-                  ,table
-                  ,@argument-completion-properties))))))
-        ;; Resume completion of partial input.
-        (`(,beg . ,end)
-         `( ,beg ,end
-            ,table
-            ,@argument-completion-properties))
-        ;; Command argument or option completion.
-        (_
-         (if-let* ((autocomplete (blue--command-get-slot 'autocomplete cmd))
-                   (type (alist-get 'type autocomplete))
-                   (blue-complete--prefix ""))
-             (cond
-              ((string-equal type "directory")
-               (blue--complete-directory))
-              ((string-equal type "file")
-               (blue--complete-file))
-              ((string-equal type "system-name")
-               (blue--complete-system-name))
-              ((string-equal type "set")
-               (let ((table (alist-get 'values autocomplete)))
-                 `( ,(point) ,(point)
-                    ,table
-                    ,@argument-completion-properties))))
-           `( ,(point) ,(point)
-              ,commands
-              ,@(blue--command-completion-properties commands))))))))
+           ;; Helper to produce completion table for autocompletable object
+           ;; respecting bounds.
+           (blue-completion--complete-autocompletable
+            (lambda (autocompletable bounds)
+              (let* ((autocomplete (blue--command-get-slot 'autocomplete autocompletable))
+                     (type (alist-get 'type autocomplete))
+                     (table (alist-get 'values autocomplete)))
+                (cond
+                 ((string-equal type "directory")
+                  (progn
+                    (message "Completing directory")
+                    (blue--complete-directory)))
+                 ((string-equal type "file")
+                  (blue--complete-file))
+                 ((string-equal type "system-name")
+                  (blue--complete-system-name))
+                 ((string-equal type "set")
+                  `( ,(car bounds) ,(cdr bounds)
+                     ,table
+                     :affixation-function ,affixation-function
+                     :company-doc-buffer ,options-doc-buffer-function
+                     :company-kind ,kind-function
+                     :exclusive 'no)))))))
+      (cond
+       ;; Option value completion (from UI or command).
+       ((and (looking-back blue-complete--option-value-prefix (pos-bol))
+             (match-end 1))
+        (let* ((thing (thing-at-point 'symbol))
+               (long-label (string-trim thing "--" "="))
+               (option (blue--get-option-from-label long-label options)))
+          (message "Completing value")
+          (funcall blue-completion--complete-autocompletable option bounds-at-pt)))
+       ;; Command option completion.
+       ((and cmd
+             (looking-back "\\(^\\|\s\\|\t\\)-+" (pos-bol))
+             (match-end 1))
+        `( ,(car bounds-at-pt) ,(cdr bounds-at-pt)
+           ,(blue--get-command-completion-table cmd)
+           ,@(blue--command-completion-properties commands)))
+       ;; Complete command arguments.
+       (cmd
+        (funcall blue-completion--complete-autocompletable cmd bounds-at-pt))
+       ;; Complete command invocations.
+       ((or (not cmd)
+            (and (looking-back "--\\(\s\\|\t\\)+" (pos-bol))
+                 (match-end 1)))
+        `( ,(car bounds-at-pt) ,(cdr bounds-at-pt)
+           ,commands
+           ,@(blue--command-completion-properties commands)))))))
 
 ;;;###autoload
 (defun pcomplete/blue ()
