@@ -91,7 +91,9 @@
   "Complete file name at point."
   (pcase-let* ((prefix
                 (and
-                 (looking-back blue-complete--option-value-prefix (pos-bol))
+                 (looking-back
+                  (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
+                  (pos-bol))
                  (match-end 1)))
                (`(,beg . ,end) (if prefix
                                    (cons prefix (point))
@@ -116,7 +118,9 @@
   "Complete directory name at point."
   (pcase-let* ((prefix
                 (and
-                 (looking-back blue-complete--option-value-prefix (pos-bol))
+                 (looking-back
+                  (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
+                  (pos-bol))
                  (match-end 1)))
                (`(,beg . ,end) (if prefix
                                    (cons prefix (point))
@@ -144,7 +148,9 @@
   "Complete system name at point."
   (pcase-let* ((prefix
                 (and
-                 (looking-back blue-complete--option-value-prefix (pos-bol))
+                 (looking-back
+                  (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
+                  (pos-bol))
                  (match-end 1)))
                (`(,beg . ,end) (if prefix
                                    (cons prefix (point))
@@ -240,14 +246,12 @@
            ;; respecting bounds.
            (blue-completion--complete-autocompletable
             (lambda (autocompletable bounds)
-              (let* ((autocomplete (blue--command-get-slot 'autocomplete autocompletable))
+              (let* ((autocomplete (alist-get 'autocomplete autocompletable))
                      (type (alist-get 'type autocomplete))
                      (table (alist-get 'values autocomplete)))
                 (cond
                  ((string-equal type "directory")
-                  (progn
-                    (message "Completing directory")
-                    (blue--complete-directory)))
+                  (blue--complete-directory))
                  ((string-equal type "file")
                   (blue--complete-file))
                  ((string-equal type "system-name")
@@ -255,18 +259,17 @@
                  ((string-equal type "set")
                   `( ,(car bounds) ,(cdr bounds)
                      ,table
-                     :affixation-function ,affixation-function
-                     :company-doc-buffer ,options-doc-buffer-function
-                     :company-kind ,kind-function
+                     :company-kind (lambda (s) 'property)
                      :exclusive 'no)))))))
       (cond
        ;; Option value completion (from UI or command).
-       ((and (looking-back blue-complete--option-value-prefix (pos-bol))
+       ((and (looking-back
+              (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
+              (pos-bol))
              (match-end 1))
         (let* ((thing (thing-at-point 'symbol))
                (long-label (string-trim thing "--" "="))
                (option (blue--get-option-from-label long-label options)))
-          (message "Completing value")
           (funcall blue-completion--complete-autocompletable option bounds-at-pt)))
        ;; Command option completion.
        ((and cmd
@@ -275,10 +278,10 @@
         `( ,(car bounds-at-pt) ,(cdr bounds-at-pt)
            ,(blue--get-command-completion-table cmd)
            ,@(blue--command-completion-properties commands)))
-       ;; Complete command arguments.
+       ;; Command argument completion.
        (cmd
         (funcall blue-completion--complete-autocompletable cmd bounds-at-pt))
-       ;; Complete command invocations.
+       ;; Command invocation completion.
        ((or (not cmd)
             (and (looking-back "--\\(\s\\|\t\\)+" (pos-bol))
                  (match-end 1)))
