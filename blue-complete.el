@@ -158,7 +158,7 @@
     (when prefix
       `( ,beg ,end
          ,blue-complete-target-names
-         :company-kind (lambda (s) 'macro)
+         :company-kind (lambda (_) 'macro)
          :exclusive 'no))))
 
 (defun blue--get-command-completion-table (command)
@@ -242,6 +242,12 @@
                   (font-lock-mode 1)
                   (font-lock-ensure)
                   (current-buffer)))))
+           (argument-completion-properties
+            (list
+             :affixation-function affixation-function
+             :company-doc-buffer options-doc-buffer-function
+             :company-kind kind-function
+             :exclusive 'no))
            ;; Helper to produce completion table for autocompletable object
            ;; respecting bounds.
            (blue-completion--complete-autocompletable
@@ -259,8 +265,8 @@
                  ((string-equal type "set")
                   `( ,(car bounds) ,(cdr bounds)
                      ,table
-                     :company-kind (lambda (s) 'property)
-                     :exclusive 'no)))))))
+                     ;; FIXME: not working.
+                     ,@argument-completion-properties)))))))
       (cond
        ;; Option value completion (from UI or command).
        ((and (looking-back
@@ -273,7 +279,7 @@
           (funcall blue-completion--complete-autocompletable option bounds-at-pt)))
        ;; Command option completion.
        ((and cmd
-             (looking-back "\\(^\\|\s\\|\t\\)-+" (pos-bol))
+             (looking-back "\\(^\\|\s\\|\t\\)-+[^\s]*" (pos-bol))
              (match-end 1))
         `( ,(car bounds-at-pt) ,(cdr bounds-at-pt)
            ,(blue--get-command-completion-table cmd)
