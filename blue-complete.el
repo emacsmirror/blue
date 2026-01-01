@@ -161,6 +161,23 @@
          :company-kind (lambda (_) 'macro)
          :exclusive 'no))))
 
+(defun blue--complete-set (values)
+  "Complete VALUES from a set at point."
+  (pcase-let* ((prefix
+                (and
+                 (looking-back
+                  (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
+                  (pos-bol))
+                 (match-end 1)))
+               (`(,beg . ,end) (if prefix
+                                   (cons prefix (point))
+                                 (blue-complete--bounds 'symbol))))
+    (when prefix
+      `( ,beg ,end
+         ,values
+         :company-kind (lambda (_) 'event)
+         :exclusive 'no))))
+
 (defun blue--get-command-completion-table (command)
   "Generate an appropriate completion table for COMMAND."
   (let* ((autocompletion (alist-get 'autocomplete command))
@@ -335,9 +352,7 @@
                  ((string-equal type "system-name")
                   (blue--complete-system-name))
                  ((string-equal type "set")
-                  `( ,(car bounds) ,(cdr bounds)
-                     ,table
-                     ,@argument-completion-properties)))))))
+                  (blue--complete-set table)))))))
       (cond
        ;; UI option value completion.
        ((and (looking-back
