@@ -300,23 +300,14 @@ bounds."
            (cmd (and last-cmd (blue--get-command last-cmd commands)))
            (options (alist-get 'options cmd)))
       (cond
-       ;; UI option value completion.
-       ((and (not cmd)
-             (looking-back
-              (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
-              (pos-bol))
-             (match-end 1))
-        (let* ((thing (thing-at-point 'symbol))
-               (long-label (string-trim thing "--" "="))
-               (option (blue--get-option-from-label long-label ui-options)))
-          (blue-completion--complete-autocompletable option)))
-       ;; Command option value completion.
+       ;; Option value completion (from command or UI).
        ((and (looking-back
               (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
               (pos-bol))
              (match-end 1))
         (let* ((thing (thing-at-point 'symbol))
                (long-label (string-trim thing "--" "="))
+               (options (if cmd options ui-options))
                (option (blue--get-option-from-label long-label options)))
           (blue-completion--complete-autocompletable option)))
         ;; UI option completion.
