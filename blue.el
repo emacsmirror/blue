@@ -380,7 +380,7 @@ If RAW is non nil, the serialized string will not be evaluated."
           (insert data)
           (goto-char (point-min))
           (condition-case err
-              (re-search-forward "\\({.*}\\)\\({.*}\\)\\(\\[.*\\]\\)")
+              (re-search-forward "\\(\\[.*\\]\\)\\({.*}\\)\\(\\[.*\\]\\)")
             (search-failed
              (blue--log-output (error-message-string err) "[BLUE] `re-search-forward'" 1)
              (with-current-buffer blue--log-buffer
@@ -418,7 +418,7 @@ If RAW is non nil, the serialized string will not be evaluated."
 (defun blue--get-command-invocations (commands)
   "Retrieve command names from COMMANDS."
   (mapcar (lambda (command)
-            (symbol-name (car command)))
+            (alist-get 'invoke command))
           commands))
 
 (defun blue--get-command-categories (commands)
