@@ -176,7 +176,50 @@
                               options)))
     (append values long-labels)))
 
-(defun blue--get-ui-completion-table (options)
+(defun blue--get-command-options-completion-table (command bounds)
+  "Generate an appropriate completion table for COMMAND respecting BOUNDS."
+  (let* ((options (alist-get 'options command))
+         (long-labels (mapcar #'(lambda (option)
+                                  (let* ((arguments (alist-get 'arguments option))
+                                         (type (alist-get 'type arguments)))
+                                    (concat "--" (car (blue--get-option-long-labels option))
+                                            (if (string= type "required")
+                                                "="
+                                              " "))))
+                              options)))
+    `( ,(car bounds) ,(cdr bounds)
+       ,long-labels
+       :company-doc-buffer
+       (lambda (candidate)
+         (when-let* ((long-label (string-trim candidate "--" "="))
+                     (option (blue--get-option-from-label long-label ',options))
+                     (doc (alist-get 'doc option))
+                     (arguments (alist-get 'arguments option))
+                     (arg-name (alist-get 'name arguments)))
+           (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+             (erase-buffer)
+             (insert doc)
+             (font-lock-add-keywords
+              nil
+              `((,arg-name . 'blue-documentation)))
+             (font-lock-mode 1)
+             (font-lock-ensure)
+             (current-buffer))))
+       :affixation-function
+       (lambda (candidates)
+         (mapcar
+          (lambda (candidate)
+            (if-let* ((long-label (string-trim candidate "--" "="))
+                      (option (blue--get-option-from-label long-label ',options))
+                      (arguments (alist-get 'arguments option))
+                      (arg-name (alist-get 'name arguments)))
+                (list candidate "" (propertize arg-name 'face 'blue-documentation))
+              (list candidate "" "")))
+          candidates))
+       :company-kind (lambda (_) 'property)
+       :exclusive no)))
+
+(defun blue--get-ui-completion-table (options bounds)
   "Generate an appropriate completion table for UI OPTIONS."
   (let* ((long-labels
           (mapcar #'(lambda (option)
@@ -187,7 +230,37 @@
                                     "="
                                   " "))))
                   options)))
-    long-labels))
+    `( ,(car bounds) ,(cdr bounds)
+       ,long-labels
+       :company-doc-buffer
+       (lambda (candidate)
+         (when-let* ((long-label (string-trim candidate "--" "="))
+                     (option (blue--get-option-from-label long-label ',options))
+                     (doc (alist-get 'doc option))
+                     (arguments (alist-get 'arguments option))
+                     (arg-name (alist-get 'name arguments)))
+           (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+             (erase-buffer)
+             (insert doc)
+             (font-lock-add-keywords
+              nil
+              `((,arg-name . 'blue-documentation)))
+             (font-lock-mode 1)
+             (font-lock-ensure)
+             (current-buffer))))
+       :affixation-function
+       (lambda (candidates)
+         (mapcar
+          (lambda (candidate)
+            (if-let* ((long-label (string-trim candidate "--" "="))
+                      (option (blue--get-option-from-label long-label ',options))
+                      (arguments (alist-get 'arguments option))
+                      (arg-name (alist-get 'name arguments)))
+                (list candidate "" (propertize arg-name 'face 'blue-documentation))
+              (list candidate "" "")))
+          candidates))
+       :company-kind (lambda (_) 'property)
+       :exclusive no)))
 
 
 ;;; Interfaces.
@@ -196,6 +269,7 @@
   "`completion-at-point' function for `blue-run-command'."
   (when blue--data
     (let* ((commands (car blue--data))
+           (invocations (blue--get-command-invocations commands))
            (ui-options (caddr blue--data))
            (prompt-start (minibuffer-prompt-end))
            (input (buffer-substring-no-properties prompt-start (point)))
@@ -206,9 +280,7 @@
            (last-cmd (and last-cmd+args
                           (car (string-split last-cmd+args))))
            (cmd (and last-cmd (blue--get-command last-cmd commands)))
-           (options (if cmd
-                        (alist-get 'options cmd)
-                      ui-options))
+           (options (alist-get 'options cmd))
            (affixation-function
             (lambda (candidates)
               (mapcar
@@ -265,10 +337,18 @@
                  ((string-equal type "set")
                   `( ,(car bounds) ,(cdr bounds)
                      ,table
-                     ;; FIXME: not working.
                      ,@argument-completion-properties)))))))
       (cond
-       ;; Option value completion (from UI or command).
+       ;; UI option value completion.
+       ((and (looking-back
+              (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
+              (pos-bol))
+             (match-end 1))
+        (let* ((thing (thing-at-point 'symbol))
+               (long-label (string-trim thing "--" "="))
+               (option (blue--get-option-from-label long-label ui-options)))
+          (funcall blue-completion--complete-autocompletable option bounds-at-pt)))
+       ;; Command option value completion.
        ((and (looking-back
               (regexp-opt (ensure-list blue-complete--option-value-prefix) t)
               (pos-bol))
@@ -277,22 +357,24 @@
                (long-label (string-trim thing "--" "="))
                (option (blue--get-option-from-label long-label options)))
           (funcall blue-completion--complete-autocompletable option bounds-at-pt)))
+        ;; UI option completion.
+       ((and (not cmd)
+             (looking-back "\\(^\\|\s\\|\t\\)-+[^\s]*" (pos-bol))
+             (match-end 1))
+        (blue--get-ui-completion-table ui-options bounds-at-pt))
        ;; Command option completion.
        ((and cmd
              (looking-back "\\(^\\|\s\\|\t\\)-+[^\s]*" (pos-bol))
              (match-end 1))
-        `( ,(car bounds-at-pt) ,(cdr bounds-at-pt)
-           ,(blue--get-command-completion-table cmd)
-           ,@(blue--command-completion-properties commands)))
+        (blue--get-command-options-completion-table cmd bounds-at-pt))
        ;; Command argument completion.
        (cmd
-        (funcall blue-completion--complete-autocompletable cmd bounds-at-pt))
+        (let ((blue-complete--option-value-prefix " ")) ; Arguments are space separated.
+          (funcall blue-completion--complete-autocompletable cmd bounds-at-pt)))
        ;; Command invocation completion.
-       ((or (not cmd)
-            (and (looking-back "--\\(\s\\|\t\\)+" (pos-bol))
-                 (match-end 1)))
+       ((not cmd)
         `( ,(car bounds-at-pt) ,(cdr bounds-at-pt)
-           ,commands
+           ,invocations
            ,@(blue--command-completion-properties commands)))))))
 
 ;;;###autoload
