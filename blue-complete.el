@@ -57,12 +57,12 @@
         :company-kind (lambda (s) (if (string-suffix-p "/" s) 'folder 'file))
         :exclusive 'no
         :category 'file)
-  "Completion extra properties for `blue--complete-file'.")
+  "Completion extra properties for `blue-complete--file'.")
 
 
 ;;; Helpers.
 
-(blue--define-memoized blue--autocomplete (blueprint input)
+(blue--define-memoized blue-complete--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
   (let* ((default-directory (or (blue--get-build-dir) default-directory))
          (command (concat blue-binary
@@ -71,7 +71,7 @@
          (output (shell-command-to-string command)))
     (string-split output)))
 
-(defun blue--completion-table (&rest _)
+(defun blue-complete--table (&rest _)
   "Completion table function for minibuffer prompt."
   (let ((result
          (while-no-input
@@ -79,7 +79,7 @@
                                       (blue--find-blueprint)))
                        (prompt-start (minibuffer-prompt-end))
                        (input (buffer-substring prompt-start (point)))
-                       (completions (blue--autocomplete blueprint input)))
+                       (completions (blue-complete--autocomplete blueprint input)))
              completions))))
     (and (consp result) result)))
 
@@ -87,7 +87,7 @@
   "Return bounds of THING."
   (or (bounds-of-thing-at-point thing) (cons (point) (point))))
 
-(defun blue--complete-file ()
+(defun blue-complete--file ()
   "Complete file name at point."
   (pcase-let* ((prefix
                 (and
@@ -114,7 +114,7 @@
              '(:company-prefix-length t))
          ,@blue-complete--file-properties))))
 
-(defun blue--complete-directory ()
+(defun blue-complete--directory ()
   "Complete directory name at point."
   (pcase-let* ((prefix
                 (and
@@ -144,7 +144,7 @@
              '(:company-prefix-length t))
          ,@blue-complete--file-properties))))
 
-(defun blue--complete-system-name ()
+(defun blue-complete--system-name ()
   "Complete system name at point."
   (pcase-let* ((prefix
                 (and
@@ -161,7 +161,7 @@
          :company-kind (lambda (_) 'macro)
          :exclusive 'no))))
 
-(defun blue--complete-set (values)
+(defun blue-complete--set (values)
   "Complete VALUES from a set at point."
   (pcase-let* ((prefix
                 (and
@@ -177,21 +177,6 @@
          ,values
          :company-kind (lambda (_) 'event)
          :exclusive 'no))))
-
-(defun blue--get-command-completion-table (command)
-  "Generate an appropriate completion table for COMMAND."
-  (let* ((autocompletion (alist-get 'autocomplete command))
-         (values (alist-get 'values autocompletion))
-         (options (alist-get 'options command))
-         (long-labels (mapcar #'(lambda (option)
-                                  (let* ((arguments (alist-get 'arguments option))
-                                         (type (alist-get 'type arguments)))
-                                    (concat "--" (car (blue--get-option-long-labels option))
-                                            (if (string= type "required")
-                                                "="
-                                              " "))))
-                              options)))
-    (append values long-labels)))
 
 (defun blue--get-command-options-completion-table (command bounds)
   "Generate an appropriate completion table for COMMAND respecting BOUNDS."
@@ -280,20 +265,20 @@
        :exclusive no)))
 
 (defun blue-completion--complete-autocompletable (autocompletable)
-  "Helper to produce completion table for autocompletable object respecting
+  "Helper to produce completion table for AUTOCOMPLETABLE object respecting
 bounds."
   (let* ((autocomplete (alist-get 'autocomplete autocompletable))
          (type (alist-get 'type autocomplete))
-         (table (alist-get 'values autocomplete)))
+         (values (alist-get 'values autocomplete)))
     (cond
      ((string-equal type "directory")
-      (blue--complete-directory))
+      (blue-complete--directory))
      ((string-equal type "file")
-      (blue--complete-file))
+      (blue-complete--file))
      ((string-equal type "system-name")
-      (blue--complete-system-name))
+      (blue-complete--system-name))
      ((string-equal type "set")
-      (blue--complete-set table)))))
+      (blue-complete--set values)))))
 
 
 ;;; Interfaces.
@@ -357,7 +342,7 @@ bounds."
 ;;;###autoload
 (defun pcomplete/blue ()
   "Completion for `blue'."
-  (while (pcomplete-here* (blue--completion-table))))
+  (while (pcomplete-here* (blue-complete--table))))
 
 (provide 'blue-complete)
 ;;; blue-complete.el ends here.
