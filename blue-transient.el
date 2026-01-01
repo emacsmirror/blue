@@ -633,13 +633,13 @@ to be specially handled."
         (list (capitalize category-name))
         (mapcar
          (lambda (command)
-           (let* ((command-name (symbol-name (car command)))
+           (let* ((command-name (alist-get 'invoke command))
                   (command-key
                    (if (> (length category-commands) 1)
                        (concat (cadr (assoc category-name category-keys))
                                (cadr (assoc command-name category-command-keys)))
                      (cadr (assoc command-name category-command-keys))))
-                  (command-synopsis (blue--command-get-slot 'synopsis command)))
+                  (command-synopsis (alist-get 'synopsis command)))
              `(,command-key
                ,(capitalize command-name)
                (lambda () ,command-synopsis (interactive)
@@ -666,7 +666,7 @@ to be specially handled."
              (cons category
                    (seq-filter
                     (lambda (command)
-                      (string-equal (blue--command-get-slot 'category command)
+                      (string-equal (alist-get 'category command)
                                     category))
                     commands)))
            categories))
@@ -755,8 +755,8 @@ suffixes."
 (defun blue-transient--arguments-menu (command-name)
   "Build transient menu for BLUE COMMAND-NAME arguments."
   (when-let* ((commands (car blue--data))
-              (command (blue--get-command (intern command-name) commands))
-              (options (blue--command-get-slot 'options command))
+              (command (blue--get-command command-name commands))
+              (options (alist-get 'options command))
               (option-labels (seq-mapcat #'blue--get-option-long-labels options))
               (option-keys (blue-transient--assign-keys option-labels nil))
               (entries (mapcar (lambda (option)

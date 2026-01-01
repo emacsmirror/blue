@@ -408,12 +408,10 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (defun blue--get-command (command commands)
   "Retrieve COMMAND from COMMANDS."
-  (assoc command commands))
-
-(defun blue--command-get-slot (slot command)
-  "Retrieve SLOT from COMMAND."
-  (let ((fields (alist-get 'fields command)))
-    (alist-get slot fields)))
+  (seq-find (lambda (cmd)
+              (string-equal (alist-get 'invoke cmd)
+                            command))
+            commands))
 
 (defun blue--get-command-invocations (commands)
   "Retrieve command names from COMMANDS."
@@ -424,7 +422,7 @@ If RAW is non nil, the serialized string will not be evaluated."
 (defun blue--get-command-categories (commands)
   "Retrieve command categories from COMMANDS."
   (seq-uniq (mapcar (lambda (command)
-                      (blue--command-get-slot 'category command))
+                      (alist-get 'category command))
                     commands)))
 
 ;; TODO: fallback to short labels when there are no long-labels.
@@ -543,9 +541,9 @@ A comand is considered interactive if it is a member of
   (lambda (candidate transform)
     (if transform
         candidate
-      (when-let* ((invocation (intern candidate))
+      (when-let* ((invocation candidate)
                   (command (blue--get-command invocation commands)))
-        (blue--command-get-slot 'category command)))))
+        (alist-get 'category command)))))
 
 (defun blue--command-completion-properties (commands)
   "Create completion properties for COMMANDS and INVOCATIONS."
@@ -553,9 +551,9 @@ A comand is considered interactive if it is a member of
               (max-width (apply #'max (mapcar #'string-width invocations)))
               (annotation-function
                (lambda (candidate)
-                 (when-let* ((invocation (intern candidate))
+                 (when-let* ((invocation candidate)
                              (command (blue--get-command invocation commands))
-                             (synopsis (blue--command-get-slot 'synopsis command))
+                             (synopsis (alist-get 'synopsis command))
                              (padding (max (+ blue-annotation-padding
                                               (- max-width (string-width candidate)))
                                            2)))
@@ -563,9 +561,9 @@ A comand is considered interactive if it is a member of
                            (propertize synopsis 'face 'blue-documentation)))))
               (options-doc-buffer-function
                (lambda (candidate)
-                 (when-let* ((invocation (intern candidate))
+                 (when-let* ((invocation candidate)
                              (command (blue--get-command invocation commands))
-                             (help-msg (blue--command-get-slot 'help command)))
+                             (help-msg (alist-get 'help command)))
                    (with-current-buffer (get-buffer-create "*blue-capf-doc*")
                      (erase-buffer)
                      (insert help-msg)

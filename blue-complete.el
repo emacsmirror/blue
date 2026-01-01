@@ -163,9 +163,9 @@
 
 (defun blue--get-command-completion-table (command)
   "Generate an appropriate completion table for COMMAND."
-  (let* ((autocompletion (blue--command-get-slot 'autocomplete command))
+  (let* ((autocompletion (alist-get 'autocomplete command))
          (values (alist-get 'values autocompletion))
-         (options (blue--command-get-slot 'options command))
+         (options (alist-get 'options command))
          (long-labels (mapcar #'(lambda (option)
                                   (let* ((arguments (alist-get 'arguments option))
                                          (type (alist-get 'type arguments)))
@@ -205,9 +205,9 @@
            (last-cmd+args (car (last cmds+args)))
            (last-cmd (and last-cmd+args
                           (car (string-split last-cmd+args))))
-           (cmd (and last-cmd (blue--get-command (intern last-cmd) commands)))
+           (cmd (and last-cmd (blue--get-command last-cmd commands)))
            (options (if cmd
-                        (blue--command-get-slot 'options cmd)
+                        (alist-get 'options cmd)
                       ui-options))
            (affixation-function
             (lambda (candidates)
