@@ -296,7 +296,9 @@ bounds."
            (cmds+args (string-split input " -- "))
            (last-cmd+args (car (last cmds+args)))
            (last-cmd (and last-cmd+args
-                          (car (string-split last-cmd+args))))
+                          (seq-find (lambda (token) ; Remove BLUE flags.
+                                      (member token invocations))
+                                    (string-split last-cmd+args))))
            (cmd (and last-cmd (blue--get-command last-cmd commands)))
            (options (alist-get 'options cmd)))
       (cond
