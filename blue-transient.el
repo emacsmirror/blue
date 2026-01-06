@@ -952,20 +952,25 @@ keeps running in the compilation buffer."
                           transient-columns
                           [("M-p" "Previous prompt" blue-transient-previous-history)]
                           [("M-n" "Next prompt" blue-transient-next-history)]]
-                         ;; Heading.
-                         [["Options"
-                           ,@(mapcar
-                              (lambda (option)
-                                (let* ((label (car (blue--get-option-long-labels option)))
-                                       (key (cadr (assoc-string label option-keys))))
-                                  (blue-transient--argument-menu-entry "-" key option nil)))
-                              (seq-remove ; Remove build directory since it's handled specially.
-                               (lambda (option)
-                                 (let* ((label (car (blue--get-option-long-labels option))))
-                                   (string-equal label "build-directory")))
-                               options))]
-                          ["" ; Empty description for alignment.
-                           ("," "Selected command args"
+                         ["Options"
+                          :class
+                          transient-columns
+                          ,@(let* ((filtered-options
+                                    (seq-remove ; Remove build directory since it's handled specially.
+                                     (lambda (option)
+                                       (let* ((label (car (blue--get-option-long-labels option))))
+                                         (string-equal label "build-directory")))
+                                     options))
+                                   (options-menu
+                                    (mapcar
+                                     (lambda (option)
+                                       (let* ((label (car (blue--get-option-long-labels option)))
+                                              (key (cadr (assoc-string label option-keys))))
+                                         (blue-transient--argument-menu-entry "-" key option nil)))
+                                     filtered-options))
+                                   (grouped-options-menu (blue-transient--split-elements 2 options-menu)))
+                              grouped-options-menu)
+                          [("," "Selected command args"
                             blue-transient--prompt-args
                             :transient t)
                            ("!" "Free-type" blue-transient--free-type :transient t)
