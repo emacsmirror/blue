@@ -831,8 +831,9 @@ This function is meant for side effects, it is responsible of keeping
 
 (defun blue-transient--split-elements (n lst)
   "Helper to split list LST of elements in N groups."
+  ;; Round up to ensure odd length lists are computed properly.
   (let* ((columns (seq-split lst
-                             (/ (length lst) n)))
+                             (ceiling (/ (length lst) (float n)))))
          (vector-columns (mapcar (lambda (item)
                                    (apply #'vector item))
                                  columns)))
