@@ -730,25 +730,22 @@ suffixes."
                                     "="
                                   " ")))
            (autocomplete (alist-get 'autocomplete option))
+           (autocomplete-type (alist-get 'type autocomplete))
+           (choices (cond
+                     ((string-equal autocomplete-type "set")
+                      (alist-get 'values autocomplete))
+                     ((string-equal autocomplete-type "system-name")
+                      blue-complete-target-names)))
            (reader (cond
-                    ((string-equal autocomplete "directory")
+                    ((string-equal autocomplete-type "directory")
                      #'transient-read-directory)
-                    ((string-equal autocomplete "file")
-                     #'transient-read-file)
-                    ;; TODO:
-                    ;; ((and (string-equal autocomplete "set")
-                    ;;       table)
-                    ;;  `( ,(point) ,(point)
-                    ;;     ,table
-                    ;;     :exclusive 'no
-                    ;;     :company-kind (lambda (_) 'property)
-                    ;;     :company-doc-buffer ,doc-buffer-function
-                    ;;     :affixation-function ,affixation-function))
-                    )))
+                    ((string-equal autocomplete-type "file")
+                     #'transient-read-file))))
       `(,(concat "--" key)
         ,(capitalize long-label)
         ,trans-label
         :summary ,doc
+        :choices ,choices
         :reader ,reader
         :class blue-transient--command-argument))))
 
