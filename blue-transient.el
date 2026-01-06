@@ -718,17 +718,19 @@ suffixes."
 
 ;; TODO: Use the autocomplete option slot to provide the apropriate argument
 ;; interface.
-(defun blue-transient--argument-menu-entry (key option)
-  "Create a transient argument entry from BLUE option."
+(defun blue-transient--argument-menu-entry (prefix key option class)
+  "Create a transient argument entry from BLUE option.
+
+PREFIX is will be concatenated to the KEY.
+CLASS will be set for the returned transient infix."
   (when-let* ((long-label (car (blue--get-option-long-labels option))))
     (let* ((doc (alist-get 'doc option))
            (arguments (alist-get 'arguments option))
            (type (alist-get 'type arguments))
            (trans-label (concat "--"
                                 long-label
-                                (if (string= type "required")
-                                    "="
-                                  " ")))
+                                (unless (string= type "switch")
+                                  "=")))
            (autocomplete (alist-get 'autocomplete option))
            (autocomplete-type (alist-get 'type autocomplete))
            (choices (cond
@@ -741,13 +743,13 @@ suffixes."
                      #'transient-read-directory)
                     ((string-equal autocomplete-type "file")
                      #'transient-read-file))))
-      `(,(concat "--" key)
+      `(,(concat prefix key)
         ,(capitalize long-label)
         ,trans-label
         :summary ,doc
         :choices ,choices
         :reader ,reader
-        :class blue-transient--command-argument))))
+        ,@(if class `(:class ,class))))))
 
 (defun blue-transient--arguments-menu (command-name)
   "Build transient menu for BLUE COMMAND-NAME arguments."
@@ -759,7 +761,7 @@ suffixes."
               (entries (mapcar (lambda (option)
                                  (when-let* ((label (car (blue--get-option-long-labels option)))
                                              (key (cadr (assoc-string label option-keys))))
-                                   (blue-transient--argument-menu-entry key option)))
+                                   (blue-transient--argument-menu-entry "--" key option 'blue-transient--command-argument)))
                                options)))
     entries))
 
@@ -896,6 +898,9 @@ keeps running in the compilation buffer."
       (blue--cache-add build-dir))
     ;; Rebuild menu.
     (let* ((commands (car blue--data))
+           (options (caddr blue--data))
+           (option-labels (seq-mapcat #'blue--get-option-long-labels options))
+           (option-keys (blue-transient--assign-keys option-labels nil))
            ;; Update `build-dirs' since cache could have been updated in the
            ;; previous lines.
            (build-dirs (blue--cache-get-build-dirs blue--blueprint))
@@ -948,45 +953,16 @@ keeps running in the compilation buffer."
                           [("M-n" "Next prompt" blue-transient-next-history)]]
                          ;; Heading.
                          [["Options"
-                           ("-a" "Always build" "--always-build")
-                           (5 "-c" "Color" "--color="
-                              :choices ("auto" "always" "never"))
-                           (5 "-C" "Compiled load path" "--compiled-load-path="
-                              :prompt "Compiled load path: "
-                              :reader transient-read-existing-directory)
-                           (5 "-F" "File" "--file="
-                              :prompt "Blueprint file: "
-                              :reader transient-read-existing-file)
-                           ("-f" "Fresh store" "--fresh-store")
-                           ("-j" "Jobs"
-                            "--jobs="
-                            ;; NOTE: here we could use
-                            ;; `transient-read-number-N+' but I prefer the
-                            ;; prompt to have a default value when hitting
-                            ;; 'RET', instead of an initial value which you have
-                            ;; to erase.
-                            :reader (lambda (&rest _)
-                                      (let* ((cpus (num-processors))
-                                             (input (read-number "Max parallel jobs: "
-                                                                 (num-processors))))
-                                        (if (not (zerop input))
-                                            (number-to-string input)
-                                          (message "Zero is not a valid value.")
-                                          nil))))
-                           (5 "-L" "Load path" "--load-path="
-                              :prompt "Load path: "
-                              :reader transient-read-existing-directory)
-                           ("-l" "Log level" "--log-level="
-                            :choices ("error" "warn" "info" "debug" "trace"))
-                           ("-p" "Profile" "--profile="
-                            :choices ("gc" "stat" "trace"))
-                           (5 "-s" "Source directory" "--source-directory="
-                              :prompt "Source directory: "
-                              :reader transient-read-existing-directory)
-                           (5 "-S" "Store directory" "--store-directory="
-                              :prompt "Store directory: "
-                              :reader transient-read-existing-directory)
-                           ("-t" "Trace" "--trace")]
+                           ,@(mapcar
+                              (lambda (option)
+                                (let* ((label (car (blue--get-option-long-labels option)))
+                                       (key (cadr (assoc-string label option-keys))))
+                                  (blue-transient--argument-menu-entry "-" key option nil)))
+                              (seq-remove ; Remove build directory since it's handled specially.
+                               (lambda (option)
+                                 (let* ((label (car (blue--get-option-long-labels option))))
+                                   (string-equal label "build-directory")))
+                               options))]
                           ["" ; Empty description for alignment.
                            ("," "Selected command args"
                             blue-transient--prompt-args
