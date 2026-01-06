@@ -827,19 +827,22 @@ This function is meant for side effects, it is responsible of keeping
           (append blue-transient--command-chain
                   (list (list input))))))
 
+(defun blue-transient--split-elements (n lst)
+  "Helper to split list LST of elements in N groups."
+  (let* ((columns (seq-split lst
+                             (/ (length lst) n)))
+         (vector-columns (mapcar (lambda (item)
+                                   (apply #'vector item))
+                                 columns)))
+    vector-columns))
+
 (defun blue-transient--selected-command-suffix-arguments (_)
   "Helper function to group last command arguments in transient suffixes."
   (if-let* ((selected-command (car (blue-transient--selected-command)))
             (suffixes (blue-transient--arguments-menu selected-command))
-            (columns (seq-split suffixes
-                                (/ (length suffixes) 2)))
             ;; Make each menu entry a vector. Each vector will be a column.
-            (vector-columns (mapcar (lambda (item)
-                                      (apply #'vector item))
-                                    columns)))
-      (transient-parse-suffixes
-       'transient--prefix
-       vector-columns)
+            (columns (blue-transient--split-elements 2 suffixes)))
+      (transient-parse-suffixes 'transient--prefix columns)
     (transient-parse-suffixes
      'transient--prefix
      '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
