@@ -484,11 +484,9 @@ SELECTED controls the face properties to apply."
 
 Takes assoc list returned by `blue-transient--build-menu'."
   (let* ((categories (mapcar #'car items))
-         (longest-category (apply #'max
-                                  (mapcar #'length categories)))
+         (longest-category (seq-max (mapcar #'length categories)))
          (command-invokes (mapcar #'cadr (seq-mapcat #'cdr items)))
-         (longest-invoke (apply #'max
-                                (mapcar #'length command-invokes)))
+         (longest-invoke (seq-max (mapcar #'length command-invokes)))
          (max-width (max longest-category longest-invoke))
          (max-columns (max (/ (frame-width) max-width)
                            1))) ; At least 1 column.
@@ -530,11 +528,9 @@ The function ensures that the assigned key is not already present in KEY-MAP."
 
 GROUP-P is passed to `blue-transient-keychar-function' in case it needs
 to be specially handled."
-  (let* ((key-map (make-hash-table :test 'equal))
-         (sorted-words (seq-sort
-                        'string< words))
-         (max-len (seq-max (seq-map (lambda (w) (length w))
-                                    sorted-words)))
+  (let* ((key-map (make-hash-table :test #'equal))
+         (sorted-words (seq-sort #'string< words))
+         (max-len (seq-max (seq-map #'length sorted-words)))
          word-keys)
     (while (< (length word-keys)
               (length words))
