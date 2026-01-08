@@ -621,6 +621,27 @@ to be specially handled."
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   "Valid transient key assignments.")
 
+(defun remove-prefix (prefix words)
+  "Remove PREFIX from WORDS."
+  (mapcar
+   (lambda (word)
+     (string-trim-left word prefix))
+   words))
+
+(defun simplify-prefixes (prefixes)
+  "Given a list of string PREFIXES. Reduce prefixes taken by previous prefixes.
+
+This function only looks forward, so almost certainly you want to pass
+alphabetically ordered list as argument."
+  (let ((head (car prefixes))
+        (tail (cdr prefixes)))
+    (if tail
+        (cons head (simplify-prefixes (remove-prefix head tail)))
+      prefixes)))
+
+;; TODO: use this functions to simplify assigned prefixes.
+;; (assign-prefix '("ab" "ba" "a" "abg" "gfd" "test" "testing" "terry"))
+;; => '(("a" "a") ("ab" "b") ("abg" "g") ("ba" "B") ("gfd" "G") ("terry" "t") ("test" "e") ("testing" "s"))
 (defun assign-prefix (words)
   (let* ((assignments
           (seq-reduce ; Use an accumulator to keep track of assigned prefixes.
@@ -671,24 +692,6 @@ to be specially handled."
            (append acc (list assignment)))))
      simple-assignments
      nil)))
-
-;; (assign-prefix '("abc" "ab" "a" "gfd" "test" "testing" "terry"))
-;; => '(("a" "a") ("ab" "ab") ("abc" "abc") ("gfd" "g") ("terry" "t") ("test" "te") ("testing" "tes"))
-
-;; TODO: use this functions to simplify assigned prefixes.
-
-(defun remove-prefix (prefix words)
-  (mapcar
-   (lambda (word)
-     (string-trim-left word prefix))
-   words))
-
-(defun simplify-prefixes (prefixes)
-  (let ((head (car prefixes))
-        (tail (cdr prefixes)))
-    (if tail
-        (cons head (simplify-prefixes (remove-prefix head tail)))
-      prefixes)))
 
 (defun blue-transient--group-commands (categories category-keys)
   "Group commands by CATEGORIES and assign CATEGORY-KEYS."
