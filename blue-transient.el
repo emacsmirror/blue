@@ -621,10 +621,9 @@ to be specially handled."
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   "Valid transient key assignments.")
 
-;; KLUDGE: find a way to make this assign string keys instead of characters.
 (defun assign-prefix (words)
   (let* ((assignments
-          (seq-reduce
+          (seq-reduce ; Use an accumulator to keep track of assigned prefixes.
            (lambda (acc word)
              (let* ((used (mapcar #'cadr acc))
                     (key (apply #'string
@@ -650,23 +649,28 @@ to be specially handled."
                                          (pcase-let ((`(,word ,key) assignment))
                                            `(,word ,simple-prefix)))
                                        assignments simple-prefixes)))
-    ;; Add fallback key if simplification removed assigned key.
-    (mapcar
-     (lambda (assignment)
+    ;; Add fallback key if simplification removed assigned key.  The accumulator
+    ;; is required to update the list of used keys as the fallbacks are
+    ;; assigned.
+    (seq-reduce
+     (lambda (acc assignment)
        (pcase-let ((`(,word ,key) assignment))
          (if (string-empty-p key)
-             (let* ((capital-prefix (string (capitalize (seq-first word))))
+             (let* ((used (append (mapcar #'cadr acc)
+                                  simple-prefixes))
+                    (capital-prefix (string (capitalize (seq-first word))))
                     (fallback-key
-                     (if (member capital-prefix simple-prefixes)
+                     (if (member capital-prefix used)
                          (string
                           (seq-find
                            (lambda (ch)
-                             (not (member (char-to-string ch) simple-prefixes)))
+                             (not (member (char-to-string ch) used)))
                            blue-transient--keychar-table))
                        capital-prefix)))
-               `(,word ,fallback-key))
-           assignment)))
-     simple-assignments)))
+               (append acc `((,word ,fallback-key))))
+           (append acc (list assignment)))))
+     simple-assignments
+     nil)))
 
 ;; (assign-prefix '("abc" "ab" "a" "gfd" "test" "testing" "terry"))
 ;; => '(("a" "a") ("ab" "ab") ("abc" "abc") ("gfd" "g") ("terry" "t") ("test" "te") ("testing" "tes"))
