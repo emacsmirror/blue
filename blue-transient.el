@@ -617,6 +617,10 @@ to be specially handled."
         (puthash word-key t key-map)))
     word-keys))
 
+(defconst blue-transient--keychar-table
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+  "Valid transient key assignments.")
+
 ;; KLUDGE: find a way to make this assign string keys instead of characters.
 (defun assign-prefix (words)
   (let* ((assignments (seq-reduce
@@ -645,7 +649,23 @@ to be specially handled."
                                          (pcase-let ((`(,word ,key) assignment))
                                            `(,word ,simple-prefix)))
                                        assignments simple-prefixes)))
-    simple-assignments))
+    ;; Add fallback key if simplification removed assigned key.
+    (mapcar
+     (lambda (assignment)
+       (pcase-let ((`(,word ,key) assignment))
+         (if (string-empty-p key)
+             (let* ((capital-prefix (string (capitalize (seq-first word))))
+                    (fallback-key
+                     (if (not (member capital-prefix simple-prefixes))
+                         capital-prefix
+                       (string
+                        (seq-find
+                         (lambda (ch)
+                           (not (member (char-to-string ch) simple-prefixes)))
+                         blue-transient--keychar-table)))))
+               `(,word ,fallback-key))
+           assignment)))
+     simple-assignments)))
 
 ;; (assign-prefix '("abc" "ab" "a" "gfd" "test" "testing" "terry"))
 ;; => '(("a" "a") ("ab" "ab") ("abc" "abc") ("gfd" "g") ("terry" "t") ("test" "te") ("testing" "tes"))
