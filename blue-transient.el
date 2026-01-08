@@ -619,26 +619,33 @@ to be specially handled."
 
 ;; KLUDGE: find a way to make this assign string keys instead of characters.
 (defun assign-prefix (words)
-  (seq-reduce
-   (lambda (acc word)
-     (let* ((used (mapcar #'cadr acc))
-            (key (apply #'string
-                        (seq-reduce ; Find unused prefix.
-                         (lambda (acc ch)
-                           (let* ((prev (apply #'string acc))
-                                  (prefix (concat prev (char-to-string ch))))
-                             (string-to-list
-                              (if (and (not (string-empty-p prev))
-                                       (not (member prev used)))
-                                  prev
-                                prefix))))
-                         (string-to-list word)
-                         nil))))
-       (unless key
-         (error "No unused character available in %s" word))
-       (append acc `((,word ,key)))))
-   (sort words)
-   nil))
+  (let* ((assignments (seq-reduce
+                       (lambda (acc word)
+                         (let* ((used (mapcar #'cadr acc))
+                                (key (apply #'string
+                                            (seq-reduce ; Find unused prefix.
+                                             (lambda (acc ch)
+                                               (let* ((prev (apply #'string acc))
+                                                      (prefix (concat prev (char-to-string ch))))
+                                                 (string-to-list
+                                                  (if (and (not (string-empty-p prev))
+                                                           (not (member prev used)))
+                                                      prev
+                                                    prefix))))
+                                             (string-to-list word)
+                                             nil))))
+                           (unless key
+                             (error "No unused character available in %s" word))
+                           (append acc `((,word ,key)))))
+                       (sort words)
+                       nil))
+         (prefixes (mapcar #'cadr assignments))
+         (simple-prefixes (simplify-prefixes prefixes))
+         (simple-assignments (seq-mapn (lambda (assignment simple-prefix)
+                                         (pcase-let ((`(,word ,key) assignment))
+                                           `(,word ,simple-prefix)))
+                                       assignments simple-prefixes)))
+    simple-assignments))
 
 ;; (assign-prefix '("abc" "ab" "a" "gfd" "test" "testing" "terry"))
 ;; => '(("a" "a") ("ab" "ab") ("abc" "abc") ("gfd" "g") ("terry" "t") ("test" "te") ("testing" "tes"))
@@ -652,12 +659,12 @@ to be specially handled."
    words))
 
 (defun simplify-prefixes (prefixes)
-  (let ((prefixes (sort prefixes))
-        (head (car prefixes))
+  (let ((head (car prefixes))
         (tail (cdr prefixes)))
     (if tail
         (cons head (simplify-prefixes (remove-prefix head tail)))
       prefixes)))
+
 (defun blue-transient--group-commands (categories category-keys)
   "Group commands by CATEGORIES and assign CATEGORY-KEYS."
   (mapcar
