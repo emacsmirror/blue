@@ -618,7 +618,7 @@ to be specially handled."
     word-keys))
 
 ;; KLUDGE: find a way to make this assign string keys instead of characters.
-(defun assign-pairs (words)
+(defun assign-prefix (words)
   (seq-reduce
    (lambda (acc word)
      (let* ((used (mapcar #'cadr acc))
@@ -640,6 +640,24 @@ to be specially handled."
    (sort words)
    nil))
 
+;; (assign-prefix '("abc" "ab" "a" "gfd" "test" "testing" "terry"))
+;; => '(("a" "a") ("ab" "ab") ("abc" "abc") ("gfd" "g") ("terry" "t") ("test" "te") ("testing" "tes"))
+
+;; TODO: use this functions to simplify assigned prefixes.
+
+(defun remove-prefix (prefix words)
+  (mapcar
+   (lambda (word)
+     (string-trim-left word prefix))
+   words))
+
+(defun simplify-prefixes (prefixes)
+  (let ((prefixes (sort prefixes))
+        (head (car prefixes))
+        (tail (cdr prefixes)))
+    (if tail
+        (cons head (simplify-prefixes (remove-prefix head tail)))
+      prefixes)))
 (defun blue-transient--group-commands (categories category-keys)
   "Group commands by CATEGORIES and assign CATEGORY-KEYS."
   (mapcar
