@@ -633,10 +633,10 @@ to be specially handled."
                                    (let* ((prev (apply #'string acc))
                                           (prefix (concat prev (char-to-string ch))))
                                      (string-to-list
-                                      (if (and (not (string-empty-p prev))
-                                               (not (member prev used)))
-                                          prev
-                                        prefix))))
+                                      (if (or (string-empty-p prev)
+                                              (member prev used))
+                                          prefix
+                                        prev))))
                                  (string-to-list word)
                                  nil))))
                (unless key
@@ -657,13 +657,13 @@ to be specially handled."
          (if (string-empty-p key)
              (let* ((capital-prefix (string (capitalize (seq-first word))))
                     (fallback-key
-                     (if (not (member capital-prefix simple-prefixes))
-                         capital-prefix
-                       (string
-                        (seq-find
-                         (lambda (ch)
-                           (not (member (char-to-string ch) simple-prefixes)))
-                         blue-transient--keychar-table)))))
+                     (if (member capital-prefix simple-prefixes)
+                         (string
+                          (seq-find
+                           (lambda (ch)
+                             (not (member (char-to-string ch) simple-prefixes)))
+                           blue-transient--keychar-table))
+                       capital-prefix)))
                `(,word ,fallback-key))
            assignment)))
      simple-assignments)))
