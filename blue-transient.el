@@ -628,11 +628,8 @@ to be specially handled."
      (string-trim-left word prefix))
    words))
 
-(defun blue-transient--simplify-prefixes (prefixes)
-  "Given a list of string PREFIXES. Reduce prefixes taken by previous prefixes.
-
-This function only looks forward, so almost certainly you want to pass
-alphabetically ordered list as argument."
+(defun %blue-transient--simplify-prefixes (prefixes)
+  "Helper function to create a fixed-point for prefix simplification."
   (let ((head (car prefixes))
         (tail (cdr prefixes)))
     (if tail
@@ -640,9 +637,21 @@ alphabetically ordered list as argument."
                     (blue-transient--remove-prefix head tail)))
       prefixes)))
 
+(defun blue-transient--simplify-prefixes (prefixes)
+  "Given a list of string PREFIXES. Reduce prefixes taken by previous prefixes.
+
+This function only looks forward, so almost certainly you want to pass
+an alphabetically ordered list as argument.
+
+The function searches a fixed point so it will retry until it get the
+most simplest prefix combination."
+  (let* ((simple-prefixes (%blue-transient--simplify-prefixes prefixes))
+         (fixed-point (equal prefixes simple-prefixes)))
+    (if fixed-point
+        simple-prefixes
+      (blue-transient--simplify-prefixes simple-prefixes))))
+
 ;; TODO: use this functions to simplify assigned prefixes.
-;; (blue-transient--assign-prefix '("ab" "ba" "a" "abg" "gfd" "test" "testing" "terry"))
-;; => '(("a" "a") ("ab" "b") ("abg" "g") ("ba" "B") ("gfd" "G") ("terry" "t") ("test" "e") ("testing" "s"))
 (defun blue-transient--assign-prefix (words)
   "Given a list of WORDS assign a prefix valid for a transient menu to each key.
 
