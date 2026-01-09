@@ -621,14 +621,14 @@ to be specially handled."
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   "Valid transient key assignments.")
 
-(defun remove-prefix (prefix words)
+(defun blue-transient--remove-prefix (prefix words)
   "Remove PREFIX from WORDS."
   (mapcar
    (lambda (word)
      (string-trim-left word prefix))
    words))
 
-(defun simplify-prefixes (prefixes)
+(defun blue-transient--simplify-prefixes (prefixes)
   "Given a list of string PREFIXES. Reduce prefixes taken by previous prefixes.
 
 This function only looks forward, so almost certainly you want to pass
@@ -636,13 +636,18 @@ alphabetically ordered list as argument."
   (let ((head (car prefixes))
         (tail (cdr prefixes)))
     (if tail
-        (cons head (simplify-prefixes (remove-prefix head tail)))
+        (cons head (blue-transient--simplify-prefixes
+                    (blue-transient--remove-prefix head tail)))
       prefixes)))
 
 ;; TODO: use this functions to simplify assigned prefixes.
-;; (assign-prefix '("ab" "ba" "a" "abg" "gfd" "test" "testing" "terry"))
+;; (blue-transient--assign-prefix '("ab" "ba" "a" "abg" "gfd" "test" "testing" "terry"))
 ;; => '(("a" "a") ("ab" "b") ("abg" "g") ("ba" "B") ("gfd" "G") ("terry" "t") ("test" "e") ("testing" "s"))
-(defun assign-prefix (words)
+(defun blue-transient--assign-prefix (words)
+  "Given a list of WORDS assign a prefix valid for a transient menu to each key.
+
+Ensure that no word ocuppies the same prefix and try to fallback
+otherwise."
   (let* ((assignments
           (seq-reduce ; Use an accumulator to keep track of assigned prefixes.
            (lambda (acc word)
@@ -665,9 +670,9 @@ alphabetically ordered list as argument."
            (sort words)
            nil))
          (prefixes (mapcar #'cadr assignments))
-         (simple-prefixes (simplify-prefixes prefixes))
+         (simple-prefixes (blue-transient--simplify-prefixes prefixes))
          (simple-assignments (seq-mapn (lambda (assignment simple-prefix)
-                                         (pcase-let ((`(,word ,key) assignment))
+                                         (pcase-let ((`(,word _) assignment))
                                            `(,word ,simple-prefix)))
                                        assignments simple-prefixes)))
     ;; Add fallback key if simplification removed assigned key.  The accumulator
