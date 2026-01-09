@@ -523,100 +523,6 @@ The function ensures that the assigned key is not already present in KEY-MAP."
             "_"))))
     result))
 
-(defun blue-transient--assign-keys (words group-p)
-  "Map WORDS to unique keys.
-
-GROUP-P is passed to `blue-transient-keychar-function' in case it needs
-to be specially handled."
-  (let* ((key-map (make-hash-table :test #'equal))
-         (sorted-words (seq-sort #'string< words))
-         (max-len (seq-max (seq-map #'length sorted-words)))
-         word-keys)
-    (while (< (length word-keys)
-              (length words))
-      (let (word
-            word-key)
-        (unless (and blue-transient-keychar-function
-                     (seq-find
-                      (lambda (w)
-                        (when-let* ((key (funcall blue-transient-keychar-function
-                                                  w
-                                                  words
-                                                  key-map
-                                                  group-p)))
-                          ;; Special case: custom user-provided key.
-                          (unless (characterp key)
-                            (user-error
-                             "Got non-char key %S from `blue-transient-keychar-function'"
-                             key))
-                          (when (gethash key key-map)
-                            (user-error
-                             "Got duplicate key %s from `blue-transient-keychar-function'"
-                             (string key)))
-                          (setq word w
-                                word-key key)))
-                      (seq-remove (lambda (w)
-                                    (assoc w word-keys))
-                                  sorted-words)))
-          (seq-find
-           (lambda (prefer-first)
-             (seq-find
-              (lambda (casefn)
-                ;; If prefer-first is true:
-                ;; - Find word with minimal N so that its Nth character is not
-                ;;   taken.
-                ;; Else:
-                ;; - Find word with minimal N so that its Nth character is not
-                ;;   taken AND is unique among Nth characters of all words.
-                (seq-find
-                 (lambda (index)
-                   (when (setq word
-                               (seq-find
-                                (lambda (word)
-                                  (and (not (assoc word word-keys))
-                                       (> (length word) index)
-                                       (blue-transient--keychar-p (elt word index))
-                                       (not (gethash
-                                             (funcall casefn (elt word index)) key-map))
-                                       (or prefer-first
-                                           (not (seq-find
-                                                 (lambda (other-word)
-                                                   (and
-                                                    (not (string= other-word word))
-                                                    (> (length other-word) index)
-                                                    (eq (funcall casefn (elt other-word index))
-                                                        (funcall casefn (elt word index)))))
-                                                 sorted-words)))))
-                                sorted-words))
-                     (setq word-key (funcall casefn (elt word index)))))
-                 (number-sequence 0 max-len)))
-              ;; Repeat above search a few times: first try characters as-is,
-              ;; then try their upper-case and down-case variants.
-              (if blue-transient-keychar-unfold
-                  (list 'identity 'upcase 'downcase)
-                (list 'identity))))
-           ;; If group-p is set, do above search once with prefer-first set to
-           ;; t.  Otherwise, first try it with prefer-first set to nil, then
-           ;; with t.  When prefer-first is nil, less matches are possible, but
-           ;; we have a nice effect when keychars are placed in the same column
-           ;; or close, so we try to maximize this effect.
-           (if group-p
-               '(t)
-             '(nil t))))
-        ;; Can't choose key char from word's letters, fallback to random key.
-        ;; Randomness is based on word hash, so that we return same key
-        ;; for same word, when possible.
-        (unless word
-          (setq word (seq-find (lambda (w)
-                                 (not (assoc w word-keys)))
-                               sorted-words)
-                word-key (blue-transient--random-key word key-map)))
-        (push (list word
-                    (string word-key))
-              word-keys)
-        (puthash word-key t key-map)))
-    word-keys))
-
 (defconst blue-transient--keychar-table
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   "Valid transient key assignments.")
@@ -628,37 +534,36 @@ to be specially handled."
      (string-trim-left word prefix))
    words))
 
-(defun %blue-transient--simplify-prefixes (prefixes)
-  "Helper function to create a fixed-point for prefix simplification."
-  (let ((head (car prefixes))
-        (tail (cdr prefixes)))
+(defun %blue-transient--simplify-keys (keys)
+  "Helper function to create a fixed-point for key simplification."
+  (let ((head (car keys))
+        (tail (cdr keys)))
     (if tail
-        (cons head (blue-transient--simplify-prefixes
+        (cons head (blue-transient--simplify-keys
                     (blue-transient--remove-prefix head tail)))
-      prefixes)))
+      keys)))
 
-(defun blue-transient--simplify-prefixes (prefixes)
-  "Given a list of string PREFIXES. Reduce prefixes taken by previous prefixes.
+(defun blue-transient--simplify-keys (keys)
+  "Given a list of KEYS, trim prefixes used by previous keys.
 
-This function only looks forward, so almost certainly you want to pass
-an alphabetically ordered list as argument.
+This function only looks forward, so almost certainly you want to pass an
+alphabetically ordered list as argument.
 
-The function searches a fixed point so it will retry until it get the
-most simplest prefix combination."
-  (let* ((simple-prefixes (%blue-transient--simplify-prefixes prefixes))
-         (fixed-point (equal prefixes simple-prefixes)))
+The function searches a fixed point, which means that it will retry until it
+gets the simplest key combination."
+  (let* ((simple-keys (%blue-transient--simplify-keys keys))
+         (fixed-point (equal keys simple-keys)))
     (if fixed-point
-        simple-prefixes
-      (blue-transient--simplify-prefixes simple-prefixes))))
+        simple-keys
+      (blue-transient--simplify-keys simple-keys))))
 
-;; TODO: use this functions to simplify assigned prefixes.
-(defun blue-transient--assign-prefix (words)
-  "Given a list of WORDS assign a prefix valid for a transient menu to each key.
+(defun blue-transient--assign-keys (words)
+  "Assign a valid key combination for a transient menu to each word in WORDS.
 
-Ensure that no word ocuppies the same prefix and try to fallback
+Ensure that no word ocuppies the same key combination, try to fallback
 otherwise."
   (let* ((assignments
-          (seq-reduce ; Use an accumulator to keep track of assigned prefixes.
+          (seq-reduce ; Use an accumulator to keep track of assigned keys.
            (lambda (acc word)
              (let* ((used (mapcar #'cadr acc))
                     (key (apply #'string
@@ -678,12 +583,12 @@ otherwise."
                (append acc `((,word ,key)))))
            (sort words)
            nil))
-         (prefixes (mapcar #'cadr assignments))
-         (simple-prefixes (blue-transient--simplify-prefixes prefixes))
+         (keys (mapcar #'cadr assignments))
+         (simple-keys (blue-transient--simplify-keys keys))
          (simple-assignments (seq-mapn (lambda (assignment simple-prefix)
                                          (pcase-let ((`(,word _) assignment))
                                            `(,word ,simple-prefix)))
-                                       assignments simple-prefixes)))
+                                       assignments simple-keys)))
     ;; Add fallback key if simplification removed assigned key.  The accumulator
     ;; is required to update the list of used keys as the fallbacks are
     ;; assigned.
@@ -692,7 +597,7 @@ otherwise."
        (pcase-let ((`(,word ,key) assignment))
          (if (string-empty-p key)
              (let* ((used (append (mapcar #'cadr acc)
-                                  simple-prefixes))
+                                  simple-keys))
                     (capital-prefix (string (capitalize (seq-first word))))
                     (fallback-key
                      (if (member capital-prefix used)
@@ -714,7 +619,7 @@ otherwise."
      (let* ((category-name (car category))
             (category-commands (cdr category))
             (category-command-invocations (blue--get-command-invocations category-commands))
-            (category-command-keys (blue-transient--assign-keys category-command-invocations nil)))
+            (category-command-keys (blue-transient--assign-keys category-command-invocations)))
        (append
         (list (capitalize category-name))
         (mapcar
@@ -745,7 +650,7 @@ otherwise."
 (defun blue-transient--build-menu (commands)
   "Build transient menu for BLUE COMMANDS."
   (let* ((categories (blue--get-command-categories commands))
-         (category-keys (blue-transient--assign-keys categories t))
+         (category-keys (blue-transient--assign-keys categories))
          (commands-by-category
           (mapcar
            (lambda (category)
@@ -843,7 +748,7 @@ CLASS will be set for the returned transient infix."
               (command (blue--get-command command-name commands))
               (options (alist-get 'options command))
               (option-labels (seq-mapcat #'blue--get-option-long-labels options))
-              (option-keys (blue-transient--assign-keys option-labels nil))
+              (option-keys (blue-transient--assign-keys option-labels))
               (entries (mapcar (lambda (option)
                                  (when-let* ((label (car (blue--get-option-long-labels option)))
                                              (key (cadr (assoc-string label option-keys))))
@@ -987,7 +892,7 @@ keeps running in the compilation buffer."
     (let* ((commands (car blue--data))
            (options (caddr blue--data))
            (option-labels (seq-mapcat #'blue--get-option-long-labels options))
-           (option-keys (blue-transient--assign-keys option-labels nil))
+           (option-keys (blue-transient--assign-keys option-labels))
            ;; Update `build-dirs' since cache could have been updated in the
            ;; previous lines.
            (build-dirs (blue--cache-get-build-dirs blue--blueprint))
