@@ -46,42 +46,6 @@ Used by `blue-transient--menu-columns'."
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
 
-(defcustom blue-transient-keychar-function nil
-  "Custom function that chooses unique key character for a word.
-
-The function should take 3 arguments:
-  - name - group or target name for which we choose a key
-  - all-names - list of all names, among which the key must be unique
-  - key-map - hashtable of taken keys
-  - group-p - whether it's group or target
-
-The function should return character to be used as a key.
-Character must not be taken by other words (other groups
-or other targets in group), i.e. it must not be present
-in the key-map.
-
-The function can return nil if it doesn't have a good key.
-In this case default algorithm is used for this word."
-  :group 'blue-transient
-  :type '(choice (const :tag "Default" nil)
-                 function))
-
-(defcustom blue-transient-keychar-unfold t
-  "Whether to use upcase/downcase key characters.
-
-If non-nil, allow using upcase and downcase variants of the original
-character as the key character."
-  :group 'blue-transient
-  :type 'boolean)
-
-(defcustom blue-transient-keychar-regexp "[[:alnum:]]"
-  "Regexp for allowed key characters.
-
-Only those characters in group and target names, which match this regex,
-can become key characters."
-  :group 'blue-transient
-  :type 'regexp)
-
 (defface blue-transient-selection
   '((t :inherit blue-hint-highlight))
   "Face used to highlight selections."
@@ -99,6 +63,7 @@ can become key characters."
 
 
 ;;; Internal variables.
+
 (defvar blue-transient-group-fallback 'unknown
   "The name of the fallback group for targets without group.")
 
@@ -201,7 +166,7 @@ This save the current transient state for future invocations
     (blue-transient--set-and-setup)))
 
 
-;;; Utilities.
+;;; Command selection.
 
 (defun blue-transient--command-index-1 (&optional skip-arguments)
   "Utility to remove 1 from  `blue-transient--selected-index' respecting bounds.
@@ -271,6 +236,9 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
       (setq blue-transient--selected-argument-index (1- argument-lenght)))
     (blue-transient--set-and-setup)))
 
+
+;;; State getters.
+
 (defun blue-transient--selected-command ()
   "Get the selected command from the `blue-transient' menu prompt."
   (unless (< blue-transient--selected-index 0)
@@ -282,7 +250,7 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
     (nth (1- blue-transient--selected-index) blue-transient--command-chain)))
 
 (defun blue-transient--selected-command-suffixes ()
-  "Get the selected command arguments suffixes values from the menu prompt."
+  "Get the selected command arguments suffixes from the menu prompt."
   (when-let* ((selected-command (blue-transient--selected-command)))
     (mapcar #'caddr
             (blue-transient--arguments-menu (car selected-command)))))
@@ -295,6 +263,34 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
                   (let ((arg-prefix (concat (string-trim-right arg "=.*") "=")))
                     (member arg-prefix selected-command-suffixes)))
                 args)))
+
+(defun blue-transient--selected-command-suffix-arguments (_)
+  "Helper function to group last command arguments in transient suffixes."
+  (if-let* ((selected-command (car (blue-transient--selected-command)))
+            (suffixes (blue-transient--arguments-menu selected-command))
+            ;; Make each menu entry a vector. Each vector will be a column.
+            (columns (blue-transient--split-elements 2 suffixes)))
+      (transient-parse-suffixes 'transient--prefix columns)
+    (transient-parse-suffixes
+     'transient--prefix
+     '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
+
+(defun blue-transient--get-option-arguments ()
+  "Retrieve values of options for the current transient prefix."
+  (let ((prefix (oref transient-current-prefix command))
+        (i 0)
+        results)
+    (condition-case nil
+        (while t
+          (let* ((suffix (transient-get-suffix prefix `(1 0 ,i)))
+                 (argument (plist-get (cdr suffix) :argument)))
+            (push argument results))
+          (setq i (1+ i)))
+      (error)) ; Do nothing, just break the loop if there are no more keys.
+    results))
+
+
+;;; Command chain manipulation.
 
 (defun blue-transient--insert-nth (n elem lst)
   "Return a new LST with ELEM inserted at position N (0-based).
@@ -368,20 +364,6 @@ the end."
           blue-transient--selected-index -1)
     (blue-transient--set-and-setup)))
 
-(defun blue-transient--get-option-arguments ()
-  "Retrieve values of options for the current transient prefix."
-  (let ((prefix (oref transient-current-prefix command))
-        (i 0)
-        results)
-    (condition-case nil
-        (while t
-          (let* ((suffix (transient-get-suffix prefix `(1 0 ,i)))
-                 (argument (plist-get (cdr suffix) :argument)))
-            (push argument results))
-          (setq i (1+ i)))
-      (error)) ; Do nothing, just break the loop if there are no more keys.
-    results))
-
 (defun blue-transient--run ()
   "Run BLUE commands."
   (interactive)
@@ -424,108 +406,44 @@ the end."
       (blue--cache-add blue--build-dir))
     (blue--compile full-input comint)))
 
-(defun blue-transient--propertize-value-arg (arg selected)
-  "Helper to propertize a transient ARG of the form `arg=val'.
+(defun blue-transient--prompt-args ()
+  "Helper for prompting BLUE command arguments."
+  (interactive)
+  (if (< blue-transient--selected-index 0)
+      (message (propertize "No command selected"
+                           'face 'minibuffer-prompt))
+    (let* ((selected-command (blue-transient--selected-command))
+           (head (seq-take blue-transient--command-chain blue-transient--selected-index))
+           (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
+           (selected-command-string (string-join selected-command " "))
+           (selected-command-prompt (concat selected-command-string " "))
+           (initial-contents (when selected-command-string
+                               (propertize selected-command-prompt
+                                           'face 'shadow
+                                           'read-only t
+                                           'rear-nonsticky t)))
+           ;; HACK: `blue-transient--setup-minibuffer' fills the completion table
+           ;; from user input, this is why here we use `initial-contents'
+           (input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                    (read-from-minibuffer "args=" initial-contents nil nil nil)))
+           (args (string-trim-left input selected-command-prompt))
+           (selected-command* (append selected-command (list args))))
+      (blue-transient--save-state)
+      (setq blue-transient--command-chain
+            (append head (list selected-command*) tail)))))
 
-SELECTED controls the face properties to apply."
-  (let* ((split (string-split arg "="))
-         (arg (concat (car split) "="))
-         (val (string-join (cdr split)
-                           "="))
-         (properties (if selected
-                         '(:underline t)
-                       '(:weight regular))))
-    (concat (propertize arg 'face `(:inherit blue-transient-selection-suffix ,@properties))
-            (propertize val 'face `(:inherit blue-transient-selection-suffix-value ,@properties)))))
+(defun blue-transient--free-type ()
+  "Helper for prompting for input to add to BLUE commands."
+  (interactive)
+  (let* ((input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
+                  (read-from-minibuffer "Input: " nil nil nil nil))))
+    (blue-transient--save-state)
+    (setq blue-transient--command-chain
+          (append blue-transient--command-chain
+                  (list (list input))))))
 
-(defun blue-transient--menu-heading ()
-  "Dynamic header for BLUE transient."
-  (let* ((selected-command (blue-transient--selected-command))
-         (selected-command-suffixes (blue-transient--selected-command-suffixes-values))
-         (head (seq-take blue-transient--command-chain blue-transient--selected-index))
-         (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
-         (propertized-head (mapcar (lambda (tokens)
-                                     (propertize (string-join tokens " ")
-                                                 'face 'widget-field))
-                                   head))
-         (propertized-selection
-          (when selected-command
-            (string-join
-             (seq-map-indexed
-              (lambda (token i)
-                (if (= i blue-transient--selected-argument-index)
-                    (if (member token selected-command-suffixes)
-                        (blue-transient--propertize-value-arg token t)
-                      (propertize token 'face '(:inherit blue-transient-selection :underline t)))
-                  (if (member token selected-command-suffixes)
-                      (blue-transient--propertize-value-arg token nil)
-                    (propertize token 'face '(:inherit blue-transient-selection :weight regular)))))
-              selected-command)
-             (propertize " " 'face 'widget-field))))
-         (propertized-tail (mapcar (lambda (tokens)
-                                     (propertize (string-join tokens " ")
-                                                 'face 'widget-field))
-                                   tail))
-         (commands (seq-remove #'null
-                               (append propertized-head
-                                       (list propertized-selection)
-                                       propertized-tail)))
-         (input (string-join commands (propertize " -- " 'face 'widget-field)))
-         (header (propertize "Commands:" 'face 'bold))
-         (header* (if propertized-selection
-                      (concat header "  ")
-                    (concat header " "
-                            (propertize ">" 'face 'blue-transient-selection)))))
-    (concat header* input
-            (propertize "\n" 'face '(:inherit widget-field :extend t)))))
-
-(defun blue-transient--menu-columns (items)
-  "Return bounded menu column count from ITEMS.
-
-Takes assoc list returned by `blue-transient--build-menu'."
-  (let* ((categories (mapcar #'car items))
-         (longest-category (seq-max (mapcar #'length categories)))
-         (command-invokes (mapcar #'cadr (seq-mapcat #'cdr items)))
-         (longest-invoke (seq-max (mapcar #'length command-invokes)))
-         (max-width (max longest-category longest-invoke))
-         (max-columns (max (/ (frame-width) max-width)
-                           1))) ; At least 1 column.
-    (if (and blue-transient-menu-columns-limit
-             (> blue-transient-menu-columns-limit 0))
-        (min blue-transient-menu-columns-limit
-             max-columns)
-      max-columns)))
-
-(defun blue-transient--keychar-p (char)
-  "Check if CHAR can be used as a key."
-  (string-match-p
-   blue-transient-keychar-regexp (string char)))
-
-(defun blue-transient--random-key (word key-map)
-  "Generate random key for WORD, trying to return same results for same words.
-
-The function ensures that the assigned key is not already present in KEY-MAP."
-  (let ((counter 0)
-        result)
-    (while (not result)
-      (cl-incf counter)
-      (let* ((hash (abs (sxhash word)))
-             (index (mod hash (length blue-transient--keychar-table)))
-             (char (elt blue-transient--keychar-table index)))
-        (if (and (blue-transient--keychar-p char)
-                 (not (gethash char key-map)))
-            ;; Hit!
-            (setq result char)
-          (if (< counter (length blue-transient--keychar-table))
-              ;; Repeat with hash of hash, and so on.
-              (setq word (number-to-string hash))
-            ;; Give up.
-            "_"))))
-    result))
-
-(defconst blue-transient--keychar-table
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-  "Valid transient key assignments.")
+
+;;; Key assignment utilities.
 
 (defun blue-transient--remove-prefix (prefix words)
   "Remove PREFIX from WORDS."
@@ -612,6 +530,80 @@ otherwise."
      simple-assignments
      nil)))
 
+
+;;; Transient classes.
+
+(defclass blue-transient--command-argument (transient-option) ()
+  "Class used for BLUE command arguments that can take a value.")
+
+(defclass blue-transient--build-directory (transient-switch) ()
+  "Class used for selected BLUE build directories.")
+
+;; Command argument handling.
+
+(cl-defmethod transient-infix-set :after ((obj blue-transient--command-argument) value)
+  "Setter for the class symbol `blue-transient--command-argument'.
+
+This function is meant for side effects, it is responsible of keeping
+`blue-transient--command-chain' sync with the selected command argument
+suffixes."
+  (blue-transient--save-state)
+  (let* ((argument-prefix (oref obj argument))
+         (selected-command (blue-transient--selected-command))
+         (selected-command-args (cdr selected-command))
+         ;; Remove the ones controled value.
+         (selected-command-args* (seq-remove
+                                  (lambda (arg)
+                                    (string-prefix-p argument-prefix arg))
+                                  selected-command-args))
+         (arg-val (if value
+                      (list (concat argument-prefix value))
+                    '()))
+         (merged-args (seq-uniq (append selected-command-args*
+                                        arg-val)))
+         (selected-command* (cons (car selected-command) merged-args))
+         (cleaned-chain (seq-remove-at-position blue-transient--command-chain
+                                                blue-transient--selected-index)))
+    (setq blue-transient--command-chain
+          (blue-transient--insert-nth blue-transient--selected-index
+                                      selected-command*
+                                      cleaned-chain))
+    (unless value
+      (setq blue-transient--selected-argument-index
+            (min blue-transient--selected-argument-index
+                 (1- (length selected-command-args)))))))
+
+;; Build directory handling.
+
+(cl-defmethod transient-infix-set :after ((_ blue-transient--build-directory) value)
+  "Setter for the class symbol `blue-transient--build-directory'.
+
+This function is meant for side effects, it is responsible of keeping
+`blue--build-dir' sync with the selected build directory."
+  (setq blue--build-dir value)
+  ;; Make completion work from selected build dir.
+  (blue--set-default-directory blue--build-dir))
+
+
+;;; Menu building.
+
+(defun blue-transient--menu-columns (items)
+  "Return bounded menu column count from ITEMS.
+
+Takes assoc list returned by `blue-transient--build-menu'."
+  (let* ((categories (mapcar #'car items))
+         (longest-category (seq-max (mapcar #'length categories)))
+         (command-invokes (mapcar #'cadr (seq-mapcat #'cdr items)))
+         (longest-invoke (seq-max (mapcar #'length command-invokes)))
+         (max-width (max longest-category longest-invoke))
+         (max-columns (max (/ (frame-width) max-width)
+                           1))) ; At least 1 column.
+    (if (and blue-transient-menu-columns-limit
+             (> blue-transient-menu-columns-limit 0))
+        (min blue-transient-menu-columns-limit
+             max-columns)
+      max-columns)))
+
 (defun blue-transient--group-commands (categories category-keys)
   "Group commands by CATEGORIES and assign CATEGORY-KEYS."
   (mapcar
@@ -669,46 +661,71 @@ otherwise."
               (apply #'vector item))
             grouped-commands)))
 
-
-;;; Selected command arguments.
+(defun blue-transient--split-elements (n lst)
+  "Helper to split list LST of elements in N groups."
+  ;; Round up to ensure odd length lists are computed properly.
+  (let* ((columns (seq-split lst
+                             (ceiling (/ (length lst) (float n)))))
+         (vector-columns (mapcar (lambda (item)
+                                   (apply #'vector item))
+                                 columns)))
+    vector-columns))
 
-(defclass blue-transient--command-argument (transient-option) ()
-  "Class used for BLUE command arguments that can take a value.")
+(defun blue-transient--propertize-value-arg (arg selected)
+  "Helper to propertize a transient ARG of the form `arg=val'.
 
-(cl-defmethod transient-infix-set :after ((obj blue-transient--command-argument) value)
-  "Setter for the class symbol `blue-transient--command-argument'.
+SELECTED controls the face properties to apply."
+  (let* ((split (string-split arg "="))
+         (arg (concat (car split) "="))
+         (val (string-join (cdr split)
+                           "="))
+         (properties (if selected
+                         '(:underline t)
+                       '(:weight regular))))
+    (concat (propertize arg 'face `(:inherit blue-transient-selection-suffix ,@properties))
+            (propertize val 'face `(:inherit blue-transient-selection-suffix-value ,@properties)))))
 
-This function is meant for side effects, it is responsible of keeping
-`blue-transient--command-chain' sync with the selected command argument
-suffixes."
-  (blue-transient--save-state)
-  (let* ((argument-prefix (oref obj argument))
-         (selected-command (blue-transient--selected-command))
-         (selected-command-args (cdr selected-command))
-         ;; Remove the ones controled value.
-         (selected-command-args* (seq-remove
-                                  (lambda (arg)
-                                    (string-prefix-p argument-prefix arg))
-                                  selected-command-args))
-         (arg-val (if value
-                      (list (concat argument-prefix value))
-                    '()))
-         (merged-args (seq-uniq (append selected-command-args*
-                                        arg-val)))
-         (selected-command* (cons (car selected-command) merged-args))
-         (cleaned-chain (seq-remove-at-position blue-transient--command-chain
-                                                blue-transient--selected-index)))
-    (setq blue-transient--command-chain
-          (blue-transient--insert-nth blue-transient--selected-index
-                                      selected-command*
-                                      cleaned-chain))
-    (unless value
-      (setq blue-transient--selected-argument-index
-            (min blue-transient--selected-argument-index
-                 (1- (length selected-command-args)))))))
+(defun blue-transient--menu-heading ()
+  "Dynamic header for BLUE transient."
+  (let* ((selected-command (blue-transient--selected-command))
+         (selected-command-suffixes (blue-transient--selected-command-suffixes-values))
+         (head (seq-take blue-transient--command-chain blue-transient--selected-index))
+         (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
+         (propertized-head (mapcar (lambda (tokens)
+                                     (propertize (string-join tokens " ")
+                                                 'face 'widget-field))
+                                   head))
+         (propertized-selection
+          (when selected-command
+            (string-join
+             (seq-map-indexed
+              (lambda (token i)
+                (if (= i blue-transient--selected-argument-index)
+                    (if (member token selected-command-suffixes)
+                        (blue-transient--propertize-value-arg token t)
+                      (propertize token 'face '(:inherit blue-transient-selection :underline t)))
+                  (if (member token selected-command-suffixes)
+                      (blue-transient--propertize-value-arg token nil)
+                    (propertize token 'face '(:inherit blue-transient-selection :weight regular)))))
+              selected-command)
+             (propertize " " 'face 'widget-field))))
+         (propertized-tail (mapcar (lambda (tokens)
+                                     (propertize (string-join tokens " ")
+                                                 'face 'widget-field))
+                                   tail))
+         (commands (seq-remove #'null
+                               (append propertized-head
+                                       (list propertized-selection)
+                                       propertized-tail)))
+         (input (string-join commands (propertize " -- " 'face 'widget-field)))
+         (header (propertize "Commands:" 'face 'bold))
+         (header* (if propertized-selection
+                      (concat header "  ")
+                    (concat header " "
+                            (propertize ">" 'face 'blue-transient-selection)))))
+    (concat header* input
+            (propertize "\n" 'face '(:inherit widget-field :extend t)))))
 
-;; TODO: Use the autocomplete option slot to provide the apropriate argument
-;; interface.
 (defun blue-transient--argument-menu-entry (prefix key option class)
   "Create a transient argument entry from BLUE option.
 
@@ -757,21 +774,6 @@ CLASS will be set for the returned transient infix."
     entries))
 
 
-;;; Selected build directory.
-
-(defclass blue-transient--build-directory (transient-switch) ()
-  "Class used for selected BLUE build directories.")
-
-(cl-defmethod transient-infix-set :after ((_ blue-transient--build-directory) value)
-  "Setter for the class symbol `blue-transient--build-directory'.
-
-This function is meant for side effects, it is responsible of keeping
-`blue--build-dir' sync with the selected build directory."
-  (setq blue--build-dir value)
-  ;; Make completion work from selected build dir.
-  (blue--set-default-directory blue--build-dir))
-
-
 ;;; UI.
 
 (defun blue-transient--setup-minibuffer ()
@@ -783,63 +785,6 @@ This function is meant for side effects, it is responsible of keeping
   ;; if `completion-at-point-functions` isn't local.
   (add-hook 'completion-at-point-functions
             #'blue-completion-at-point nil t))
-
-(defun blue-transient--prompt-args ()
-  "Helper for prompting BLUE command arguments."
-  (interactive)
-  (if (< blue-transient--selected-index 0)
-      (message (propertize "No command selected"
-                           'face 'minibuffer-prompt))
-    (let* ((selected-command (blue-transient--selected-command))
-           (head (seq-take blue-transient--command-chain blue-transient--selected-index))
-           (tail (seq-drop blue-transient--command-chain (1+ blue-transient--selected-index)))
-           (selected-command-string (string-join selected-command " "))
-           (selected-command-prompt (concat selected-command-string " "))
-           (initial-contents (when selected-command-string
-                               (propertize selected-command-prompt
-                                           'face 'shadow
-                                           'read-only t
-                                           'rear-nonsticky t)))
-           ;; HACK: `blue-transient--setup-minibuffer' fills the completion table
-           ;; from user input, this is why here we use `initial-contents'
-           (input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
-                    (read-from-minibuffer "args=" initial-contents nil nil nil)))
-           (args (string-trim-left input selected-command-prompt))
-           (selected-command* (append selected-command (list args))))
-      (blue-transient--save-state)
-      (setq blue-transient--command-chain
-            (append head (list selected-command*) tail)))))
-
-(defun blue-transient--free-type ()
-  "Helper for prompting for input to add to BLUE commands."
-  (interactive)
-  (let* ((input (minibuffer-with-setup-hook #'blue-transient--setup-minibuffer
-                  (read-from-minibuffer "Input: " nil nil nil nil))))
-    (blue-transient--save-state)
-    (setq blue-transient--command-chain
-          (append blue-transient--command-chain
-                  (list (list input))))))
-
-(defun blue-transient--split-elements (n lst)
-  "Helper to split list LST of elements in N groups."
-  ;; Round up to ensure odd length lists are computed properly.
-  (let* ((columns (seq-split lst
-                             (ceiling (/ (length lst) (float n)))))
-         (vector-columns (mapcar (lambda (item)
-                                   (apply #'vector item))
-                                 columns)))
-    vector-columns))
-
-(defun blue-transient--selected-command-suffix-arguments (_)
-  "Helper function to group last command arguments in transient suffixes."
-  (if-let* ((selected-command (car (blue-transient--selected-command)))
-            (suffixes (blue-transient--arguments-menu selected-command))
-            ;; Make each menu entry a vector. Each vector will be a column.
-            (columns (blue-transient--split-elements 2 suffixes)))
-      (transient-parse-suffixes 'transient--prefix columns)
-    (transient-parse-suffixes
-     'transient--prefix
-     '([(:info (propertize "No arguments" 'face 'shadow) :format "%d")]))))
 
 ;; This function is defined at run-time during the evaluation of
 ;; `blue-transient'. Let's declare it here to silence the byte-compilation
@@ -855,8 +800,7 @@ for a directory to use when running `blue'.
 
 The following steps are performed:
 
- - For each command, a unique key sequence is assigned.  See
-   `blue-transient-keychar-function' and other related options.
+ - For each command, a unique key sequence is assigned.
 
  - Transient menu is built.  See `blue-transient--menu-heading' and
    `blue-transient--menu-columns' for altering its appearance.
