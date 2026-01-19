@@ -23,6 +23,8 @@
 
 ;;; Code:
 
+;; TODO: refactor duplicated code.
+
 (require 'blue)
 
 (defcustom blue-complete-target-names
@@ -181,20 +183,31 @@
 (defun blue--get-command-options-completion-table (command bounds)
   "Generate an appropriate completion table for COMMAND respecting BOUNDS."
   (let* ((options (alist-get 'options command))
-         (long-labels (mapcar #'(lambda (option)
-                                  (let* ((arguments (alist-get 'arguments option))
-                                         (type (alist-get 'type arguments)))
-                                    (concat "--" (car (blue--get-option-long-labels option))
-                                            (if (string= type "required")
-                                                "="
-                                              " "))))
-                              options)))
+         (labels
+          (mapcar
+           #'(lambda (option)
+               (let* ((arguments (alist-get 'arguments option))
+                      (type (alist-get 'type arguments))
+                      (labels (blue--get-option-labels option))
+                      (short-labels (car labels))
+                      (long-labels (cdr labels)))
+                 (cond
+                  (long-labels
+                   (concat "--" (car long-labels)
+                           (if (string= type "required")
+                               "="
+                             " ")))
+                  (short-labels
+                   (concat "-" (car short-labels) " "))
+                  (t
+                   nil))))
+           options)))
     `( ,(car bounds) ,(cdr bounds)
-       ,long-labels
+       ,labels
        :company-doc-buffer
        (lambda (candidate)
-         (when-let* ((long-label (string-trim candidate "--" "="))
-                     (option (blue--get-option-from-label long-label ',options))
+         (when-let* ((label (string-trim candidate "--?" "="))
+                     (option (blue--get-option-from-label label ',options))
                      (doc (alist-get 'doc option))
                      (arguments (alist-get 'arguments option))
                      (arg-name (alist-get 'name arguments)))
@@ -211,8 +224,8 @@
        (lambda (candidates)
          (mapcar
           (lambda (candidate)
-            (if-let* ((long-label (string-trim candidate "--" "="))
-                      (option (blue--get-option-from-label long-label ',options))
+            (if-let* ((label (string-trim candidate "--?" "="))
+                      (option (blue--get-option-from-label label ',options))
                       (arguments (alist-get 'arguments option))
                       (arg-name (alist-get 'name arguments)))
                 (list candidate "" (propertize arg-name 'face 'blue-documentation))
@@ -223,21 +236,31 @@
 
 (defun blue--get-ui-completion-table (options bounds)
   "Generate an appropriate completion table for UI OPTIONS."
-  (let* ((long-labels
-          (mapcar #'(lambda (option)
-                      (let* ((arguments (alist-get 'arguments option))
-                             (type (alist-get 'type arguments)))
-                        (concat "--" (car (blue--get-option-long-labels option))
-                                (if (string= type "required")
-                                    "="
-                                  " "))))
-                  options)))
+  (let* ((labels
+          (mapcar
+           #'(lambda (option)
+               (let* ((arguments (alist-get 'arguments option))
+                      (type (alist-get 'type arguments))
+                      (labels (blue--get-option-labels option))
+                      (short-labels (car labels))
+                      (long-labels (cdr labels)))
+                 (cond
+                  (long-labels
+                   (concat "--" (car long-labels)
+                           (if (string= type "required")
+                               "="
+                             " ")))
+                  (short-labels
+                   (concat "-" (car short-labels) " "))
+                  (t
+                   nil))))
+           options)))
     `( ,(car bounds) ,(cdr bounds)
-       ,long-labels
+       ,labels
        :company-doc-buffer
        (lambda (candidate)
-         (when-let* ((long-label (string-trim candidate "--" "="))
-                     (option (blue--get-option-from-label long-label ',options))
+         (when-let* ((label (string-trim candidate "--?" "="))
+                     (option (blue--get-option-from-label label ',options))
                      (doc (alist-get 'doc option))
                      (arguments (alist-get 'arguments option))
                      (arg-name (alist-get 'name arguments)))
@@ -254,8 +277,8 @@
        (lambda (candidates)
          (mapcar
           (lambda (candidate)
-            (if-let* ((long-label (string-trim candidate "--" "="))
-                      (option (blue--get-option-from-label long-label ',options))
+            (if-let* ((label (string-trim candidate "--?" "="))
+                      (option (blue--get-option-from-label label ',options))
                       (arguments (alist-get 'arguments option))
                       (arg-name (alist-get 'name arguments)))
                 (list candidate "" (propertize arg-name 'face 'blue-documentation))
@@ -308,9 +331,9 @@ bounds."
               (pos-bol))
              (match-end 1))
         (let* ((thing (thing-at-point 'symbol))
-               (long-label (string-trim thing "--" "="))
+               (label (string-trim thing "--?" "="))
                (options (if cmd options ui-options))
-               (option (blue--get-option-from-label long-label options)))
+               (option (blue--get-option-from-label label options)))
           (blue-completion--complete-autocompletable option)))
         ;; UI option completion.
        ((and (not cmd)

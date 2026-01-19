@@ -425,18 +425,20 @@ If RAW is non nil, the serialized string will not be evaluated."
                       (alist-get 'category command))
                     commands)))
 
-;; TODO: fallback to short labels when there are no long-labels.
-(defun blue--get-option-long-labels (option)
-  "Retrieve long lable from OPTION."
-  (when-let* ((labels (alist-get 'labels option))
-              (long-labels (alist-get 'long labels)))
-    long-labels))
+(defun blue--get-option-labels (option)
+  "Retrieve lables from OPTION."
+  (when-let* ((labels (alist-get 'labels option)))
+    (let ((short-labels (alist-get 'short labels))
+          (long-labels (alist-get 'long labels)))
+      (cons short-labels long-labels))))
 
 (defun blue--get-option-from-label (label options)
   "Retrieve option from OPTIONS that matches LABEL."
   (seq-find (lambda (option)
-              (let ((long-labels (blue--get-option-long-labels option)))
-                (member label long-labels)))
+              (let* ((labels (blue--get-option-labels option))
+                     (short-labels (car labels))
+                     (long-labels (cdr labels)))
+                (member label (append short-labels long-labels))))
             options))
 
 
