@@ -26,6 +26,8 @@
 
 ;;; Code:
 
+;; TODO: refactor duplicated code.
+
 (require 'blue)
 (require 'blue-complete)
 
@@ -731,14 +733,21 @@ SELECTED controls the face properties to apply."
 
 PREFIX is will be concatenated to the KEY.
 CLASS will be set for the returned transient infix."
-  (when-let* ((long-label (car (blue--get-option-long-labels option))))
-    (let* ((doc (alist-get 'doc option))
+  (when-let* ((labels (blue--get-option-labels option)))
+    (let* ((short-labels (car labels))
+           (long-labels (cdr labels))
+           (doc (alist-get 'doc option))
            (arguments (alist-get 'arguments option))
            (type (alist-get 'type arguments))
-           (trans-label (concat "--"
-                                long-label
-                                (unless (string= type "switch")
-                                  "=")))
+           (trans-label
+            (concat
+             (cond
+              (long-labels
+               (concat "--" (car long-labels)))
+              (short-labels
+               (concat "-" (car short-labels))))
+             (unless (string= type "switch")
+               "=")))
            (autocomplete (alist-get 'autocomplete option))
            (autocomplete-type (alist-get 'type autocomplete))
            (choices (cond
@@ -752,7 +761,8 @@ CLASS will be set for the returned transient infix."
                     ((string-equal autocomplete-type "file")
                      #'transient-read-file))))
       `(,(concat prefix key)
-        ,(capitalize long-label)
+        ,(capitalize (or (car long-labels)
+                         (car short-labels)))
         ,trans-label
         :summary ,doc
         :choices ,choices
@@ -764,14 +774,25 @@ CLASS will be set for the returned transient infix."
   (when-let* ((commands (car blue--data))
               (command (blue--get-command command-name commands))
               (options (alist-get 'options command))
-              (option-labels (seq-mapcat #'blue--get-option-long-labels options))
-              (option-keys (blue-transient--assign-keys option-labels))
-              (entries (mapcar (lambda (option)
-                                 (when-let* ((label (car (blue--get-option-long-labels option)))
-                                             (key (cadr (assoc-string label option-keys))))
-                                   (blue-transient--argument-menu-entry "--" key option 'blue-transient--command-argument)))
-                               options)))
-    entries))
+              (option-labels (seq-mapcat
+                              #'(lambda (option)
+                                  (let ((labels (blue--get-option-labels option)))
+                                    (append (car labels) (cdr labels))))
+                              options))
+              (option-keys (blue-transient--assign-keys option-labels)))
+    (let ((options-menu
+           (mapcar
+            (lambda (option)
+              (let* ((labels (blue--get-option-labels option))
+                     (short-labels (car labels))
+                     (long-labels (cdr labels))
+                     (label (or (car long-labels)
+                                (car short-labels)))
+                     (key (cadr (assoc-string label option-keys))))
+                (blue-transient--argument-menu-entry
+                 "--" key option 'blue-transient--command-argument)))
+            options)))
+      options-menu)))
 
 
 ;;; UI.
@@ -835,7 +856,11 @@ keeps running in the compilation buffer."
     ;; Rebuild menu.
     (let* ((commands (car blue--data))
            (options (caddr blue--data))
-           (option-labels (seq-mapcat #'blue--get-option-long-labels options))
+           (option-labels (seq-mapcat
+                                #'(lambda (option)
+                                    (let ((labels (blue--get-option-labels option)))
+                                      (append (car labels) (cdr labels))))
+                                options))
            (option-keys (blue-transient--assign-keys option-labels))
            ;; Update `build-dirs' since cache could have been updated in the
            ;; previous lines.
@@ -893,13 +918,17 @@ keeps running in the compilation buffer."
                           ,@(let* ((filtered-options
                                     (seq-remove ; Remove build directory since it's handled specially.
                                      (lambda (option)
-                                       (let* ((label (car (blue--get-option-long-labels option))))
-                                         (string-equal label "build-directory")))
+                                       (let* ((long-labels (cdr (blue--get-option-labels option))))
+                                         (member "build-directory" long-labels)))
                                      options))
                                    (options-menu
                                     (mapcar
                                      (lambda (option)
-                                       (let* ((label (car (blue--get-option-long-labels option)))
+                                       (let* ((labels (blue--get-option-labels option))
+                                              (short-labels (car labels))
+                                              (long-labels (cdr labels))
+                                              (label (or (car long-labels)
+                                                         (car short-labels)))
                                               (key (cadr (assoc-string label option-keys))))
                                          (blue-transient--argument-menu-entry "-" key option nil)))
                                      filtered-options))
