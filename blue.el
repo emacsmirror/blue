@@ -340,6 +340,14 @@ If NO-SAVE is non-nil, don't save to disk immediately."
   (unless no-save
     (blue--write-cache)))
 
+(defun blue--cache-add-current-build-dir ()
+  "Add the current build directory to cache if it exists.
+
+This is a convenience wrapper around `blue--cache-add' that checks if
+the build directory `blue--build-dir' exists before adding it."
+  (when-let* ((build-dir (blue--get-build-dir)))
+    (blue--cache-add build-dir)))
+
 (defun blue--cache-get-build-dirs (dir)
   "Get cached build directories for project containing DIR."
   (let ((blueprint (blue--find-blueprint dir)))

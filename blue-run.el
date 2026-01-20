@@ -169,8 +169,7 @@ COMINT-FLIP inverts the interactive compilation logic."
                              " ")))
         ;; Bring `blue--build-dir' to the from of the list so it's ordered by
         ;; usage.
-        (when-let* ((build-dir (blue--get-build-dir)))
-          (blue--cache-add build-dir))
+        (blue--cache-add-current-build-dir)
         (blue--compile command-string comint)))))
 
 (provide 'blue-run)

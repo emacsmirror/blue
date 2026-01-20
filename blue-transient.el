@@ -404,8 +404,7 @@ the end."
       (unless (equal blue-transient--command-chain last-hist)
         (push (copy-tree blue-transient--command-chain) blue-transient--history)))
     ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
-    (when blue--build-dir
-      (blue--cache-add blue--build-dir))
+    (blue--cache-add-current-build-dir)
     (blue--compile full-input comint)))
 
 (defun blue-transient--prompt-args ()
@@ -827,8 +826,7 @@ keeps running in the compilation buffer."
     ;; Make completion work from selected build dir.
     (blue--set-default-directory blue--build-dir)
     ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
-    (when build-dir
-      (blue--cache-add build-dir))
+    (blue--cache-add-current-build-dir)
     ;; Rebuild menu.
     (let* ((commands (car blue--data))
            (options (caddr blue--data))
