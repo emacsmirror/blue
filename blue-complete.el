@@ -267,6 +267,54 @@ bounds."
      ((string-equal type "set")
       (blue-complete--set values)))))
 
+(defun blue--create-group-fn (commands)
+  "Create group function for COMMANDS."
+  (lambda (candidate transform)
+    (if transform
+        candidate
+      (when-let* ((invocation candidate)
+                  (command (blue--get-command invocation commands)))
+        (alist-get 'category command)))))
+
+(defun blue--command-completion-properties (commands)
+  "Create completion properties for COMMANDS and INVOCATIONS."
+  (when-let* ((invocations (blue--get-command-invocations commands))
+              (max-width (apply #'max (mapcar #'string-width invocations)))
+              (annotation-function
+               (lambda (candidate)
+                 (when-let* ((invocation candidate)
+                             (command (blue--get-command invocation commands))
+                             (synopsis (alist-get 'synopsis command))
+                             (padding (max (+ blue-annotation-padding
+                                              (- max-width (string-width candidate)))
+                                           2)))
+                   (concat (make-string padding ?\s)
+                           (propertize synopsis 'face 'blue-documentation)))))
+              (options-doc-buffer-function
+               (lambda (candidate)
+                 (when-let* ((invocation candidate)
+                             (command (blue--get-command invocation commands))
+                             (help-msg (alist-get 'help command)))
+                   (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+                     (erase-buffer)
+                     (insert help-msg)
+                     (font-lock-add-keywords
+                      nil
+                      `(("\\[.+\\]\s*\\.\\{3\\}*" . 'blue-documentation)))
+                     (font-lock-mode 1)
+                     (font-lock-ensure)
+                     (current-buffer))))))
+    (list
+     :annotation-function annotation-function
+     :company-doc-buffer options-doc-buffer-function
+     :company-kind (lambda (candidate)
+                     (cond
+                      ((string-prefix-p "--" candidate) 'property)
+                      ((member candidate invocations) 'command)
+                      (t 'event)))
+     :exclusive 'no
+     :group-function (blue--create-group-fn commands))))
+
 
 ;;; Interfaces.
 
