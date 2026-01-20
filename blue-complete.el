@@ -180,37 +180,8 @@
          :company-kind (lambda (_) 'event)
          :exclusive 'no))))
 
-(defun blue--get-command-options-completion-table (command bounds)
-  "Generate an appropriate completion table for COMMAND respecting BOUNDS."
-  (let* ((options (alist-get 'options command))
-         (labels (mapcar #'blue--format-option-label options)))
-    `( ,(car bounds) ,(cdr bounds)
-       ,labels
-       :company-doc-buffer
-       (lambda (candidate)
-         (when-let* ((label (string-trim candidate "--?" "="))
-                     (option (blue--get-option-from-label label ',options))
-                     (doc (alist-get 'doc option))
-                     (arguments (alist-get 'arguments option))
-                     (arg-name (alist-get 'name arguments))
-                     (keywords `((,arg-name . 'blue-documentation))))
-           (blue--create-doc-buffer doc keywords)))
-       :affixation-function
-       (lambda (candidates)
-         (mapcar
-          (lambda (candidate)
-            (if-let* ((label (string-trim candidate "--?" "="))
-                      (option (blue--get-option-from-label label ',options))
-                      (arguments (alist-get 'arguments option))
-                      (arg-name (alist-get 'name arguments)))
-                (list candidate "" (propertize arg-name 'face 'blue-documentation))
-              (list candidate "" "")))
-          candidates))
-       :company-kind (lambda (_) 'property)
-       :exclusive no)))
-
-(defun blue--get-ui-completion-table (options bounds)
-  "Generate an appropriate completion table for UI OPTIONS."
+(defun blue--get-options-completion-table (options bounds)
+  "Generate an appropriate completion table from OPTIONS respecting BOUNDS."
   (let ((labels (mapcar #'blue--format-option-label options)))
     `( ,(car bounds) ,(cdr bounds)
        ,labels
@@ -318,8 +289,8 @@ Returns the buffer containing the formatted documentation."
   "`completion-at-point' function for `blue-run-command'."
   (when blue--data
     (let* ((commands (car blue--data))
-           (invocations (blue--get-command-invocations commands))
            (ui-options (caddr blue--data))
+           (invocations (blue--get-command-invocations commands))
            (prompt-start (minibuffer-prompt-end))
            (input (buffer-substring-no-properties prompt-start (point)))
            (bounds-at-pt (or (bounds-of-thing-at-point 'symbol)
@@ -331,7 +302,8 @@ Returns the buffer containing the formatted documentation."
                                       (member token invocations))
                                     (string-split last-cmd+args))))
            (cmd (and last-cmd (blue--get-command last-cmd commands)))
-           (options (alist-get 'options cmd)))
+           (cmd-options (alist-get 'options cmd))
+           (options (if cmd cmd-options ui-options)))
       (cond
        ;; Option value completion (from command or UI).
        ((and (looking-back
@@ -340,19 +312,12 @@ Returns the buffer containing the formatted documentation."
              (match-end 1))
         (let* ((thing (thing-at-point 'symbol))
                (label (string-trim thing "--?" "="))
-               (options (if cmd options ui-options))
                (option (blue--get-option-from-label label options)))
           (blue-completion--complete-autocompletable option)))
-        ;; UI option completion.
-       ((and (not cmd)
-             (looking-back "\\(^\\|\s\\|\t\\)-+[^\s]*" (pos-bol))
+        ;; Option completion (from command or UI).
+       ((and (looking-back "\\(^\\|\s\\|\t\\)-+[^\s]*" (pos-bol))
              (match-end 1))
-        (blue--get-ui-completion-table ui-options bounds-at-pt))
-       ;; Command option completion.
-       ((and cmd
-             (looking-back "\\(^\\|\s\\|\t\\)-+[^\s]*" (pos-bol))
-             (match-end 1))
-        (blue--get-command-options-completion-table cmd bounds-at-pt))
+        (blue--get-options-completion-table options bounds-at-pt))
        ;; Command argument completion.
        (cmd
         (let ((blue-complete--option-value-prefix " ")) ; Arguments are space separated.
