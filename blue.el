@@ -441,6 +441,32 @@ If RAW is non nil, the serialized string will not be evaluated."
                 (member label (append short-labels long-labels))))
             options))
 
+(defun blue--format-option-label (option &optional raw)
+  "Format OPTION into a label string suitable for completion.
+
+Returns a string with the option's label prefixed appropriately
+(-- for long options, - for short options) and suffixed with = or space
+depending on whether the option requires a value.
+
+If RAW is t return the label without adding any prefix or suffix."
+  (when-let* ((labels (blue--get-option-labels option)))
+    (let* ((short-label (caar labels))
+           (long-label (cadr labels))
+           (arguments (alist-get 'arguments option))
+           (type (alist-get 'type arguments))
+           (suffix (unless (string= type "switch")
+                     "=")))
+      (cond
+       (long-label
+        (if raw
+            long-label
+            (concat "--" long-label suffix)))
+       (short-label
+        (if raw
+            short-label
+          (concat "-" short-label suffix)))
+       (t nil)))))
+
 
 ;;; Compilation.
 

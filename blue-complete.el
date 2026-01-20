@@ -183,25 +183,7 @@
 (defun blue--get-command-options-completion-table (command bounds)
   "Generate an appropriate completion table for COMMAND respecting BOUNDS."
   (let* ((options (alist-get 'options command))
-         (labels
-          (mapcar
-           #'(lambda (option)
-               (let* ((arguments (alist-get 'arguments option))
-                      (type (alist-get 'type arguments))
-                      (labels (blue--get-option-labels option))
-                      (short-labels (car labels))
-                      (long-labels (cdr labels)))
-                 (cond
-                  (long-labels
-                   (concat "--" (car long-labels)
-                           (if (string= type "required")
-                               "="
-                             " ")))
-                  (short-labels
-                   (concat "-" (car short-labels) " "))
-                  (t
-                   nil))))
-           options)))
+         (labels (mapcar #'blue--format-option-label options)))
     `( ,(car bounds) ,(cdr bounds)
        ,labels
        :company-doc-buffer
@@ -236,25 +218,7 @@
 
 (defun blue--get-ui-completion-table (options bounds)
   "Generate an appropriate completion table for UI OPTIONS."
-  (let* ((labels
-          (mapcar
-           #'(lambda (option)
-               (let* ((arguments (alist-get 'arguments option))
-                      (type (alist-get 'type arguments))
-                      (labels (blue--get-option-labels option))
-                      (short-labels (car labels))
-                      (long-labels (cdr labels)))
-                 (cond
-                  (long-labels
-                   (concat "--" (car long-labels)
-                           (if (string= type "required")
-                               "="
-                             " ")))
-                  (short-labels
-                   (concat "-" (car short-labels) " "))
-                  (t
-                   nil))))
-           options)))
+  (let ((labels (mapcar #'blue--format-option-label options)))
     `( ,(car bounds) ,(cdr bounds)
        ,labels
        :company-doc-buffer

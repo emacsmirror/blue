@@ -734,20 +734,11 @@ SELECTED controls the face properties to apply."
 PREFIX is will be concatenated to the KEY.
 CLASS will be set for the returned transient infix."
   (when-let* ((labels (blue--get-option-labels option)))
-    (let* ((short-labels (car labels))
-           (long-labels (cdr labels))
+    (let* ((formated-label (blue--format-option-label option nil))
+           (raw-label (blue--format-option-label option t))
            (doc (alist-get 'doc option))
            (arguments (alist-get 'arguments option))
            (type (alist-get 'type arguments))
-           (trans-label
-            (concat
-             (cond
-              (long-labels
-               (concat "--" (car long-labels)))
-              (short-labels
-               (concat "-" (car short-labels))))
-             (unless (string= type "switch")
-               "=")))
            (autocomplete (alist-get 'autocomplete option))
            (autocomplete-type (alist-get 'type autocomplete))
            (choices (cond
@@ -761,9 +752,8 @@ CLASS will be set for the returned transient infix."
                     ((string-equal autocomplete-type "file")
                      #'transient-read-file))))
       `(,(concat prefix key)
-        ,(capitalize (or (car long-labels)
-                         (car short-labels)))
-        ,trans-label
+        ,(capitalize raw-label)
+        ,formated-label
         :summary ,doc
         :choices ,choices
         :reader ,reader
@@ -784,10 +774,7 @@ CLASS will be set for the returned transient infix."
            (mapcar
             (lambda (option)
               (let* ((labels (blue--get-option-labels option))
-                     (short-labels (car labels))
-                     (long-labels (cdr labels))
-                     (label (or (car long-labels)
-                                (car short-labels)))
+                     (label (blue--format-option-label option t))
                      (key (cadr (assoc-string label option-keys))))
                 (blue-transient--argument-menu-entry
                  "--" key option 'blue-transient--command-argument)))
@@ -925,10 +912,7 @@ keeps running in the compilation buffer."
                                     (mapcar
                                      (lambda (option)
                                        (let* ((labels (blue--get-option-labels option))
-                                              (short-labels (car labels))
-                                              (long-labels (cdr labels))
-                                              (label (or (car long-labels)
-                                                         (car short-labels)))
+                                              (label (blue--format-option-label option t))
                                               (key (cadr (assoc-string label option-keys))))
                                          (blue-transient--argument-menu-entry "-" key option nil)))
                                      filtered-options))
