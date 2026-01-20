@@ -737,8 +737,6 @@ CLASS will be set for the returned transient infix."
     (let* ((formated-label (blue--format-option-label option nil))
            (raw-label (blue--format-option-label option t))
            (doc (alist-get 'doc option))
-           (arguments (alist-get 'arguments option))
-           (type (alist-get 'type arguments))
            (autocomplete (alist-get 'autocomplete option))
            (autocomplete-type (alist-get 'type autocomplete))
            (choices (cond
@@ -773,8 +771,7 @@ CLASS will be set for the returned transient infix."
     (let ((options-menu
            (mapcar
             (lambda (option)
-              (let* ((labels (blue--get-option-labels option))
-                     (label (blue--format-option-label option t))
+              (let* ((label (blue--format-option-label option t))
                      (key (cadr (assoc-string label option-keys))))
                 (blue-transient--argument-menu-entry
                  "--" key option 'blue-transient--command-argument)))
@@ -911,8 +908,7 @@ keeps running in the compilation buffer."
                                    (options-menu
                                     (mapcar
                                      (lambda (option)
-                                       (let* ((labels (blue--get-option-labels option))
-                                              (label (blue--format-option-label option t))
+                                       (let* ((label (blue--format-option-label option t))
                                               (key (cadr (assoc-string label option-keys))))
                                          (blue-transient--argument-menu-entry "-" key option nil)))
                                      filtered-options))
