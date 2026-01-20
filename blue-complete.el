@@ -23,8 +23,6 @@
 
 ;;; Code:
 
-;; TODO: refactor duplicated code.
-
 (require 'blue)
 
 (defcustom blue-complete-target-names

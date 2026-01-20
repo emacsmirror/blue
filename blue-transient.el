@@ -26,8 +26,6 @@
 
 ;;; Code:
 
-;; TODO: refactor duplicated code.
-
 (require 'blue)
 (require 'blue-complete)
 
