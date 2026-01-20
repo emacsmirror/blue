@@ -77,7 +77,7 @@ If OVERRIDE is non nil disable CONFIGS."
 (defun blue--show-hints (&rest _)
   "Display build directory hints in minibuffer overlay."
   (when-let* ((build-dirs (blue--cache-get-build-dirs blue--blueprint))
-              (content (blue--create-hint-overlay build-dirs (blue--get-build-dir) blue--overiden-build-dir)))
+              (content (blue--create-hint-overlay build-dirs (blue--get-build-dir) blue--overiden-build-dir-p)))
     (unless blue--hint-overlay
       (setq blue--hint-overlay (make-overlay (point) (point))))
     (overlay-put blue--hint-overlay 'after-string content)
@@ -102,7 +102,7 @@ If OVERRIDE is non nil disable CONFIGS."
   ;; Work on a copy of the current minibuffer keymap so it doesn’t leak
   (use-local-map (copy-keymap (current-local-map)))
   (define-key (current-local-map) (kbd "SPC") nil)
-  (unless blue--overiden-build-dir
+  (unless blue--overiden-build-dir-p
     (let ((build-dirs (blue--cache-get-build-dirs blue--blueprint)))
       (seq-do #'blue--bind-build-dir-key (number-sequence 1 (length build-dirs)))))
   (add-hook 'completion-at-point-functions #'blue-completion-at-point nil t)
@@ -117,15 +117,10 @@ If OVERRIDE is non nil disable CONFIGS."
   (blue--ensure-cache)
   (setq blue--blueprint (blue--find-blueprint))
   (let* ((prefix (car current-prefix-arg))
-         (build-dirs (blue--cache-get-build-dirs blue--blueprint))
-         (last-build-dir (car build-dirs))
-         (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
-                           (and blue-require-build-directory
-                                (not last-build-dir))))
-         (comint-flip (eql prefix 16))) ; Double universal argument 'C-u C-u'.
-    (setq blue--overiden-build-dir (when prompt-dir-p
-                                     (blue--prompt-dir t))
-          blue--build-dir (or blue--overiden-build-dir last-build-dir)
+         (comint-flip (eql prefix 16)) ; Double universal argument 'C-u C-u'.
+         (determined-build-dir (blue--determine-build-dir)))
+    (setq blue--overiden-build-dir-p (cdr determined-build-dir)
+          blue--build-dir (car determined-build-dir)
           blue--data (blue--get-data blue--blueprint))
     ;; Make completion work from selected build dir.
     (blue--set-default-directory blue--build-dir)

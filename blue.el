@@ -125,7 +125,7 @@ directory has been stored in the cache."
 These directories are used for extending `compilation-search-path' and
 locating BLUE replay file references.")
 
-(defvar blue--overiden-build-dir nil
+(defvar blue--overiden-build-dir-p nil
   "Internal variable used to override `blue--build-dir'.
 
 This is used when passing universal prefix argument `C-u' to
@@ -575,6 +575,21 @@ MUSTMATCH is passed directly to `read-directory-name'."
                (not (file-exists-p dir)))
       (mkdir dir t))
     dir))
+
+(defun blue--determine-build-dir ()
+  "Helper to determine the build directory to use by reading prefix argument.
+
+Returns a pair of (BUILD-DIR . PROMPTED-P)."
+  (let* ((prefix (car current-prefix-arg))
+         (build-dirs (blue--cache-get-build-dirs blue--blueprint))
+         (last-build-dir (car build-dirs))
+         (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
+                           (and blue-require-build-directory
+                                (not last-build-dir))))
+         (build-dir (if prompt-dir-p
+                        (blue--prompt-dir t)
+                      last-build-dir)))
+    (cons build-dir prompt-dir-p)))
 
 
 ;;; UI.

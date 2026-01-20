@@ -821,15 +821,7 @@ keeps running in the compilation buffer."
   (setq blue-transient--history-index 0
         blue--blueprint (blue--find-blueprint))
   (let* ((blue-transient-menu 'blue-transient--menu)
-         (prefix (car current-prefix-arg))
-         (build-dirs (blue--cache-get-build-dirs blue--blueprint))
-         (last-build-dir (car build-dirs))
-         (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
-                           (and blue-require-build-directory
-                                (not last-build-dir))))
-         (build-dir (if prompt-dir-p
-                        (blue--prompt-dir t)
-                      last-build-dir)))
+         (build-dir (car (blue--determine-build-dir))))
     (setq blue--build-dir build-dir
           blue--data (blue--get-data blue--blueprint))
     ;; Make completion work from selected build dir.
