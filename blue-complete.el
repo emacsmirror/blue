@@ -192,16 +192,9 @@
                      (option (blue--get-option-from-label label ',options))
                      (doc (alist-get 'doc option))
                      (arguments (alist-get 'arguments option))
-                     (arg-name (alist-get 'name arguments)))
-           (with-current-buffer (get-buffer-create "*blue-capf-doc*")
-             (erase-buffer)
-             (insert doc)
-             (font-lock-add-keywords
-              nil
-              `((,arg-name . 'blue-documentation)))
-             (font-lock-mode 1)
-             (font-lock-ensure)
-             (current-buffer))))
+                     (arg-name (alist-get 'name arguments))
+                     (keywords `((,arg-name . 'blue-documentation))))
+           (blue--create-doc-buffer doc keywords)))
        :affixation-function
        (lambda (candidates)
          (mapcar
@@ -227,16 +220,9 @@
                      (option (blue--get-option-from-label label ',options))
                      (doc (alist-get 'doc option))
                      (arguments (alist-get 'arguments option))
-                     (arg-name (alist-get 'name arguments)))
-           (with-current-buffer (get-buffer-create "*blue-capf-doc*")
-             (erase-buffer)
-             (insert doc)
-             (font-lock-add-keywords
-              nil
-              `((,arg-name . 'blue-documentation)))
-             (font-lock-mode 1)
-             (font-lock-ensure)
-             (current-buffer))))
+                     (arg-name (alist-get 'name arguments))
+                     (keywords `((,arg-name . 'blue-documentation))))
+           (blue--create-doc-buffer doc keywords)))
        :affixation-function
        (lambda (candidates)
          (mapcar
@@ -276,6 +262,22 @@ bounds."
                   (command (blue--get-command invocation commands)))
         (alist-get 'category command)))))
 
+(defun blue--create-doc-buffer (content keywords)
+  "Create or reuse documentation buffer with CONTENT.
+
+KEYWORDS is a list of font-lock keyword specifications to apply to the
+buffer. For more information read `font-lock-add-keywords'.
+
+Returns the buffer containing the formatted documentation."
+  (with-current-buffer (get-buffer-create "*blue-capf-doc*")
+    (erase-buffer)
+    (insert content)
+    (when keywords
+      (font-lock-add-keywords nil keywords)
+      (font-lock-mode 1)
+      (font-lock-ensure))
+    (current-buffer)))
+
 (defun blue--command-completion-properties (commands)
   "Create completion properties for COMMANDS and INVOCATIONS."
   (when-let* ((invocations (blue--get-command-invocations commands))
@@ -294,16 +296,10 @@ bounds."
                (lambda (candidate)
                  (when-let* ((invocation candidate)
                              (command (blue--get-command invocation commands))
-                             (help-msg (alist-get 'help command)))
-                   (with-current-buffer (get-buffer-create "*blue-capf-doc*")
-                     (erase-buffer)
-                     (insert help-msg)
-                     (font-lock-add-keywords
-                      nil
-                      `(("\\[.+\\]\s*\\.\\{3\\}*" . 'blue-documentation)))
-                     (font-lock-mode 1)
-                     (font-lock-ensure)
-                     (current-buffer))))))
+                             (help-msg (alist-get 'help command))
+                             (keywords `(("\\[.+\\]\s*\\.\\{3\\}*"
+                                          . 'blue-documentation))))
+                   (blue--create-doc-buffer help-msg keywords)))))
     (list
      :annotation-function annotation-function
      :company-doc-buffer options-doc-buffer-function
