@@ -62,7 +62,7 @@ If OVERRIDE is non nil disable CONFIGS."
               (lines (string-join formatted "\n"))
               (lines* (if override
                           (concat
-                           (blue--format-build-dir-hint 0 override override)
+                           (blue--format-build-dir-hint 0 current current)
                            "\n"
                            (propertize lines 'face 'blue-hint-separator))
                         lines)))
