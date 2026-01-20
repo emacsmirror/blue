@@ -70,8 +70,9 @@
          (command (concat blue-binary
                           " --file=" blueprint
                           " .autocomplete bash \"blue " input "\""))
-         (output (shell-command-to-string command)))
-    (string-split output)))
+         (output (shell-command-to-string command))
+         (clean (replace-regexp-in-string "^;;;.*\n?" "" output)))
+    (string-split clean)))
 
 (defun blue-complete--table (&rest _)
   "Completion table function for minibuffer prompt."
