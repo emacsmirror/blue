@@ -975,7 +975,9 @@ keeps running in the compilation buffer."
                           ;; `blue--cache-list' is this the desired behavior?
                           ("-b" "Build directory" "--build-directory="
                            :prompt "Build directory: "
-                           :reader transient-read-existing-directory)
+                           :reader
+                           (lambda (&rest _)
+                             (blue--prompt-dir t nil)))
                           ,@(seq-mapn (lambda (idx build-dir)
                                         (list
                                          (concat " " (number-to-string idx)) "" build-dir
