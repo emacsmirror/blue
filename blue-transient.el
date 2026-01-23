@@ -46,6 +46,12 @@ Used by `blue-transient--menu-columns'."
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
 
+(defcustom blue-transient-command-argument-min-rows 7
+  "If non-nil, ensures that the command argument menu has that many rows."
+  :group 'blue-transient
+  :type '(choice (const :tag "Unlimited" nil)
+                 (integer :tag "Limit")))
+
 (defface blue-transient-selection
   '((t :inherit blue-hint-highlight))
   "Face used to highlight selections."
@@ -269,7 +275,7 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
   (if-let* ((selected-command (car (blue-transient--selected-command)))
             (suffixes (blue-transient--arguments-menu selected-command))
             ;; Make each menu entry a vector. Each vector will be a column.
-            (columns (blue-transient--split-elements 2 suffixes)))
+            (columns (blue-transient--split-elements-smart suffixes)))
       (transient-parse-suffixes 'transient--prefix columns)
     (transient-parse-suffixes
      'transient--prefix
@@ -669,6 +675,45 @@ Takes assoc list returned by `blue-transient--build-menu'."
                                    (apply #'vector item))
                                  columns)))
     vector-columns))
+
+(defun blue-transient--entry-length (entry)
+  "Helper to compute the length of the visible text from menu ENTRY."
+  (let* ((visible-text (car (seq-split entry 3)))
+         (visible-sizes (mapcar #'length visible-text))
+         (len (+ (apply #'+ visible-sizes)
+                 4))) ; Account for decorators such as parenthesis and spaces.
+    len))
+
+(defun blue-transient--max-group-width (group)
+  "Helper to compute the max width of the visible text from the menu GROUP."
+  (apply #'max
+         (mapcar (lambda (entry)
+                   (blue-transient--entry-length entry))
+                 group)))
+
+(defun blue-transient--compute-max-groups (n lst &optional min-height)
+  "Recursive helper to compute how many groups fit the screen.
+
+N is an accumulator to count the number of groups of the current iteration.
+LST is the list to split into groups."
+  (let* ((min-height (or min-height 0))
+         (groups (blue-transient--split-elements n lst))
+         (max-widths (mapcar #'blue-transient--max-group-width groups))
+         (menu-width (+ (apply #'+ max-widths)
+                        (* (1- (length groups))
+                           2))) ; Account for spaces between groups.
+         (menu-height (apply #'max (mapcar #'length groups))))
+    (if (or (> menu-width (frame-width))
+            (< menu-height min-height))
+        (1- n)
+      (blue-transient--compute-max-groups (1+ n) lst min-height))))
+
+(defun blue-transient--split-elements-smart (lst)
+  "Helper to split list LST of elements in a number of groups which fits screen."
+  (blue-transient--split-elements
+   (blue-transient--compute-max-groups
+    1 lst blue-transient-command-argument-min-rows)
+   lst))
 
 (defun blue-transient--propertize-value-arg (arg selected)
   "Helper to propertize a transient ARG of the form `arg=val'.
