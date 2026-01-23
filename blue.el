@@ -125,7 +125,7 @@ directory has been stored in the cache."
 These directories are used for extending `compilation-search-path' and
 locating BLUE replay file references.")
 
-(defvar blue--overiden-build-dir nil
+(defvar blue--overiden-build-dir-p nil
   "Internal variable used to override `blue--build-dir'.
 
 This is used when passing universal prefix argument `C-u' to
@@ -340,6 +340,14 @@ If NO-SAVE is non-nil, don't save to disk immediately."
   (unless no-save
     (blue--write-cache)))
 
+(defun blue--cache-add-current-build-dir ()
+  "Add the current build directory to cache if it exists.
+
+This is a convenience wrapper around `blue--cache-add' that checks if
+the build directory `blue--build-dir' exists before adding it."
+  (when-let* ((build-dir (blue--get-build-dir)))
+    (blue--cache-add build-dir)))
+
 (defun blue--cache-get-build-dirs (dir)
   "Get cached build directories for project containing DIR."
   (let ((blueprint (blue--find-blueprint dir)))
@@ -369,7 +377,9 @@ If RAW is non nil, the serialized string will not be evaluated."
   "Return the commands and execution environment provided by BLUEPRINT."
   (when-let* ((options (when blueprint
                          (list (concat "--file=" blueprint))))
-              (cmd '(".serialize-commands" "--" ".serialize-execution-environment"))
+              (cmd '(".serialize-commands" "--"
+                     ".serialize-execution-environment" "--"
+                     ".serialize-ui"))
               (output (blue--execute-deserialize options cmd))
               (data (car output))
               (exit-code (cdr output)))
@@ -378,25 +388,23 @@ If RAW is non nil, the serialized string will not be evaluated."
           (insert data)
           (goto-char (point-min))
           (condition-case err
-              (re-search-forward "\\({.*}\\)\\({.*}\\)")
+              (re-search-forward "\\(\\[.*\\]\\)\\({.*}\\)\\(\\[.*\\]\\)")
             (search-failed
              (blue--log-output (error-message-string err) "[BLUE] `re-search-forward'" 1)
              (with-current-buffer blue--log-buffer
                (goto-char (point-min)))
              (display-buffer blue--log-buffer)
              (error "[BLUE] Deserialization failed")))
-          (let ((json1 (match-string-no-properties 1))
-                (json2 (match-string-no-properties 2)))
-            (cons (json-parse-string json1
-                                     :object-type 'alist
-                                     :array-type 'list
-                                     :null-object nil
-                                     :false-object nil)
-                  (json-parse-string json2
-                                     :object-type 'alist
-                                     :array-type 'list
-                                     :null-object nil
-                                     :false-object nil))))
+          (let ((commands (match-string-no-properties 1))
+                (exec-env (match-string-no-properties 2))
+                (ui (match-string-no-properties 3)))
+            (mapcar (lambda (json)
+                      (json-parse-string json
+                                         :object-type 'alist
+                                         :array-type 'list
+                                         :null-object nil
+                                         :false-object nil))
+                    (list commands exec-env ui))))
       (with-current-buffer blue--log-buffer
         (goto-char (point-min)))
       (display-buffer blue--log-buffer)
@@ -408,38 +416,64 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (defun blue--get-command (command commands)
   "Retrieve COMMAND from COMMANDS."
-  (assoc command commands))
-
-(defun blue--command-get-slot (slot command)
-  "Retrieve SLOT from COMMAND."
-  (let ((fields (alist-get 'fields command)))
-    (alist-get slot fields)))
+  (seq-find (lambda (cmd)
+              (string-equal (alist-get 'invoke cmd)
+                            command))
+            commands))
 
 (defun blue--get-command-invocations (commands)
   "Retrieve command names from COMMANDS."
   (mapcar (lambda (command)
-            (symbol-name (car command)))
+            (alist-get 'invoke command))
           commands))
 
 (defun blue--get-command-categories (commands)
   "Retrieve command categories from COMMANDS."
   (seq-uniq (mapcar (lambda (command)
-                      (blue--command-get-slot 'category command))
+                      (alist-get 'category command))
                     commands)))
 
-(defun blue--get-option-long-labels (option)
-  "Retrieve long lable from OPTION."
-  (when-let* ((labels (alist-get 'labels option))
-              (long-labels (alist-get 'long labels)))
-    long-labels))
+(defun blue--get-option-labels (option)
+  "Retrieve lables from OPTION."
+  (when-let* ((labels (alist-get 'labels option)))
+    (let ((short-labels (alist-get 'short labels))
+          (long-labels (alist-get 'long labels)))
+      (cons short-labels long-labels))))
 
-(defun blue--get-option-from-label (label command)
-  "Retrieve option from COMMAND that matches LABEL."
-  (let ((options (blue--command-get-slot 'options command)))
-    (seq-find (lambda (option)
-                (let ((long-labels (blue--get-option-long-labels option)))
-                  (member label long-labels)))
-              options)))
+(defun blue--get-option-from-label (label options)
+  "Retrieve option from OPTIONS that matches LABEL."
+  (seq-find (lambda (option)
+              (let* ((labels (blue--get-option-labels option))
+                     (short-labels (car labels))
+                     (long-labels (cdr labels)))
+                (member label (append short-labels long-labels))))
+            options))
+
+(defun blue--format-option-label (option &optional raw)
+  "Format OPTION into a label string suitable for completion.
+
+Returns a string with the option's label prefixed appropriately
+(-- for long options, - for short options) and suffixed with = or space
+depending on whether the option requires a value.
+
+If RAW is t return the label without adding any prefix or suffix."
+  (when-let* ((labels (blue--get-option-labels option)))
+    (let* ((short-label (caar labels))
+           (long-label (cadr labels))
+           (arguments (alist-get 'arguments option))
+           (type (alist-get 'type arguments))
+           (suffix (unless (string= type "switch")
+                     "=")))
+      (cond
+       (long-label
+        (if raw
+            long-label
+            (concat "--" long-label suffix)))
+       (short-label
+        (if raw
+            short-label
+          (concat "-" short-label suffix)))
+       (t nil)))))
 
 
 ;;; Compilation.
@@ -465,7 +499,7 @@ NAME-OF-MODE is the major mode name that the compilation buffer will use."
   "Set current buffer search path.
 
 This is meant to be used in compilation buffers."
-  (when-let* ((conf (cdr blue--data))
+  (when-let* ((conf (cadr blue--data))
               (srcdir (blue--config-get "srcdir" conf)))
     ;; Make 'srcdir' errors searchable in compilation buffer.
     (setq-local blue--search-path (seq-uniq (cons srcdir compilation-search-path))
@@ -535,57 +569,6 @@ A comand is considered interactive if it is a member of
   (let ((invocations (blue--parse-invocations input-tokens)))
     (seq-some #'blue--interactive-p invocations)))
 
-
-;;; Command Prompt.
-
-(defun blue--create-group-fn (commands)
-  "Create group function for COMMANDS."
-  (lambda (candidate transform)
-    (if transform
-        candidate
-      (when-let* ((invocation (intern candidate))
-                  (command (blue--get-command invocation commands)))
-        (blue--command-get-slot 'category command)))))
-
-(defun blue--command-completion-properties (commands)
-  "Create completion properties for COMMANDS and INVOCATIONS."
-  (when-let* ((invocations (blue--get-command-invocations commands))
-              (max-width (apply #'max (mapcar #'string-width invocations)))
-              (annotation-function
-               (lambda (candidate)
-                 (when-let* ((invocation (intern candidate))
-                             (command (blue--get-command invocation commands))
-                             (synopsis (blue--command-get-slot 'synopsis command))
-                             (padding (max (+ blue-annotation-padding
-                                              (- max-width (string-width candidate)))
-                                           2)))
-                   (concat (make-string padding ?\s)
-                           (propertize synopsis 'face 'blue-documentation)))))
-              (options-doc-buffer-function
-               (lambda (candidate)
-                 (when-let* ((invocation (intern candidate))
-                             (command (blue--get-command invocation commands))
-                             (help-msg (blue--command-get-slot 'help command)))
-                   (with-current-buffer (get-buffer-create "*blue-capf-doc*")
-                     (erase-buffer)
-                     (insert help-msg)
-                     (font-lock-add-keywords
-                      nil
-                      `(("\\[.+\\]\s*\\.\\{3\\}*" . 'blue-documentation)))
-                     (font-lock-mode 1)
-                     (font-lock-ensure)
-                     (current-buffer))))))
-    (list
-     :annotation-function annotation-function
-     :company-doc-buffer options-doc-buffer-function
-     :company-kind (lambda (candidate)
-                     (cond
-                      ((string-prefix-p "--" candidate) 'property)
-                      ((member candidate invocations) 'command)
-                      (t 'event)))
-     :exclusive 'no
-     :group-function (blue--create-group-fn commands))))
-
 (defun blue--prompt-dir (&optional create-p mustmatch)
   "Prompt for directory.
 
@@ -601,6 +584,20 @@ MUSTMATCH is passed directly to `read-directory-name'."
       (mkdir dir t))
     dir))
 
+(defun blue--determine-build-dir ()
+  "Helper to determine the build directory to use by reading prefix argument.
+
+Returns a pair of (BUILD-DIR . PROMPTED-P)."
+  (let* ((prefix (car current-prefix-arg))
+         (build-dirs (blue--cache-get-build-dirs blue--blueprint))
+         (last-build-dir (car build-dirs))
+         (prompt-dir-p (or (eql prefix 4) ; Single universal argument 'C-u'.
+                           (and blue-require-build-directory
+                                (not last-build-dir))))
+         (build-dir (if prompt-dir-p
+                        (blue--prompt-dir t)
+                      last-build-dir)))
+    (cons build-dir prompt-dir-p)))
 
 
 ;;; UI.
