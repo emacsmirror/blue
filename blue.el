@@ -192,7 +192,7 @@ This is used when passing universal prefix argument `C-u' to
 (defun blue--set-default-directory (dir)
   "Helper to safely set the `default-directory' to DIR."
   (when (and (stringp dir) (file-exists-p dir))
-    (setq default-directory dir)))
+    (setq default-directory (file-name-as-directory dir))))
 
 ;; TODO: should we use 'blue' to locate the 'blueprint.scm'?
 (defun blue--find-blueprint (&optional path)
