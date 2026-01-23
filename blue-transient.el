@@ -46,6 +46,12 @@ Used by `blue-transient--menu-columns'."
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Limit")))
 
+(defcustom blue-transient-options-min-rows 5
+  "If non-nil, ensures that the options menu has that many rows."
+  :group 'blue-transient
+  :type '(choice (const :tag "Unlimited" nil)
+                 (integer :tag "Limit")))
+
 (defcustom blue-transient-command-argument-min-rows 7
   "If non-nil, ensures that the command argument menu has that many rows."
   :group 'blue-transient
@@ -691,28 +697,32 @@ Takes assoc list returned by `blue-transient--build-menu'."
                    (blue-transient--entry-length entry))
                  group)))
 
-(defun blue-transient--compute-max-groups (n lst &optional min-height)
+(defun blue-transient--compute-max-groups (n lst min-height fr-width)
   "Recursive helper to compute how many groups fit the screen.
 
 N is an accumulator to count the number of groups of the current iteration.
-LST is the list to split into groups."
+LST is the list to split into groups.
+MIN-HEIGHT is the minimum numbers of row to have per group.
+FR-WIDTH serves to restrict the span width wise of the groups."
   (let* ((min-height (or min-height 0))
+         (fr-width (or fr-width
+                       (frame-width)))
          (groups (blue-transient--split-elements n lst))
          (max-widths (mapcar #'blue-transient--max-group-width groups))
          (menu-width (+ (apply #'+ max-widths)
                         (* (1- (length groups))
                            2))) ; Account for spaces between groups.
          (menu-height (apply #'max (mapcar #'length groups))))
-    (if (or (> menu-width (frame-width))
+    (if (or (> menu-width fr-width)
             (< menu-height min-height))
         (1- n)
-      (blue-transient--compute-max-groups (1+ n) lst min-height))))
+      (blue-transient--compute-max-groups (1+ n) lst min-height fr-width))))
 
 (defun blue-transient--split-elements-smart (lst)
   "Helper to split list LST of elements in a number of groups which fits screen."
   (blue-transient--split-elements
    (blue-transient--compute-max-groups
-    1 lst blue-transient-command-argument-min-rows)
+    1 lst blue-transient-command-argument-min-rows (frame-width))
    lst))
 
 (defun blue-transient--propertize-value-arg (arg selected)
@@ -945,7 +955,14 @@ keeps running in the compilation buffer."
                                               (key (cadr (assoc-string label option-keys))))
                                          (blue-transient--argument-menu-entry "-" key option nil)))
                                      filtered-options))
-                                   (grouped-options-menu (blue-transient--split-elements 2 options-menu)))
+                                   (grouped-options-menu
+                                    (blue-transient--split-elements
+                                     (blue-transient--compute-max-groups
+                                      1
+                                      options-menu
+                                      blue-transient-options-min-rows
+                                      (- (frame-width) 25)) ; Give some margin for the controls group.
+                                     options-menu)))
                               grouped-options-menu)
                           [("," "Selected command args"
                             blue-transient--prompt-args
