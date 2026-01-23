@@ -485,16 +485,6 @@ COMMAND is the invocation passed to BLUE.
 NAME-OF-MODE is the major mode name that the compilation buffer will use."
   (format "*%s | %s*" name-of-mode command))
 
-(defun blue--setup-buffer (buffer)
-  "Setup compilation BUFFER with DIR and error patterns."
-  (with-current-buffer buffer
-    (make-local-variable 'compilation-error-regexp-alist)
-    (add-to-list 'compilation-error-regexp-alist
-                 '("^.* at \\(.*?\\):\\([0-9]+\\)" 1 2))
-    ;; Bound dynamicaly for the context of this function, let's write it buffer
-    ;; locally so it persists after the dynamic context ends.
-    (setq default-directory default-directory)))
-
 (defun blue--set-search-path ()
   "Set current buffer search path.
 
@@ -532,12 +522,25 @@ COMINT-P selects `comint-mode' for compilation buffer."
          (buf (get-buffer-create
                (compilation-buffer-name name-of-mode comint-p compilation-buffer-name-function)))
          (default-directory (or (blue--get-build-dir) default-directory)))
-    (setq-default compilation-directory default-directory)
-    (blue--setup-buffer buf)
-    (compilation-start command comint-p)
-    ;; Make 'srcdir' errors searchable in compilation buffer.
     (with-current-buffer buf
-      (blue--set-search-path))))
+      ;; Setup compilation BUFFER with DIR and error patterns.
+      (make-local-variable 'compilation-error-regexp-alist)
+      (add-to-list 'compilation-error-regexp-alist
+                   '("^.* at \\(.*?\\):\\([0-9]+\\)" 1 2))
+      ;; Bound dynamicaly for the context of this function, let's write it buffer
+      ;; locally so it persists after the dynamic context ends.
+      (setq default-directory default-directory
+            compilation-directory default-directory
+            compilation-finish-functions
+            (let ((orig compilation-finish-functions))
+              #'(lambda (buf _)
+                  (with-current-buffer buf
+                    ;; Make completion work from selected build dir.
+                    (blue--set-default-directory (blue--get-build-dir))
+                    (setq compilation-finish-functions orig)
+                    ;; Make 'srcdir' errors searchable in compilation buffer.
+                    (blue--set-search-path))))))
+    (compilation-start command comint-p)))
 
 
 ;;; Command Analysis.

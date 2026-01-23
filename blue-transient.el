@@ -593,7 +593,7 @@ This function is meant for side effects, it is responsible of keeping
 `blue--build-dir' sync with the selected build directory."
   (setq blue--build-dir value)
   ;; Make completion work from selected build dir.
-  (blue--set-default-directory blue--build-dir))
+  (blue--set-default-directory (blue--get-build-dir)))
 
 
 ;;; Menu building.
@@ -877,7 +877,7 @@ keeps running in the compilation buffer."
     (setq blue--build-dir build-dir
           blue--data (blue--get-data blue--blueprint))
     ;; Make completion work from selected build dir.
-    (blue--set-default-directory blue--build-dir)
+    (blue--set-default-directory (blue--get-build-dir))
     ;; Bring `blue--build-dir' to the from of the list so it's ordered by usage.
     (blue--cache-add-current-build-dir)
     ;; Rebuild menu.

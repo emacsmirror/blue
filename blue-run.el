@@ -89,16 +89,21 @@ If OVERRIDE is non nil disable CONFIGS."
 (defun blue--bind-build-dir-key (index)
   "Setup keybinding for build directory INDEX."
   (let ((key (kbd (format "M-%d" index))))
-    (define-key (current-local-map) key
-                (lambda ()
-                  (interactive)
-                  (setq blue--build-dir
-                        (nth (1- index) (blue--cache-get-build-dirs blue--blueprint))
-                        default-directory blue--build-dir) ; Make completion work from selected build dir.
-                  (blue--show-hints)))))
+    (define-key
+     (current-local-map)
+     key
+     (lambda ()
+       (interactive)
+       (setq blue--build-dir
+             (nth (1- index) (blue--cache-get-build-dirs blue--blueprint)))
+       ;; Make completion work from selected build dir.
+       (blue--set-default-directory (blue--get-build-dir))
+       (blue--show-hints)))))
 
 (defun blue--setup-minibuffer ()
   "Setup keybindings and completion for minibuffer prompt."
+  ;; Make completion work from selected build dir.
+  (blue--set-default-directory (blue--get-build-dir))
   ;; Work on a copy of the current minibuffer keymap so it doesn’t leak
   (use-local-map (copy-keymap (current-local-map)))
   (define-key (current-local-map) (kbd "SPC") nil)
@@ -122,8 +127,6 @@ If OVERRIDE is non nil disable CONFIGS."
     (setq blue--overiden-build-dir-p (cdr determined-build-dir)
           blue--build-dir (car determined-build-dir)
           blue--data (blue--get-data blue--blueprint))
-    ;; Make completion work from selected build dir.
-    (blue--set-default-directory blue--build-dir)
     (if-let* ((commands (car blue--data))
               (invocations (blue--get-command-invocations commands))
               (completion-extra-properties
