@@ -174,7 +174,8 @@ Each record becomes a plist with field names as keywords."
 
       ;; Insert error section (collapsed by default if long).
       (when error-msg
-        (let ((error-lines (split-string error-msg "\n")))
+        (let* ((error-msg (ansi-color-apply error-msg))
+               (error-lines (split-string error-msg "\n")))
           (magit-insert-section (blue-error)
             (magit-insert-heading "Error:")
             (dolist (line error-lines)
