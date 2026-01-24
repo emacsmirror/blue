@@ -611,22 +611,23 @@ COMINT-P selects `comint-mode' for compilation buffer."
                                   'follow-link t
                                   'help-echo (format "Click to open: %s" url))))))))))
 
-(defun blue-ansi-strip-control-sequences (beg end)
-  "Strip out ANSI non-color control sequences like ESC [ K in the region."
-  (save-excursion
-    (goto-char beg)
-    (while (re-search-forward
-            "\033\\[[0-9;?]*[A-Za-z]" end t) ; matches CSI sequences
-      (replace-match "" t t))))
+(defun blue-hyperlinks-compilation-filter ()
+  "Translate OSC hyperlink escape sequences button text properties."
+  (let ((inhibit-read-only t))
+    (blue-ansi-buttonize-hyperlinks compilation-filter-start (point))))
 
-(defun blue-compilation-filter ()
-  "Filter function for compilation buffers."
-  (ansi-color-apply-on-region compilation-filter-start (point))
-  (blue-ansi-strip-control-sequences compilation-filter-start (point))
-  (blue-ansi-buttonize-hyperlinks compilation-filter-start (point)))
+(defun blue-prettify-compilation-filter ()
+  "Combination of filters to prettify output in compilation buffers."
+  ;; HACK: apply first our own OSC filter since the built-in one,
+  ;; `ansi-osc-compilation-filter', does not visit lines properly. This
+  ;; ensures our text properties are applied before the OSC filter does
+  ;; anything.
+  (blue-hyperlinks-compilation-filter)
+  (ansi-color-compilation-filter)
+  (ansi-osc-compilation-filter))
 
-(defun blue-comint-filter (_)
-  "Filter function for comint buffers."
+(defun blue-prettify-comint-filter ()
+  "Combination of filters to prettify output in comint buffers."
   (let ((start-marker (if (and (markerp comint-last-output-start)
 			                   (eq (marker-buffer comint-last-output-start)
 				                   (current-buffer))
@@ -634,9 +635,9 @@ COMINT-P selects `comint-mode' for compilation buffer."
 			              comint-last-output-start
 			            (point-min-marker)))
 	    (end-marker (process-mark (get-buffer-process (current-buffer)))))
+    (blue-ansi-buttonize-hyperlinks start-marker end-marker)
     (ansi-color-apply-on-region start-marker end-marker)
-    (blue-ansi-strip-control-sequences start-marker end-marker)
-    (blue-ansi-buttonize-hyperlinks start-marker end-marker)))
+    (ansi-osc-apply-on-region start-marker end-marker)))
 
 ;;;###autoload
 (define-minor-mode blue-prettify-compilation-mode
@@ -646,10 +647,10 @@ COMINT-P selects `comint-mode' for compilation buffer."
   :lighter " blue-pc"
   (if blue-prettify-compilation-mode
       (progn
-        (add-hook 'compilation-filter-hook #'blue-compilation-filter)
-        (add-hook 'comint-output-filter-functions #'blue-comint-filter))
-    (remove-hook 'compilation-filter-hook #'blue-compilation-filter)
-    (remove-hook 'comint-output-filter-functions #'blue-comint-filter)))
+        (add-hook 'compilation-filter-hook #'blue-prettify-compilation-filter)
+        (add-hook 'comint-output-filter-functions #'blue-prettify-comint-filter))
+    (remove-hook 'compilation-filter-hook #'blue-prettify-compilation-filter)
+    (remove-hook 'comint-output-filter-functions #'blue-prettify-comint-filter)))
 
 
 ;;; Command Analysis.
