@@ -609,7 +609,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
                                   'action `(lambda (_)
                                              (blue-open-hyperlink ,url))
                                   'follow-link t
-                                  'help-echo (format "Click to open: %s" url))))))))))
+                                  'help-echo (format "Click to open %s" url))))))))))
 
 (defun blue-hyperlinks-compilation-filter ()
   "Translate OSC hyperlink escape sequences button text properties."
@@ -625,6 +625,14 @@ COMINT-P selects `comint-mode' for compilation buffer."
   (blue-hyperlinks-compilation-filter)
   (ansi-color-compilation-filter)
   (ansi-osc-compilation-filter))
+
+(defun blue--apply-filter (str filter)
+  "Helper to apply FILTER to string STR."
+  (with-temp-buffer
+    (let ((compilation-filter-start (point)))
+      (insert str)
+      (funcall filter)
+      (buffer-string))))
 
 (defun blue-prettify-comint-filter ()
   "Combination of filters to prettify output in comint buffers."
