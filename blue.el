@@ -620,9 +620,23 @@ COMINT-P selects `comint-mode' for compilation buffer."
       (replace-match "" t t))))
 
 (defun blue-compilation-filter ()
+  "Filter function for compilation buffers."
   (ansi-color-apply-on-region compilation-filter-start (point))
   (blue-ansi-strip-control-sequences compilation-filter-start (point))
   (blue-ansi-buttonize-hyperlinks compilation-filter-start (point)))
+
+(defun blue-comint-filter (_)
+  "Filter function for comint buffers."
+  (let ((start-marker (if (and (markerp comint-last-output-start)
+			                   (eq (marker-buffer comint-last-output-start)
+				                   (current-buffer))
+			                   (marker-position comint-last-output-start))
+			              comint-last-output-start
+			            (point-min-marker)))
+	    (end-marker (process-mark (get-buffer-process (current-buffer)))))
+    (ansi-color-apply-on-region start-marker end-marker)
+    (blue-ansi-strip-control-sequences start-marker end-marker)
+    (blue-ansi-buttonize-hyperlinks start-marker end-marker)))
 
 ;;;###autoload
 (define-minor-mode blue-prettify-compilation-mode
@@ -631,8 +645,11 @@ COMINT-P selects `comint-mode' for compilation buffer."
   :group 'blue
   :lighter " blue-pc"
   (if blue-prettify-compilation-mode
-      (add-hook 'compilation-filter-hook #'blue-compilation-filter)
-    (remove-hook 'compilation-filter-hook #'blue-compilation-filter)))
+      (progn
+        (add-hook 'compilation-filter-hook #'blue-compilation-filter)
+        (add-hook 'comint-output-filter-functions #'blue-comint-filter))
+    (remove-hook 'compilation-filter-hook #'blue-compilation-filter)
+    (remove-hook 'comint-output-filter-functions #'blue-comint-filter)))
 
 
 ;;; Command Analysis.
