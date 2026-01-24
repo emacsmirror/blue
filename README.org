@@ -32,7 +32,11 @@ This package is available on [[https://melpa.org/][MELPA]]!
 
 Add this to your configuration file to install it from source:
 #+begin_src emacs-lisp
-(use-package blue)
+(use-package blue
+  :init
+  ;; Enable custom filters to handle different escape sequences in compilation
+  ;; and comint buffers.
+  (blue-prettify-compilation-mode 1))
 #+end_src
 
 * Usage
