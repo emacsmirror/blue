@@ -542,6 +542,19 @@ COMINT-P selects `comint-mode' for compilation buffer."
                     (blue--set-search-path))))))
     (compilation-start command comint-p)))
 
+(defun blue--visit-location (file &optional line column)
+  "Open FILE and move point to LINE and COLUMN if provided."
+  (when-let* ((path (if (file-exists-p file)
+                        file
+                      (locate-file file blue--search-path))))
+    (when (file-exists-p path)
+      (find-file path)
+      (when line
+        (goto-char (point-min))
+        (forward-line (1- line)))
+      (when column
+        (move-to-column column)))))
+
 (defun blue-open-hyperlink (url)
   "Open a hyperlink URL, handling file:// URLs specially."
   (cond
@@ -559,12 +572,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
            (line (when line-str (string-to-number line-str)))
            (col-str (match-string 3 url))
            (col (when col-str (string-to-number col-str))))
-      (find-file path)
-      (when line
-        (goto-char (point-min))
-        (forward-line (1- line))
-        (when col
-          (forward-char (1- col))))))
+      (blue--visit-location path line col)))
    (t (browse-url url))))
 
 (defun blue-ansi-buttonize-hyperlinks (beg end)

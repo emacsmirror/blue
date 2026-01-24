@@ -223,19 +223,6 @@ DIR is the directory where the replay data has been taken from."
 
 ;;; Fontification.
 
-(defun blue-replay--visit-location (file &optional line column)
-  "Open FILE and move point to LINE and COLUMN if provided."
-  (when-let* ((path (if (file-exists-p file)
-                        file
-                      (locate-file file blue--search-path))))
-    (when (file-exists-p path)
-      (find-file path)
-      (when line
-        (goto-char (point-min))
-        (forward-line (1- line)))
-      (when column
-        (move-to-column column)))))
-
 (defvar blue-replay--file-rx
   (rx (group
        (or
@@ -271,7 +258,7 @@ line:column information.")
                       (string-to-number col-str))))
           (make-text-button (match-beginning 0) (match-end 0)
                             'action `(lambda (_)
-                                       (blue-replay--visit-location
+                                       (blue--visit-location
                                         ,path ,line ,col))
                             'follow-link t
                             'help-echo (format "Click to open %s" path))))
