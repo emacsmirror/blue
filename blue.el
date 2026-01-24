@@ -542,6 +542,124 @@ COMINT-P selects `comint-mode' for compilation buffer."
                     (blue--set-search-path))))))
     (compilation-start command comint-p)))
 
+(defun blue--visit-location (file &optional line column)
+  "Open FILE and move point to LINE and COLUMN if provided."
+  (when-let* ((path (if (file-exists-p file)
+                        file
+                      (locate-file file blue--search-path))))
+    (when (file-exists-p path)
+      (find-file path)
+      (when line
+        (goto-char (point-min))
+        (forward-line (1- line)))
+      (when column
+        (move-to-column column)))))
+
+(defun blue-open-hyperlink (url)
+  "Open a hyperlink URL, handling file:// URLs specially."
+  (cond
+   ((string-match
+     (rx bos "file://"
+         (* (not "/"))                           ; hostname (optional)
+         (group "/" (*? anything))               ; path (capture group 1)
+         (? "#L"                                 ; optional line number
+            (group (+ digit))                    ; line (capture group 2)
+            (? ":" (group (+ digit))))           ; optional column (capture group 3)
+         eos)
+     url)
+    (let* ((path (match-string 1 url))
+           (line-str (match-string 2 url))
+           (line (when line-str (string-to-number line-str)))
+           (col-str (match-string 3 url))
+           (col (when col-str (string-to-number col-str))))
+      (blue--visit-location path line col)))
+   (t (browse-url url))))
+
+(defun blue-ansi-buttonize-hyperlinks (beg end)
+  "Convert ANSI OSC 8 hyperlink sequences into clickable buttons in the region."
+  (save-excursion
+    (goto-char beg)
+    (while (re-search-forward
+            (rx "\033]8;;"
+                (group (* (not (any "\033" "\007"))))  ; URL capture group
+                (or "\033\\" "\007"))                   ; Terminator
+            end t)
+      (let ((url (match-string-no-properties 1))
+            (open-start (match-beginning 0))
+            (open-end (match-end 0)))
+        ;; Delete the opening sequence
+        (delete-region open-start open-end)
+        ;; Adjust end boundary
+        (setq end (- end (- open-end open-start)))
+        ;; Now point is at link-start (where the text begins)
+        (let ((link-start (point)))
+          ;; Find the closing sequence
+          (when (re-search-forward
+                 (rx "\033]8;;" (or "\033\\" "\007"))
+                 end t)
+            (let ((close-start (match-beginning 0))
+                  (close-end (match-end 0)))
+              ;; Delete the closing sequence
+              (delete-region close-start close-end)
+              ;; Adjust end boundary again
+              (setq end (- end (- close-end close-start)))
+              ;; Make the text between them a button
+              (when (and url (> close-start link-start))
+                (make-text-button link-start close-start
+                                  'action `(lambda (_)
+                                             (blue-open-hyperlink ,url))
+                                  'follow-link t
+                                  'help-echo (format "Click to open %s" url))))))))))
+
+(defun blue-hyperlinks-compilation-filter ()
+  "Translate OSC hyperlink escape sequences button text properties."
+  (let ((inhibit-read-only t))
+    (blue-ansi-buttonize-hyperlinks compilation-filter-start (point))))
+
+(defun blue-prettify-compilation-filter ()
+  "Combination of filters to prettify output in compilation buffers."
+  ;; HACK: apply first our own OSC filter since the built-in one,
+  ;; `ansi-osc-compilation-filter', does not visit lines properly. This
+  ;; ensures our text properties are applied before the OSC filter does
+  ;; anything.
+  (blue-hyperlinks-compilation-filter)
+  (ansi-color-compilation-filter)
+  (ansi-osc-compilation-filter))
+
+(defun blue--apply-filter (str filter)
+  "Helper to apply FILTER to string STR."
+  (with-temp-buffer
+    (let ((compilation-filter-start (point)))
+      (insert str)
+      (funcall filter)
+      (buffer-string))))
+
+(defun blue-prettify-comint-filter ()
+  "Combination of filters to prettify output in comint buffers."
+  (let ((start-marker (if (and (markerp comint-last-output-start)
+			                   (eq (marker-buffer comint-last-output-start)
+				                   (current-buffer))
+			                   (marker-position comint-last-output-start))
+			              comint-last-output-start
+			            (point-min-marker)))
+	    (end-marker (process-mark (get-buffer-process (current-buffer)))))
+    (blue-ansi-buttonize-hyperlinks start-marker end-marker)
+    (ansi-color-apply-on-region start-marker end-marker)
+    (ansi-osc-apply-on-region start-marker end-marker)))
+
+;;;###autoload
+(define-minor-mode blue-prettify-compilation-mode
+  "Minor mode to enhance compilation mode's prettifying functions."
+  :global t
+  :group 'blue
+  :lighter " blue-pc"
+  (if blue-prettify-compilation-mode
+      (progn
+        (add-hook 'compilation-filter-hook #'blue-prettify-compilation-filter)
+        (add-hook 'comint-output-filter-functions #'blue-prettify-comint-filter))
+    (remove-hook 'compilation-filter-hook #'blue-prettify-compilation-filter)
+    (remove-hook 'comint-output-filter-functions #'blue-prettify-comint-filter)))
+
 
 ;;; Command Analysis.
 

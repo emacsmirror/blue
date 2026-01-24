@@ -132,7 +132,10 @@ Each record becomes a plist with field names as keywords."
       ;; Insert basic info.
       (when origin
         (magit-insert-section (blue-field :origin)
-          (insert (format "%-10s %s\n" "origin:" origin))))
+          (insert
+           (format
+            "%-10s %s\n" "origin:"
+            (blue--apply-filter origin #'blue-prettify-compilation-filter)))))
 
       (when replay
         (let ((help-msg (format "Click to replay buildable %s" replay-hash)))
@@ -174,7 +177,8 @@ Each record becomes a plist with field names as keywords."
 
       ;; Insert error section (collapsed by default if long).
       (when error-msg
-        (let* ((error-msg (ansi-color-apply error-msg))
+        (let* ((error-msg (blue--apply-filter
+                           error-msg #'blue-prettify-compilation-filter))
                (error-lines (split-string error-msg "\n")))
           (magit-insert-section (blue-error)
             (magit-insert-heading "Error:")
@@ -223,19 +227,6 @@ DIR is the directory where the replay data has been taken from."
 
 ;;; Fontification.
 
-(defun blue-replay--visit-location (file &optional line column)
-  "Open FILE and move point to LINE and COLUMN if provided."
-  (when-let* ((path (if (file-exists-p file)
-                        file
-                      (locate-file file blue--search-path))))
-    (when (file-exists-p path)
-      (find-file path)
-      (when line
-        (goto-char (point-min))
-        (forward-line (1- line)))
-      (when column
-        (move-to-column column)))))
-
 (defvar blue-replay--file-rx
   (rx (group
        (or
@@ -261,20 +252,21 @@ line:column information.")
     (,blue-replay--file-rx
      (0
       (prog1 'button
-        (let* ((path (or (match-string-no-properties 3)
-                         (match-string-no-properties 6)))
-               (line-str (match-string-no-properties 4))
-               (line (when line-str
-                       (string-to-number line-str)))
-               (col-str (match-string-no-properties 5))
-               (col (when col-str
-                      (string-to-number col-str))))
-          (make-text-button (match-beginning 0) (match-end 0)
-                            'action `(lambda (_)
-                                       (blue-replay--visit-location
-                                        ,path ,line ,col))
-                            'follow-link t
-                            'help-echo (format "Click to open %s" path))))
+        (unless (button-at (match-beginning 0))
+          (let* ((path (or (match-string-no-properties 3)
+                           (match-string-no-properties 6)))
+                 (line-str (match-string-no-properties 4))
+                 (line (when line-str
+                         (string-to-number line-str)))
+                 (col-str (match-string-no-properties 5))
+                 (col (when col-str
+                        (string-to-number col-str))))
+            (make-text-button (match-beginning 0) (match-end 0)
+                              'action `(lambda (_)
+                                         (blue--visit-location
+                                          ,path ,line ,col))
+                              'follow-link t
+                              'help-echo (format "Click to open %s" path)))))
       ;; Allow overriding previous fontification, eg. refontify strings.
       t))
 
