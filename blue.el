@@ -160,15 +160,6 @@ This is used when passing universal prefix argument `C-u' to
   (setq-local outline-regexp "▶")
   (read-only-mode 1))
 
-(defun blue--get-log-buffer ()
-  "Return `blue--log-buffer'."
-  (let ((buf (get-buffer blue--log-buffer)) ; Already existing.
-        (buf* (get-buffer-create blue--log-buffer)))
-    (unless buf
-      (with-current-buffer buf*
-        (blue-log-mode)))
-    buf*))
-
 (defun blue--get-build-dir ()
   "Return `blue--build-dir' if it exists, nil otherwise."
   (if (and blue--build-dir
@@ -250,6 +241,15 @@ See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
 
 ;;; Logging.
 
+(defun blue--get-log-buffer ()
+  "Return `blue--log-buffer'."
+  (let ((buf (get-buffer blue--log-buffer)) ; Already existing.
+        (buf* (get-buffer-create blue--log-buffer)))
+    (unless buf
+      (with-current-buffer buf*
+        (blue-log-mode)))
+    buf*))
+
 (defun blue--format-header (command)
   "Format COMMAND header for output buffer.
 
@@ -273,12 +273,12 @@ COMMAND is the command string that generated OUTPUT.
 EXIT-CODE is the return value of CMD."
   (with-current-buffer (blue--get-log-buffer)
     (let ((inhibit-read-only t))
+      (goto-char (point-max))
+      (when command (insert (blue--format-header command)))
+      (insert output)
+      (unless (equal (point) (line-beginning-position))
+        (insert "\n"))
       (save-excursion
-        (goto-char (point-min))
-        (when command (insert (blue--format-header command)))
-        (insert output)
-        (unless (equal (point) (line-beginning-position))
-          (insert "\n"))
         (when exit-code (insert (blue--format-footer exit-code)))))))
 
 
@@ -391,9 +391,7 @@ If RAW is non nil, the serialized string will not be evaluated."
               (re-search-forward "\\(\\[.*\\]\\)\\({.*}\\)\\(\\[.*\\]\\)")
             (search-failed
              (blue--log-output (error-message-string err) "[BLUE] `re-search-forward'" 1)
-             (with-current-buffer blue--log-buffer
-               (goto-char (point-min)))
-             (display-buffer blue--log-buffer)
+             (display-buffer (blue--get-log-buffer))
              (error "[BLUE] Deserialization failed")))
           (let ((commands (match-string-no-properties 1))
                 (exec-env (match-string-no-properties 2))
@@ -405,9 +403,7 @@ If RAW is non nil, the serialized string will not be evaluated."
                                          :null-object nil
                                          :false-object nil))
                     (list commands exec-env ui))))
-      (with-current-buffer blue--log-buffer
-        (goto-char (point-min)))
-      (display-buffer blue--log-buffer)
+      (display-buffer (blue--get-log-buffer))
       (error "[BLUE] Deserialization failed"))))
 
 (defun blue--config-get (var config)
