@@ -340,12 +340,12 @@ for a directory to use when running `blue'."
                                    (not last-build-dir))))
             (current-dir (directory-file-name (expand-file-name default-directory)))
             (build-dir (cond
-                        ;; If we are in a known dir let's use that one.
-                        ((member current-dir build-dirs)
-                         current-dir)
                         ((or prompt-dir-p
                              (not last-build-dir))
                          (blue--prompt-dir nil t))
+                        ;; If we are in a known dir let's use that one.
+                        ((member current-dir build-dirs)
+                         current-dir)
                         (t
                          last-build-dir))))
        (list build-dir))))
