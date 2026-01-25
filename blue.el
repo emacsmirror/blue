@@ -272,10 +272,14 @@ EXIT-CODE displays the status of the command."
 COMMAND is the command string that generated OUTPUT.
 EXIT-CODE is the return value of CMD."
   (with-current-buffer (blue--get-log-buffer)
-    (let ((inhibit-read-only t))
-      (goto-char (point-max))
+    (let ((inhibit-read-only t)
+          (start (point-max)))
+      (goto-char start)
       (when command (insert (blue--format-header command)))
       (insert output)
+      (blue--apply-filter-in-region
+       start (point)
+       #'blue-prettify-compilation-filter)
       (unless (equal (point) (line-beginning-position))
         (insert "\n"))
       (save-excursion
@@ -365,12 +369,11 @@ If RAW is non nil, the serialized string will not be evaluated."
          (args (append (or options '()) (cons "--color=always" commands)))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
-         (raw-output (with-output-to-string
+         (output (with-output-to-string
                        (setq exit-code
                              (apply #'call-process blue-binary nil standard-output nil args))))
-         (propertized-output (ansi-color-apply raw-output))
-         (filtered-output (replace-regexp-in-string ";;;.*\n?" "" raw-output)))
-    (blue--log-output propertized-output command-string exit-code)
+         (filtered-output (replace-regexp-in-string ";;;.*\n?" "" output)))
+    (blue--log-output output command-string exit-code)
     (cons filtered-output exit-code)))
 
 (defun blue--get-data (blueprint)
@@ -622,13 +625,12 @@ COMINT-P selects `comint-mode' for compilation buffer."
   (ansi-color-compilation-filter)
   (ansi-osc-compilation-filter))
 
-(defun blue--apply-filter (str filter)
+(defun blue--apply-filter-in-region (beg end filter)
   "Helper to apply FILTER to string STR."
-  (with-temp-buffer
-    (let ((compilation-filter-start (point)))
-      (insert str)
-      (funcall filter)
-      (buffer-string))))
+  (save-excursion
+    (let ((compilation-filter-start beg))
+      (goto-char end) ; Filters take point as ending possition.
+      (funcall filter))))
 
 (defun blue-prettify-comint-filter (_)
   "Combination of filters to prettify output in comint buffers."

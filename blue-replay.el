@@ -132,10 +132,11 @@ Each record becomes a plist with field names as keywords."
       ;; Insert basic info.
       (when origin
         (magit-insert-section (blue-field :origin)
-          (insert
-           (format
-            "%-10s %s\n" "origin:"
-            (blue--apply-filter origin #'blue-prettify-compilation-filter)))))
+          (let ((start (point)))
+            (insert (format "%-10s %s\n" "origin:" origin))
+            (blue--apply-filter-in-region
+             start (point)
+             #'blue-prettify-compilation-filter))))
 
       (when replay
         (let ((help-msg (format "Click to replay buildable %s" replay-hash)))
@@ -177,13 +178,15 @@ Each record becomes a plist with field names as keywords."
 
       ;; Insert error section (collapsed by default if long).
       (when error-msg
-        (let* ((error-msg (blue--apply-filter
-                           error-msg #'blue-prettify-compilation-filter))
-               (error-lines (split-string error-msg "\n")))
+        (let ((start (point))
+              (error-lines (split-string error-msg "\n")))
           (magit-insert-section (blue-error)
             (magit-insert-heading "Error:")
             (dolist (line error-lines)
-              (insert line "\n")))))
+              (insert line "\n")
+              (blue--apply-filter-in-region
+               start (point)
+               #'blue-prettify-compilation-filter)))))
 
       (insert "\n"))))
 
