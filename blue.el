@@ -634,7 +634,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
       (funcall filter)
       (buffer-string))))
 
-(defun blue-prettify-comint-filter ()
+(defun blue-prettify-comint-filter (_)
   "Combination of filters to prettify output in comint buffers."
   (let ((start-marker (if (and (markerp comint-last-output-start)
 			                   (eq (marker-buffer comint-last-output-start)
