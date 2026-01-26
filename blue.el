@@ -189,14 +189,16 @@ This is used when passing universal prefix argument `C-u' to
 (defun blue--find-blueprint (&optional path)
   "Return path to top-level `blueprint.scm'.
 If PATH is non-nil, locate `blueprint.scm' from PATH."
-  (if-let* ((blueprint (locate-dominating-file (or path default-directory)
-                                               "blueprint.scm")))
+  (if-let* ((blueprint (concat
+                        (or
+                         (getenv "BLUE_EMBEDDED")
+                         (locate-dominating-file (or path default-directory)
+                                                 "blueprint.scm"))
+                        "/blueprint.scm")))
       ;; This expands resolving symlinks. It's needed since in the build
       ;; directory ther can be a symlinked 'blueprint.scm' for projects that
       ;; require configuration.
-      (file-truename
-       (directory-file-name
-        (concat blueprint "/blueprint.scm")))
+      (file-truename (directory-file-name blueprint))
     (error (concat "[BLUE] Failed to locate `blueprint.scm'"
                    (when path
                      (concat " in " path))))))
