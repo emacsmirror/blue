@@ -624,6 +624,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
   ;; anything.
   (blue-hyperlinks-compilation-filter)
   (ansi-osc-compilation-filter)
+  (ansi-color-compilation-filter)
   ;; HACK: for the ANSI color filter to catch escape sequences introduced
   ;; through a carraige return, the filter needs to backtrack to the beginning
   ;; of line.
