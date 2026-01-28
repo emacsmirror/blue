@@ -582,7 +582,7 @@ COMINT-P selects `comint-mode' for compilation buffer."
     (while (re-search-forward
             (rx "\033]8;;"
                 (group (* (not (any "\033" "\007"))))  ; URL capture group
-                (or "\033\\" "\007"))                   ; Terminator
+                (or "\033\\" "\007"))                  ; Terminator
             end t)
       (let ((url (match-string-no-properties 1))
             (open-start (match-beginning 0))

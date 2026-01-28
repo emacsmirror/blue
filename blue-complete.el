@@ -78,8 +78,8 @@
          (while-no-input
            (when-let* ((blueprint (or blue--blueprint
                                       (blue--find-blueprint)))
-                       (prompt-start (minibuffer-prompt-end))
-                       (input (buffer-substring prompt-start (point)))
+                       (prompt-start (line-beginning-position))
+                       (input (buffer-substring-no-properties prompt-start (point)))
                        (completions (blue-complete--autocomplete blueprint input)))
              completions))))
     (and (consp result) result)))
