@@ -633,8 +633,8 @@ COMINT-P selects `comint-mode' for compilation buffer."
       (goto-char end) ; Filters take point as ending possition.
       (funcall filter))))
 
-(defun blue-prettify-comint-filter (_)
-  "Combination of filters to prettify output in comint buffers."
+(defun blue--run-comint-filter (filter)
+  "Helper function to run FILTER in a comint buffer."
   (let ((start-marker (if (and (markerp comint-last-output-start)
 			                   (eq (marker-buffer comint-last-output-start)
 				                   (current-buffer))
@@ -642,9 +642,14 @@ COMINT-P selects `comint-mode' for compilation buffer."
 			              comint-last-output-start
 			            (point-min-marker)))
 	    (end-marker (process-mark (get-buffer-process (current-buffer)))))
-    (blue-ansi-buttonize-hyperlinks start-marker end-marker)
-    (ansi-color-apply-on-region start-marker end-marker)
-    (ansi-osc-apply-on-region start-marker end-marker)))
+    (funcall filter start-marker end-marker)))
+
+(defun blue-prettify-comint-filter (_)
+  "Combination of filters to prettify output in comint buffers."
+  (dolist (filter '(blue-ansi-buttonize-hyperlinks
+                    ansi-color-apply-on-region
+                    ansi-osc-apply-on-region))
+    (blue--run-comint-filter filter)))
 
 ;;;###autoload
 (define-minor-mode blue-prettify-compilation-mode
