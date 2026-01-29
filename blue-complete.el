@@ -62,15 +62,18 @@
 
 ;;; Helpers.
 
-(blue--define-memoized blue-complete--autocomplete (blueprint input)
+(defun blue-complete--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
   (let* ((default-directory (or (blue--get-build-dir) default-directory))
-         (command (concat blue-binary
-                          " --file=" blueprint
-                          " .autocomplete bash \"blue " input "\""))
-         (output (shell-command-to-string command))
-         (clean (replace-regexp-in-string "^;;;.*\n?" "" output)))
-    (string-split clean)))
+         (options (when blueprint
+                    (list (concat "--file=" blueprint))))
+         (output (blue--execute
+                  options
+                  `(".autocomplete" "bash" ,input)))
+         (stdout (car output))
+         (exit-code (cdr output)))
+    (when (zerop exit-code)
+      (string-split stdout))))
 
 (defun blue-complete--table (&rest _)
   "Completion table function for minibuffer prompt."

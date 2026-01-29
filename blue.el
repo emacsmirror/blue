@@ -215,31 +215,6 @@ If PATH is non-nil, locate `blueprint.scm' from PATH."
   (and file (file-exists-p file) (file-readable-p file)))
 
 
-;;; Memoization.
-
-(defun blue--memoize (function)
-  "Return a memoized version of FUNCTION."
-  (let ((cache (make-hash-table :test 'equal)))
-    (lambda (&rest args)
-      (let ((result (gethash args cache 'cache-miss)))
-        (if (eq result 'cache-miss)
-            (let ((result (apply function args)))
-              (puthash args result cache)
-              result)
-          result)))))
-
-(defmacro blue--define-memoized (name arglist docstring &rest body)
-  "Define a memoized function NAME.
-See `defun' for the meaning of NAME ARGLIST DOCSTRING and BODY."
-  (declare (doc-string 3) (indent 2))
-  `(defalias ',name
-     (blue--memoize (lambda ,arglist ,@body))
-     ,(format "(%S %s)\n\n%s"
-              name
-              (mapconcat #'symbol-name arglist " ")
-              docstring)))
-
-
 ;;; Logging.
 
 (defun blue--get-log-buffer ()
