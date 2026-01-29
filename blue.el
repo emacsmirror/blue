@@ -191,8 +191,9 @@ This is used when passing universal prefix argument `C-u' to
 If PATH is non-nil, locate `blueprint.scm' from PATH."
   (if-let* ((blueprint (or (getenv "BLUE_BLUEPRINT")
                            (concat
-                            (locate-dominating-file (or path default-directory)
-                                                    "blueprint.scm")
+                            (or (locate-dominating-file (or path default-directory)
+                                                        "blueprint.scm")
+                                (error "Could not find blueprint.scm in current directory or parents"))
                             "/blueprint.scm"))))
       ;; This expands resolving symlinks. It's needed since in the build
       ;; directory ther can be a symlinked 'blueprint.scm' for projects that
