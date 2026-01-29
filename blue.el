@@ -361,7 +361,7 @@ the build directory `blue--build-dir' exists before adding it."
 
 ;;; Deserialization.
 
-(defun blue--execute-deserialize (options commands)
+(defun blue--execute (options commands)
   "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
@@ -384,7 +384,7 @@ If RAW is non nil, the serialized string will not be evaluated."
               (cmd '(".serialize-commands" "--"
                      ".serialize-execution-environment" "--"
                      ".serialize-ui"))
-              (output (blue--execute-deserialize options cmd))
+              (output (blue--execute options cmd))
               (data (car output))
               (exit-code (cdr output)))
     (if (zerop exit-code)

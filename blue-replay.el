@@ -220,7 +220,7 @@ DIR is the directory where the replay data has been taken from."
   (let* ((options (when blueprint
                     (list (concat "--file=" blueprint)
                           (concat "--build-directory=" dir))))
-         (output (blue--execute-deserialize options '("replay")))
+         (output (blue--execute options '("replay")))
          (data (car output))
          (exit-code (cdr output)))
     (if (zerop exit-code)
