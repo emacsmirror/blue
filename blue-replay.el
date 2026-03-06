@@ -217,9 +217,9 @@ DIR is the directory where the replay data has been taken from."
 
 (defun blue-replay--replay (blueprint dir)
   "Return the replay data for BLUEPRINT stored in DIR."
-  (let* ((options (when blueprint
-                    (list (concat "--file=" blueprint)
-                          (concat "--build-directory=" dir))))
+  (let* ((process-environment (cons (concat "BLUE_BLUEPRINT=" blueprint)
+                                    process-environment))
+         (options (list (concat "--build-directory=" dir)))
          (output (blue--execute options '("replay")))
          (data (car output))
          (exit-code (cdr output)))

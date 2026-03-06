@@ -65,11 +65,11 @@
 (defun blue-complete--autocomplete (blueprint input)
   "Use blue '.autocomplete' command to provide completion from INPUT."
   (let* ((default-directory (or (blue--get-build-dir) default-directory))
-         (options (when blueprint
-                    (list (concat "--file=" blueprint))))
+         (process-environment (cons (concat "BLUE_BLUEPRINT=" blueprint)
+                                    process-environment))
          (output (blue--execute
-                  options
-                  `(".autocomplete" "bash" ,input)))
+                  '()
+                  `(",autocomplete" "bash" ,input)))
          (stdout (car output))
          (exit-code (cdr output)))
     (when (zerop exit-code)

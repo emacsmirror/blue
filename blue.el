@@ -337,13 +337,15 @@ the build directory `blue--build-dir' exists before adding it."
 
 ;;; Deserialization.
 
+;; TODO: force colors so the log files are more readable.
 (defun blue--execute (options commands)
   "Execute BLUE serialization COMMANDS with OPTIONS and return parsed output.
 
 If RAW is non nil, the serialized string will not be evaluated."
   (let* ((default-directory (or (blue--get-build-dir) default-directory))
-         (process-environment (cons "GUILE_AUTO_COMPILE=0" process-environment))
-         (args (append (or options '()) (cons "--color=always" commands)))
+         (process-environment (append '("GUILE_AUTO_COMPILE=0")
+                                      process-environment))
+         (args (append (or options '()) commands))
          (command-string (string-join (cons blue-binary args) " "))
          exit-code
          (output (with-output-to-string
@@ -355,12 +357,12 @@ If RAW is non nil, the serialized string will not be evaluated."
 
 (defun blue--get-data (blueprint)
   "Return the commands and execution environment provided by BLUEPRINT."
-  (when-let* ((options (when blueprint
-                         (list (concat "--file=" blueprint))))
+  (when-let* ((process-environment (cons (concat "BLUE_BLUEPRINT=" blueprint)
+                                         process-environment))
               (cmd '(".serialize-commands" "--"
                      ".serialize-execution-environment" "--"
                      ".serialize-ui"))
-              (output (blue--execute options cmd))
+              (output (blue--execute '() cmd))
               (data (car output))
               (exit-code (cdr output)))
     (if (zerop exit-code)
