@@ -289,16 +289,29 @@ If SKIP-ARGUMENTS is non-nil, jump to previous command."
 
 (defun blue-transient--get-option-arguments ()
   "Retrieve values of options for the current transient prefix."
-  (let ((prefix (oref transient-current-prefix command))
-        (i 0)
-        results)
-    (condition-case nil
-        (while t
-          (let* ((suffix (transient-get-suffix prefix `(1 0 ,i)))
-                 (argument (plist-get (cdr suffix) :argument)))
-            (push argument results))
-          (setq i (1+ i)))
-      (error)) ; Do nothing, just break the loop if there are no more keys.
+  (let* ((prefix (oref transient-current-prefix command))
+         (column 0)
+         results
+         (get-row
+          (lambda (col)
+            (let ((row 0)
+                  ;; Since `transient-get-suffix' signals and error when the
+                  ;; requested location is out of bounds, we need a way to
+                  ;; detect if the out of bounds came from the column or the
+                  ;; row, to let the column loop know if it should move to the
+                  ;; next column or if there are no more columns. If any thing
+                  ;; has been found, it means that the column is valid so the
+                  ;; outer loop should try with the next one.
+                  found-any)
+              (while-let ((suffix (ignore-errors (transient-get-suffix
+                                                  prefix `(1 ,col ,row))))
+                          (argument (plist-get (cdr suffix) :argument)))
+                (push argument results)
+                (setq row (1+ row)
+                      found-any t))
+              found-any))))
+    (while (funcall get-row column)
+      (setq column (1+ column)))
     results))
 
 
