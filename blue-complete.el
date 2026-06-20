@@ -24,6 +24,7 @@
 ;;; Code:
 
 (require 'blue)
+(require 'minibuffer)
 
 (defcustom blue-complete-target-names
   '(
@@ -60,32 +61,102 @@
   "Completion extra properties for `blue-complete--file'.")
 
 
+;;; Async autocomplete state.
+
+(defvar blue-complete--process nil
+  "Currently running autocomplete process.")
+
+(defvar blue-complete--last-input nil
+  "Input string that produced `blue-complete--candidates'.")
+
+(defvar blue-complete--candidates nil
+  "Cached completion candidates from the last finished process.")
+
+(defvar blue-complete--debounce-timer nil
+  "Timer used to debounce process spawning.")
+
+(defconst blue-complete--debounce-delay 0.08
+  "Delay after last keystroke before spawning the autocomplete process.")
+
 ;;; Helpers.
 
-(defun blue-complete--autocomplete (blueprint input)
-  "Use blue '.autocomplete' command to provide completion from INPUT."
+(defun blue-complete--kill-process (process)
+  "Kill running autocomplete PROCESS and clear `blue-complete--process'."
+  (when (process-live-p process)
+    (delete-process process))
+  (setq blue-complete--process nil))
+
+(defun blue-complete--spawn (blueprint input callback)
+  "Spawn an async autocomplete process with INPUT for BLUEPRINT.
+
+CALLBACK is called with the list of completion strings when done."
+  (blue-complete--kill-process blue-complete--process)
   (let* ((default-directory (or (blue--get-build-dir) default-directory))
-         (process-environment (cons (concat "BLUE_BLUEPRINT=" blueprint)
-                                    process-environment))
-         (output (blue--execute
-                  '()
-                  `(",autocomplete" "bash" ,input)))
-         (stdout (car output))
-         (exit-code (cdr output)))
-    (when (zerop exit-code)
-      (string-split stdout))))
+         (process-environment
+          (append (list "GUILE_AUTO_COMPILE=0"
+                        (concat "BLUE_BLUEPRINT=" blueprint))
+                  process-environment))
+         (proc (make-process
+                :name "blue-autocomplete"
+                :buffer (generate-new-buffer " *blue-autocomplete*")
+                :command (list blue-binary ",autocomplete" "bash" input)
+                :noquery t
+                :sentinel
+                (lambda (p _event)
+                  (when (eq (process-status p) 'exit)
+                    (let ((candidates
+                           (when (zerop (process-exit-status p))
+                             (with-current-buffer (process-buffer p)
+                               (string-split (buffer-string))))))
+                      (blue-complete--kill-process p)
+                      (setq blue-complete--last-input input
+                            blue-complete--candidates candidates)
+                      (funcall callback candidates)))))))
+    (setq blue-complete--process proc)))
+
+(defun blue-complete--async-table (blueprint input update-fn)
+  "Kick off async completion for BLUEPRINT with INPUT.
+
+Call UPDATE-FN when completion candidates have been collected.  Returns
+the cached candidate list immediately (may be nil or stale)."
+  (when blue-complete--debounce-timer
+    (cancel-timer blue-complete--debounce-timer))
+  ;; Only spawn when the input has actually changed.
+  (unless (equal input blue-complete--last-input)
+    (setq blue-complete--debounce-timer
+          (run-at-time blue-complete--debounce-delay nil
+                       (lambda ()
+                         (setq blue-complete--debounce-timer nil)
+                         (blue-complete--spawn blueprint input update-fn)))))
+  ;; Return cached candidates immediately so the UI is never blocked.
+  blue-complete--candidates)
+
+(defun blue-complete--refresh (buf)
+  "Nudge the completion UI in BUF to redisplay with fresh candidates.
+
+Flushes the sorted-completion cache so the next display pass re-calls
+the collection function, then fires `post-command-hook' so UIs like
+Corfu and Company notice the change without a keypress."
+  (when (buffer-live-p buf)
+    (with-current-buffer buf
+      (completion--flush-all-sorted-completions)
+      (run-hooks 'post-command-hook))))
 
 (defun blue-complete--table (&rest _)
-  "Completion table function for minibuffer prompt."
-  (let ((result
-         (while-no-input
-           (when-let* ((blueprint (or blue--blueprint
-                                      (blue--find-blueprint)))
-                       (prompt-start (line-beginning-position))
-                       (input (buffer-substring-no-properties prompt-start (point)))
-                       (completions (blue-complete--autocomplete blueprint input)))
-             completions))))
-    (and (consp result) result)))
+  "Dynamic completion table for `pcomplete/blue'.
+
+Returns cached candidates immediately (non-blocking) and spawns an async
+process in the background.  When the process finishes the completion UI
+is nudged to redisplay with the updated candidate list."
+  (when-let* ((blueprint (or blue--blueprint (blue--find-blueprint)))
+              (prompt-start (line-beginning-position))
+              (input (buffer-substring-no-properties prompt-start (point))))
+    (let ((buf (current-buffer)))
+      (blue-complete--async-table
+       blueprint input
+       (lambda (_candidates)
+         (run-at-time 0 nil #'blue-complete--refresh buf)))))
+  blue-complete--candidates)
 
 (defun blue-complete--bounds (thing)
   "Return bounds of THING."
@@ -316,7 +387,7 @@ Returns the buffer containing the formatted documentation."
                (label (string-trim thing "--?" "="))
                (option (blue--get-option-from-label label options)))
           (blue-completion--complete-autocompletable option)))
-        ;; Option completion (from command or UI).
+       ;; Option completion (from command or UI).
        ((and (looking-back "\\(^\\|\s\\|\t\\)-+[^\s]*" (pos-bol))
              (match-end 1))
         (blue--get-options-completion-table options bounds-at-pt))
