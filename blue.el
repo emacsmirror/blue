@@ -3,7 +3,7 @@
 ;; Copyright © 2025 Sergio Pastor Pérez
 ;;
 ;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
-;; Version: 0.0.35
+;; Version: 0.0.36
 ;; Package-Requires: ((emacs "30.1") (magit-section "4.3.8"))
 ;; Keywords: blue, tools
 ;; URL: https://codeberg.org/lapislazuli/blue.el
@@ -557,37 +557,42 @@ COMINT-P selects `comint-mode' for compilation buffer."
   "Convert ANSI OSC 8 hyperlink sequences into clickable buttons in the region."
   (save-excursion
     (goto-char beg)
-    (while (re-search-forward
-            (rx "\033]8;;"
-                (group (* (not (any "\033" "\007"))))  ; URL capture group
-                (or "\033\\" "\007"))                  ; Terminator
-            end t)
-      (let ((url (match-string-no-properties 1))
-            (open-start (match-beginning 0))
-            (open-end (match-end 0)))
-        ;; Delete the opening sequence
-        (delete-region open-start open-end)
-        ;; Adjust end boundary
-        (setq end (- end (- open-end open-start)))
-        ;; Now point is at link-start (where the text begins)
-        (let ((link-start (point)))
-          ;; Find the closing sequence
+    ;; The marker will update its location as text is inserted or deleted.
+    (let ((limit (copy-marker end t)))
+      (while (re-search-forward
+              (rx "\033]8;;"
+                  (group (* (not (any "\033" "\007")))) ; URL capture group.
+                  (or "\033\\" "\007"))                 ; Terminator.
+              limit t)
+        (let* ((url (match-string-no-properties 1))
+               (open-start (match-beginning 0))
+               (open-end (match-end 0))
+               (text-start (copy-marker open-start))
+               (text-end nil))
+
+          ;; Remove opening OSC 8 sequence.
+          (delete-region open-start open-end)
+
+          ;; Find closing OSC 8 sequence.
+          (goto-char text-start)
           (when (re-search-forward
                  (rx "\033]8;;" (or "\033\\" "\007"))
-                 end t)
-            (let ((close-start (match-beginning 0))
-                  (close-end (match-end 0)))
-              ;; Delete the closing sequence
-              (delete-region close-start close-end)
-              ;; Adjust end boundary again
-              (setq end (- end (- close-end close-start)))
-              ;; Make the text between them a button
-              (when (and url (> close-start link-start))
-                (make-text-button link-start close-start
-                                  'action `(lambda (_)
-                                             (blue-open-hyperlink ,url))
-                                  'follow-link t
-                                  'help-echo (format "Click to open %s" url))))))))))
+                 limit t)
+            (setq text-end (copy-marker (match-beginning 0)))
+
+            ;; Remove closing OSC 8 sequence.
+            (delete-region (match-beginning 0) (match-end 0))
+
+            ;; Add button to the visible text.
+            (when (> (marker-position text-end)
+                     (marker-position text-start))
+              (make-text-button
+               (marker-position text-start)
+               (marker-position text-end)
+               'action (lambda (_)
+                         (blue-open-hyperlink url))
+               'follow-link t
+               'help-echo (format "Click to open %s" url)))))))))
 
 (defun blue-hyperlinks-compilation-filter ()
   "Translate OSC hyperlink escape sequences button text properties."
