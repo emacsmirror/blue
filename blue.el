@@ -3,7 +3,7 @@
 ;; Copyright © 2025 Sergio Pastor Pérez
 ;;
 ;; Author: Sergio Pastor Pérez <sergio.pastorperez@gmail.com>
-;; Version: 0.0.36
+;; Version: 0.0.37
 ;; Package-Requires: ((emacs "30.1") (magit-section "4.3.8"))
 ;; Keywords: blue, tools
 ;; URL: https://codeberg.org/lapislazuli/blue.el
@@ -474,6 +474,12 @@ This is meant to be used in compilation buffers."
     (setq-local blue--search-path (seq-uniq (cons srcdir compilation-search-path))
                 compilation-search-path blue--search-path)))
 
+(defvar-keymap blue-compilation-map
+  :doc "Keymap for `compilation-mode' buffers created by BLUE."
+  :name "blue"
+  "r" 'blue-run-command
+  "m" 'blue-transient)
+
 (defun blue--compile (command &optional comint-p)
   "Compile COMMAND with BLUE-specific setup.
 COMINT-P selects `comint-mode' for compilation buffer."
@@ -509,17 +515,20 @@ COMINT-P selects `comint-mode' for compilation buffer."
       ;; Bound dynamicaly for the context of this function, let's write it buffer
       ;; locally so it persists after the dynamic context ends.
       (setq default-directory default-directory
-            compilation-directory default-directory
-            compilation-finish-functions
-            (let ((orig compilation-finish-functions))
-              #'(lambda (buf _)
-                  (with-current-buffer buf
+            compilation-directory default-directory))
+    (let ((compilation-mode-hook
+           (seq-uniq
+            (cons (lambda ()
+                    ;; Set BLUE specific keybindings.
+                    (use-local-map
+                     (make-composed-keymap (list blue-compilation-map)
+                                           (current-local-map)))
                     ;; Make completion work from selected build dir.
                     (blue--set-default-directory (blue--get-build-dir))
-                    (setq compilation-finish-functions orig)
                     ;; Make 'srcdir' errors searchable in compilation buffer.
-                    (blue--set-search-path))))))
-    (compilation-start command comint-p)))
+                    (blue--set-search-path))
+                  compilation-mode-hook))))
+      (compilation-start command comint-p))))
 
 (defun blue--visit-location (file &optional line column)
   "Open FILE and move point to LINE and COLUMN if provided."
